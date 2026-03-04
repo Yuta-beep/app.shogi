@@ -41,7 +41,9 @@ export function TitleScreen() {
   return (
     <ImageBackground source={homeAssets.titleBackground} resizeMode="cover" className="flex-1">
       <SafeAreaView className="flex-1">
-        <View className="flex-1 bg-black/20">{isReady ? <TapToStartScreen onPressStart={() => router.replace('/home')} /> : <AppLoadingScreen />}</View>
+        <View className="flex-1 bg-black/20">
+          {isReady ? <TapToStartScreen onPressStart={() => router.replace('/home')} /> : <AppLoadingScreen imageSource={homeAssets.loadingImage} />}
+        </View>
       </SafeAreaView>
     </ImageBackground>
   );
