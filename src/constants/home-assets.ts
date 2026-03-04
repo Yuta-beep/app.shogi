@@ -1,5 +1,6 @@
 export const homeAssets = {
   titleBackground: require('../../assets/home/ui/title-bg.png'),
+  loadingImage: require('../../assets/home/ui/loading.png'),
   background: require('../../assets/home/background/home-bg.png'),
   userBar: require('../../assets/home/ui/user-bar.png'),
   pvpBadge: require('../../assets/home/ui/pvp-badge.png'),
