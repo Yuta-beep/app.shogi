@@ -1,0 +1,25 @@
+export const homeAssets = {
+  titleBackground: require('../../assets/home/ui/title-bg.png'),
+  background: require('../../assets/home/background/home-bg.png'),
+  userBar: require('../../assets/home/ui/user-bar.png'),
+  pvpBadge: require('../../assets/home/ui/pvp-badge.png'),
+  buttons: {
+    normalDungeon: require('../../assets/home/buttons/normal-dungeon.png'),
+    specialDungeon: require('../../assets/home/buttons/special-dungeon.png'),
+    deckBuilder: require('../../assets/home/buttons/deck-builder.png'),
+    pieceCatalog: require('../../assets/home/buttons/piece-catalog.png'),
+    gacha: require('../../assets/home/buttons/gacha.png'),
+    pieceShop: require('../../assets/home/buttons/piece-shop.png'),
+  },
+  preloadTargets: [
+    require('../../assets/home/background/home-bg.png'),
+    require('../../assets/home/ui/user-bar.png'),
+    require('../../assets/home/ui/pvp-badge.png'),
+    require('../../assets/home/buttons/normal-dungeon.png'),
+    require('../../assets/home/buttons/special-dungeon.png'),
+    require('../../assets/home/buttons/deck-builder.png'),
+    require('../../assets/home/buttons/piece-catalog.png'),
+    require('../../assets/home/buttons/gacha.png'),
+    require('../../assets/home/buttons/piece-shop.png'),
+  ],
+} as const;
