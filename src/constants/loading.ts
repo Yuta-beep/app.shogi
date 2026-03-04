@@ -1,0 +1,2 @@
+export const TITLE_TO_HOME_LOADING_MS = 2400;
+
