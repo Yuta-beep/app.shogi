@@ -1,13 +1,14 @@
 import { useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { ImageBackground, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 
 import { AppLoadingScreen } from '@/components/module/app-loading-screen';
 import { homeAssets } from '@/constants/home-assets';
-import { stageNodes, stageRanges, stageSelectBackgrounds } from '@/constants/stage-select-data';
+import { stageSelectBackgrounds } from '@/constants/stage-select-data';
 import { useAssetPreload } from '@/hooks/common/use-asset-preload';
+import { useStageSelectScreen } from '@/features/stage-select/ui/use-stage-select-screen';
 
 const pagePaths: Record<number, string> = {
   1: 'M 350 2350 C 375 2300, 425 2250, 500 2150 C 575 2100, 625 2050, 700 2000 C 750 1900, 775 1850, 800 1800 C 800 1700, 775 1650, 700 1600 C 625 1500, 575 1450, 500 1400 C 425 1300, 375 1250, 350 1200 C 375 1100, 425 1050, 500 1000 C 575 900, 625 850, 700 800 C 750 700, 775 650, 800 600 C 800 500, 775 450, 700 400 C 625 300, 575 250, 500 200',
@@ -19,19 +20,12 @@ const pagePaths: Record<number, string> = {
 
 export function StageSelectScreen() {
   const router = useRouter();
-  const [currentPage, setCurrentPage] = useState(1);
-  const [selectedStageId, setSelectedStageId] = useState<number | null>(null);
+  const { currentPage, setCurrentPage, ranges, nodesInPage, selectedStageId, selectedStage, selectStage } = useStageSelectScreen();
 
   const preloadTargets = useMemo(() => Object.values(stageSelectBackgrounds), []);
   const { isReady } = useAssetPreload(preloadTargets);
 
-  const currentRange = stageRanges.find((range) => range.page === currentPage) ?? stageRanges[0];
-  const nodesInPage = useMemo(
-    () => stageNodes.filter((node) => node.page === currentPage),
-    [currentPage]
-  );
-
-  const selectedStage = stageNodes.find((node) => node.id === selectedStageId) ?? null;
+  const currentRange = ranges.find((range) => range.page === currentPage) ?? ranges[0];
 
   if (!isReady) {
     return (
@@ -49,7 +43,7 @@ export function StageSelectScreen() {
         <View className="flex-1">
           <View className="z-20 bg-[#f7f7f7]/90 px-2 py-2">
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="gap-2 px-1">
-              {stageRanges.map((range) => {
+              {ranges.map((range) => {
                 const active = range.page === currentPage;
                 return (
                   <Pressable
@@ -93,7 +87,9 @@ export function StageSelectScreen() {
                   ) : null}
 
                   <Pressable
-                    onPress={() => setSelectedStageId(node.id)}
+                    onPress={() => {
+                      void selectStage(node.id);
+                    }}
                     style={{ backgroundColor: node.color }}
                     className={`h-14 w-14 items-center justify-center rounded-full border-2 border-white/70 shadow ${selectedStageId === node.id ? 'scale-110' : ''}`}
                   >
