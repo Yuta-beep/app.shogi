@@ -81,7 +81,7 @@ const cumulativePieces: Record<number, string[]> = {
 };
 
 const positions: Record<number, { top: number; left: number }> = {
-  1: { top: 1840, left: -5 }, 2: { top: 1720, left: 48 }, 3: { top: 1600, left: 70 }, 4: { top: 1440, left: 68 },
+  1: { top: 1840, left: 35 }, 2: { top: 1720, left: 48 }, 3: { top: 1600, left: 70 }, 4: { top: 1440, left: 68 },
   5: { top: 1280, left: 57 }, 6: { top: 1120, left: 35 }, 7: { top: 960, left: 24 }, 8: { top: 800, left: 39 },
   9: { top: 660, left: 55 }, 10: { top: 450, left: 67 }, 11: { top: 320, left: 68 }, 12: { top: 160, left: 50 },
   13: { top: 500, left: 42 }, 14: { top: 667, left: 51 }, 15: { top: 833, left: 67 }, 16: { top: 1000, left: 68 },
