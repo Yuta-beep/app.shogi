@@ -1,8 +1,10 @@
+import { Image } from 'expo-image';
 import { useEffect, useRef } from 'react';
 import { Animated, Easing, Text, View } from 'react-native';
 
 type AppLoadingScreenProps = {
   label?: string;
+  imageSource?: number;
 };
 
 function LoadingDots() {
@@ -60,13 +62,17 @@ function LoadingDots() {
   );
 }
 
-export function AppLoadingScreen({ label = 'Loading' }: AppLoadingScreenProps) {
+export function AppLoadingScreen({ label = 'Loading', imageSource }: AppLoadingScreenProps) {
   return (
-    <View className="flex-1 items-end justify-end px-6 pb-8">
-      <View className="flex-row items-center rounded-lg bg-black/45 px-3 py-2">
-        <Text className="text-base font-bold text-[#ffe6a5]">{label}</Text>
-        <LoadingDots />
-      </View>
+    <View className="flex-1 items-center justify-center px-6">
+      {imageSource ? (
+        <Image source={imageSource} contentFit="contain" style={{ width: 220, height: 220 }} />
+      ) : (
+        <View className="flex-row items-center rounded-lg bg-black/45 px-3 py-2">
+          <Text className="text-base font-bold text-[#ffe6a5]">{label}</Text>
+          <LoadingDots />
+        </View>
+      )}
     </View>
   );
 }
