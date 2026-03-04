@@ -22,3 +22,11 @@
 - `app/` はルーティング定義中心に保つ。
 - 実装コードは `src/` 配下（`features`, `components`, `constants`, `hooks`）に置く。
 - UIファースト方針は `docs/ui-first-development-plan.md` を参照する。
+
+## 5. 命名規則（必須）
+- ブランチは `type/short-description` 形式で命名する。
+- `type` は `feat`, `fix`, `refactor`, `chore`, `hotfix` を使用する。
+- 例: `fix/ui-update`, `feat/stage-select-ui`, `refactor/home-sections`
+- コミットメッセージは `type: summary` 形式で記述する。
+- `type` は `feat`, `fix`, `refactor`, `chore`, `hotfix` を使用する。
+- 例: `feat: implement stage select ui`, `fix: adjust home header spacing`
