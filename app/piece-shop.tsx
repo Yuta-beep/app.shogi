@@ -1,5 +1,5 @@
-import { ScreenPlaceholder } from '@/components/module/screen-placeholder';
+import { PieceShopScreen } from '@/features/piece-shop/ui/piece-shop-screen';
 
 export default function PieceShopRoute() {
-  return <ScreenPlaceholder title="Piece Shop" />;
+  return <PieceShopScreen />;
 }
