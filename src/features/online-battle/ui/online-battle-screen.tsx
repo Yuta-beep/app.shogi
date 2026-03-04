@@ -4,12 +4,15 @@ import { Pressable, Text, View } from 'react-native';
 
 import { UiScreenShell } from '@/components/module/ui-screen-shell';
 import { useOnlineBattleScreen } from '@/features/online-battle/ui/use-online-battle-screen';
+import { useScreenBgm } from '@/hooks/common/use-screen-bgm';
+import { playSe } from '@/lib/audio/audio-manager';
 
 const onlineBg = require('../../../../assets/online-battle/online-bg.png');
 
 export function OnlineBattleScreen() {
   const params = useLocalSearchParams<{ opponent?: string; rating?: string }>();
   const { session } = useOnlineBattleScreen(params.opponent, params.rating);
+  useScreenBgm('onlineBattle');
 
   return (
     <UiScreenShell title="Online Battle" subtitle="対戦接続状況">
@@ -28,7 +31,7 @@ export function OnlineBattleScreen() {
         <Text className="text-sm text-[#6b4532]">{session.opponentLabel}</Text>
       </View>
 
-      <Pressable className="mt-4 rounded-lg border border-accent bg-white px-3 py-3 active:scale-95">
+      <Pressable onPress={() => void playSe('cancel')} className="mt-4 rounded-lg border border-accent bg-white px-3 py-3 active:scale-95">
         <Text className="text-center font-bold text-ink">待機キャンセル</Text>
       </Pressable>
     </UiScreenShell>

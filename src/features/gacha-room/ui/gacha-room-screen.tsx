@@ -4,6 +4,8 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useGachaRoomScreen } from '@/features/gacha-room/ui/use-gacha-room-screen';
+import { useScreenBgm } from '@/hooks/common/use-screen-bgm';
+import { playSe } from '@/lib/audio/audio-manager';
 
 const gachaAssets = {
   home: require('../../../../assets/shared/home-back.png'),
@@ -21,13 +23,20 @@ const gachaAssets = {
 export function GachaRoomScreen() {
   const router = useRouter();
   const vm = useGachaRoomScreen();
+  useScreenBgm('gacha');
 
   return (
     <SafeAreaView className="flex-1 bg-[#0f172a]">
       <View className="border-b border-white/15 bg-[#111827] px-4 py-3">
         <View className="flex-row items-center justify-between">
           <Text className="text-lg font-black text-white">ガチャルーム</Text>
-          <Pressable onPress={() => router.replace('/home')} className="active:scale-95">
+          <Pressable
+            onPress={() => {
+              void playSe('tap');
+              router.replace('/home');
+            }}
+            className="active:scale-95"
+          >
             <Image source={gachaAssets.home} contentFit="contain" style={{ width: 128, height: 40 }} />
           </Pressable>
         </View>
@@ -48,7 +57,13 @@ export function GachaRoomScreen() {
 
           return (
             <View key={banner.key} className={`rounded-2xl border p-3 ${active ? 'border-amber-300 bg-white/10' : 'border-white/20 bg-white/5'}`}>
-              <Pressable onPress={() => vm.setSelectedKey(banner.key)} className="active:scale-[0.99]">
+              <Pressable
+                onPress={() => {
+                  void playSe('tap');
+                  vm.setSelectedKey(banner.key);
+                }}
+                className="active:scale-[0.99]"
+              >
                 <Image source={gachaAssets.banners[banner.key]} contentFit="contain" style={{ width: '100%', height: 120 }} />
               </Pressable>
 
@@ -57,7 +72,13 @@ export function GachaRoomScreen() {
                   <Text className="text-base font-black text-white">{banner.name}</Text>
                   <Text className="text-xs text-slate-300">{banner.rareRateText}</Text>
                 </View>
-                <Pressable onPress={() => vm.setSelectedKey(banner.key)} className="active:scale-95">
+                <Pressable
+                  onPress={() => {
+                    void playSe('tap');
+                    vm.setSelectedKey(banner.key);
+                  }}
+                  className="active:scale-95"
+                >
                   <Image source={drawImage} contentFit="contain" style={{ width: 100, height: 40 }} />
                 </Pressable>
               </View>
@@ -70,7 +91,13 @@ export function GachaRoomScreen() {
             {vm.banners.find((banner) => banner.key === vm.selectedKey)?.name ?? 'ガチャ'}
           </Text>
           <Text className="mt-1 text-xs text-slate-300">{vm.statusText}</Text>
-          <Pressable onPress={() => void vm.roll()} className="mt-3 rounded-xl bg-[#ec4899] px-4 py-3">
+          <Pressable
+            onPress={() => {
+              void playSe('confirm');
+              void vm.roll();
+            }}
+            className="mt-3 rounded-xl bg-[#ec4899] px-4 py-3"
+          >
             <Text className="text-center text-base font-black text-white">ガチャを引く</Text>
           </Pressable>
         </View>

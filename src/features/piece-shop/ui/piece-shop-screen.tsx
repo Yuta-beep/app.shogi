@@ -4,6 +4,8 @@ import { Modal, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { usePieceShopScreen } from '@/features/piece-shop/ui/use-piece-shop-screen';
+import { useScreenBgm } from '@/hooks/common/use-screen-bgm';
+import { playSe } from '@/lib/audio/audio-manager';
 import { ShopItem } from '@/usecases/piece-shop/load-shop-catalog-usecase';
 
 const shopAssets = {
@@ -22,11 +24,14 @@ const shopAssets = {
 export function PieceShopScreen() {
   const router = useRouter();
   const vm = usePieceShopScreen();
+  useScreenBgm('shop');
 
   function openPurchase(piece: ShopItem) {
     if (vm.owned.includes(piece.key)) {
+      void playSe('cancel');
       return;
     }
+    void playSe('confirm');
     vm.openConfirm(piece);
   }
 
@@ -43,7 +48,13 @@ export function PieceShopScreen() {
           <Text className="text-sm font-black text-[#ffe6a5]">{`金 x${vm.goldCurrency}`}</Text>
         </View>
 
-        <Pressable onPress={() => router.replace('/home')} className="mt-3 self-start active:scale-95">
+        <Pressable
+          onPress={() => {
+            void playSe('tap');
+            router.replace('/home');
+          }}
+          className="mt-3 self-start active:scale-95"
+        >
           <Image source={shopAssets.home} contentFit="contain" style={{ width: 140, height: 44 }} />
         </Pressable>
 
@@ -54,7 +65,13 @@ export function PieceShopScreen() {
 
             return (
               <View key={piece.key} className="w-[31%] items-center rounded-xl bg-[#fff8e6]/95 p-2">
-                <Pressable onPress={() => vm.openDetail(piece)} className="w-full items-center active:scale-95">
+                <Pressable
+                  onPress={() => {
+                    void playSe('tap');
+                    vm.openDetail(piece);
+                  }}
+                  className="w-full items-center active:scale-95"
+                >
                   <Image source={shopAssets.pieces[piece.key]} contentFit="contain" style={{ width: 86, height: 100 }} />
                 </Pressable>
 
@@ -85,7 +102,13 @@ export function PieceShopScreen() {
             <Text className="mt-1 text-sm text-[#1f2937]">
               {vm.detailPiece ? `${vm.detailPiece.costType === 'pawn' ? '歩' : '金'} ${vm.detailPiece.cost}` : ''}
             </Text>
-            <Pressable onPress={vm.closeDetail} className="mt-4 rounded-md bg-[#8b0000] px-3 py-2">
+            <Pressable
+              onPress={() => {
+                void playSe('cancel');
+                vm.closeDetail();
+              }}
+              className="mt-4 rounded-md bg-[#8b0000] px-3 py-2"
+            >
               <Text className="text-center font-black text-[#ffd56a]">閉じる</Text>
             </Pressable>
           </View>
@@ -100,10 +123,22 @@ export function PieceShopScreen() {
               {vm.confirmPiece ? `${vm.confirmPiece.key} (${vm.confirmPiece.costType === 'pawn' ? '歩' : '金'} ${vm.confirmPiece.cost})` : ''}
             </Text>
             <View className="mt-4 flex-row gap-2">
-              <Pressable onPress={() => void vm.purchase()} className="flex-1 rounded-md bg-[#8b0000] px-3 py-2">
+              <Pressable
+                onPress={() => {
+                  void playSe('confirm');
+                  void vm.purchase();
+                }}
+                className="flex-1 rounded-md bg-[#8b0000] px-3 py-2"
+              >
                 <Text className="text-center font-black text-[#ffd56a]">はい</Text>
               </Pressable>
-              <Pressable onPress={vm.closeConfirm} className="flex-1 rounded-md border border-[#8b0000] bg-white px-3 py-2">
+              <Pressable
+                onPress={() => {
+                  void playSe('cancel');
+                  vm.closeConfirm();
+                }}
+                className="flex-1 rounded-md border border-[#8b0000] bg-white px-3 py-2"
+              >
                 <Text className="text-center font-black text-[#7f1d1d]">いいえ</Text>
               </Pressable>
             </View>
