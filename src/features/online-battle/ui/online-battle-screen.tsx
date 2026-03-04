@@ -1,7 +1,10 @@
+import { Image } from 'expo-image';
 import { useLocalSearchParams } from 'expo-router';
 import { Pressable, Text, View } from 'react-native';
 
 import { UiScreenShell } from '@/components/module/ui-screen-shell';
+
+const onlineBg = require('../../../../assets/online-battle/online-bg.png');
 
 export function OnlineBattleScreen() {
   const params = useLocalSearchParams<{ opponent?: string; rating?: string }>();
@@ -10,9 +13,13 @@ export function OnlineBattleScreen() {
 
   return (
     <UiScreenShell title="Online Battle" subtitle="対戦接続状況">
-      <View className="rounded-xl border-2 border-accent bg-[#fff7e6] p-4">
+      <View className="overflow-hidden rounded-xl border border-accent/60">
+        <Image source={onlineBg} contentFit="cover" style={{ width: '100%', height: 170 }} />
+      </View>
+
+      <View className="mt-3 rounded-xl border-2 border-accent bg-[#fff7e6] p-4">
         <Text className="text-lg font-black text-ink">対局ルーム #A12X9</Text>
-        <Text className="mt-1 text-sm text-[#6b4532]">接続状態: マッチング完了</Text>
+        <Text className="mt-1 text-sm text-[#6b4532]">接続状態: マッチング完了（UIモック）</Text>
       </View>
 
       <View className="mt-3 rounded-xl border border-accent/60 bg-white p-3">
