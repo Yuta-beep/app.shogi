@@ -4,12 +4,15 @@ import { Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useMatchingScreen } from '@/features/matching/ui/use-matching-screen';
+import { useScreenBgm } from '@/hooks/common/use-screen-bgm';
+import { playSe } from '@/lib/audio/audio-manager';
 
 const matchingBg = require('../../../../assets/matching/matching-bg.png');
 
 export function MatchingScreen() {
   const router = useRouter();
   const { snapshot, cancel } = useMatchingScreen();
+  useScreenBgm('matching');
 
   return (
     <SafeAreaView className="flex-1 bg-black">
@@ -29,6 +32,7 @@ export function MatchingScreen() {
 
           <Pressable
             onPress={() => {
+              void playSe('cancel');
               void cancel();
               router.replace('/home');
             }}

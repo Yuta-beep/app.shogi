@@ -4,6 +4,8 @@ import { Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { usePieceCatalogScreen } from '@/features/piece-info/ui/use-piece-catalog-screen';
+import { useScreenBgm } from '@/hooks/common/use-screen-bgm';
+import { playSe } from '@/lib/audio/audio-manager';
 
 const pieceTemplate = require('../../../../assets/piece-info/piece-template.png');
 const homeBack = require('../../../../assets/shared/home-back.png');
@@ -11,6 +13,7 @@ const homeBack = require('../../../../assets/shared/home-back.png');
 export function PieceInfoScreen() {
   const router = useRouter();
   const { piece, index, total, previous, next } = usePieceCatalogScreen();
+  useScreenBgm('catalog');
 
   return (
     <SafeAreaView className="flex-1 bg-[#f8f3e8]">
@@ -20,7 +23,13 @@ export function PieceInfoScreen() {
 
       <View className="flex-1 px-4 pb-4">
         <View className="mt-2 flex-row items-center justify-between">
-          <Pressable onPress={() => router.replace('/home')} className="active:scale-95">
+          <Pressable
+            onPress={() => {
+              void playSe('tap');
+              router.replace('/home');
+            }}
+            className="active:scale-95"
+          >
             <Image source={homeBack} contentFit="contain" style={{ width: 140, height: 44 }} />
           </Pressable>
           <Text className="text-lg font-black text-[#2f1b14]">駒情報</Text>
@@ -42,11 +51,23 @@ export function PieceInfoScreen() {
         </View>
 
         <View className="mt-auto flex-row items-center justify-center gap-3">
-          <Pressable onPress={previous} className="h-12 w-12 items-center justify-center rounded-full border border-[#8b0000] bg-white active:scale-95">
+          <Pressable
+            onPress={() => {
+              void playSe('tap');
+              previous();
+            }}
+            className="h-12 w-12 items-center justify-center rounded-full border border-[#8b0000] bg-white active:scale-95"
+          >
             <Text className="text-xl font-black text-[#8b0000]">←</Text>
           </Pressable>
           <Text className="text-sm font-bold text-[#6b4532]">{`${index + 1} / ${total}`}</Text>
-          <Pressable onPress={next} className="h-12 w-12 items-center justify-center rounded-full border border-[#8b0000] bg-white active:scale-95">
+          <Pressable
+            onPress={() => {
+              void playSe('tap');
+              next();
+            }}
+            className="h-12 w-12 items-center justify-center rounded-full border border-[#8b0000] bg-white active:scale-95"
+          >
             <Text className="text-xl font-black text-[#8b0000]">→</Text>
           </Pressable>
         </View>

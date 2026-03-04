@@ -54,6 +54,29 @@ src/
 docs/                # 開発方針ドキュメント
 ```
 
+## Audio Policy
+- 音源は `assets/audio` 配下に配置する
+- 推奨構成:
+```text
+assets/audio/
+  bgm/
+  se/
+```
+- 再生実装は `expo-audio` を利用する（`expo-av` は新規採用しない）
+- 音源マッピングは `src/constants/audio-assets.ts` で管理する
+- 画面ごとのBGM方針（HTML移植ベース）:
+  - `title` -> `title`
+  - `home` -> `home`
+  - `stage-select` -> `dungeonSelect`
+  - `stage-shogi` -> `battle`
+  - `deck-builder` -> `deckBuilder`
+  - `piece-info` -> `catalog`
+  - `piece-shop` -> `shop`
+  - `gacha-room` -> `gacha`
+  - `matching` -> `matching`
+  - `online-battle` -> `onlineBattle`
+  - `special-dungeon` -> `specialDungeon`
+
 ## Architecture Policy
 - UIファーストで開発
 - `app/` はルーティング定義に限定

@@ -7,10 +7,13 @@ import { HomeActionGridSection } from '@/features/home/ui/sections/home-action-g
 import { HomeBackgroundSection } from '@/features/home/ui/sections/home-background-section';
 import { HomeHeaderSection } from '@/features/home/ui/sections/home-header-section';
 import { useHomeScreen } from '@/features/home/ui/use-home-screen';
+import { useScreenBgm } from '@/hooks/common/use-screen-bgm';
+import { playSe } from '@/lib/audio/audio-manager';
 
 export function HomeScreen() {
   const router = useRouter();
   const { snapshot } = useHomeScreen();
+  useScreenBgm('home');
 
   return (
     <ImageBackground source={homeAssets.background} resizeMode="cover" className="flex-1">
@@ -18,7 +21,10 @@ export function HomeScreen() {
         <View className="flex-1">
           <HomeBackgroundSection />
           <HomeHeaderSection
-            onPressMatching={() => router.push('/matching')}
+            onPressMatching={() => {
+              void playSe('tap');
+              router.push('/matching');
+            }}
             playerName={snapshot.playerName}
             rating={snapshot.rating}
           />

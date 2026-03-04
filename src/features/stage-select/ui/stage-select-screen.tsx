@@ -9,6 +9,8 @@ import { homeAssets } from '@/constants/home-assets';
 import { stageSelectBackgrounds } from '@/constants/stage-select-data';
 import { useAssetPreload } from '@/hooks/common/use-asset-preload';
 import { useStageSelectScreen } from '@/features/stage-select/ui/use-stage-select-screen';
+import { useScreenBgm } from '@/hooks/common/use-screen-bgm';
+import { playSe } from '@/lib/audio/audio-manager';
 
 const pagePaths: Record<number, string> = {
   1: 'M 350 2350 C 375 2300, 425 2250, 500 2150 C 575 2100, 625 2050, 700 2000 C 750 1900, 775 1850, 800 1800 C 800 1700, 775 1650, 700 1600 C 625 1500, 575 1450, 500 1400 C 425 1300, 375 1250, 350 1200 C 375 1100, 425 1050, 500 1000 C 575 900, 625 850, 700 800 C 750 700, 775 650, 800 600 C 800 500, 775 450, 700 400 C 625 300, 575 250, 500 200',
@@ -21,6 +23,7 @@ const pagePaths: Record<number, string> = {
 export function StageSelectScreen() {
   const router = useRouter();
   const { currentPage, setCurrentPage, ranges, nodesInPage, selectedStageId, selectedStage, selectStage } = useStageSelectScreen();
+  useScreenBgm('dungeonSelect');
 
   const preloadTargets = useMemo(() => Object.values(stageSelectBackgrounds), []);
   const { isReady } = useAssetPreload(preloadTargets);
@@ -48,7 +51,10 @@ export function StageSelectScreen() {
                 return (
                   <Pressable
                     key={range.page}
-                    onPress={() => setCurrentPage(range.page)}
+                    onPress={() => {
+                      void playSe('tap');
+                      setCurrentPage(range.page);
+                    }}
                     className={`rounded-lg px-3 py-2 ${active ? 'bg-[#ffc107]' : 'bg-white/75'}`}
                   >
                     <Text className={`text-xs font-black ${active ? 'text-white' : 'text-[#4b5563]'}`}>{range.label}</Text>
@@ -88,6 +94,7 @@ export function StageSelectScreen() {
 
                   <Pressable
                     onPress={() => {
+                      void playSe('tap');
                       void selectStage(node.id);
                     }}
                     style={{ backgroundColor: node.color }}
@@ -106,7 +113,10 @@ export function StageSelectScreen() {
                 <>
                   <Text className="text-lg font-black text-[#111]">{`ステージ${selectedStage.id}: ${selectedStage.name}`}</Text>
                   <Pressable
-                    onPress={() => router.push({ pathname: '/stage-shogi', params: { stage: String(selectedStage.id) } })}
+                    onPress={() => {
+                      void playSe('confirm');
+                      router.push({ pathname: '/stage-shogi', params: { stage: String(selectedStage.id) } });
+                    }}
                     className="mt-2 rounded-lg bg-[#ffc107] px-4 py-3"
                   >
                     <Text className="text-center text-base font-black text-white">開始</Text>
@@ -116,7 +126,13 @@ export function StageSelectScreen() {
                 <Text className="text-center text-sm font-bold text-[#555]">ステージを選択してください</Text>
               )}
 
-              <Pressable onPress={() => router.replace('/home')} className="mt-3 rounded-lg border border-[#ffc107] bg-[#fff8e1] px-4 py-3">
+              <Pressable
+                onPress={() => {
+                  void playSe('tap');
+                  router.replace('/home');
+                }}
+                className="mt-3 rounded-lg border border-[#ffc107] bg-[#fff8e1] px-4 py-3"
+              >
                 <Text className="text-center text-sm font-black text-[#4b5563]">ホームに戻る</Text>
               </Pressable>
             </View>

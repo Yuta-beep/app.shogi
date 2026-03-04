@@ -4,12 +4,14 @@ import { Text, View } from 'react-native';
 
 import { UiScreenShell } from '@/components/module/ui-screen-shell';
 import { useStageBattleScreen } from '@/features/stage-shogi/ui/use-stage-battle-screen';
+import { useScreenBgm } from '@/hooks/common/use-screen-bgm';
 
 const boardImage = require('../../../../assets/stage-shogi/shogi-board.png');
 
 export function StageShogiScreen() {
   const params = useLocalSearchParams<{ stage?: string }>();
   const { snapshot } = useStageBattleScreen(params.stage);
+  useScreenBgm('battle');
 
   return (
     <UiScreenShell title="Stage Shogi" subtitle="バトル画面（UIモック）">

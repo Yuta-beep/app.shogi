@@ -3,6 +3,8 @@ import { Pressable, Text, View } from 'react-native';
 
 import { UiScreenShell } from '@/components/module/ui-screen-shell';
 import { useDeckBuilderScreen } from '@/features/deck-builder/ui/use-deck-builder-screen';
+import { useScreenBgm } from '@/hooks/common/use-screen-bgm';
+import { playSe } from '@/lib/audio/audio-manager';
 
 const deckAssets = {
   bg: require('../../../../assets/deck-builder/deck-bg.png'),
@@ -11,6 +13,7 @@ const deckAssets = {
 
 export function DeckBuilderScreen() {
   const { ownedPieces } = useDeckBuilderScreen();
+  useScreenBgm('deckBuilder');
 
   return (
     <UiScreenShell title="マイデッキ作成" subtitle="将棋盤に駒を配置して保存">
@@ -26,7 +29,13 @@ export function DeckBuilderScreen() {
         <Text className="text-sm font-black text-[#2f1b14]">所持駒</Text>
         <View className="mt-2 flex-row flex-wrap gap-2">
           {ownedPieces.map((piece) => (
-            <Pressable key={piece} className="h-10 w-10 items-center justify-center rounded-md border border-[#8b0000]/40 bg-[#fff7e6] active:scale-95">
+            <Pressable
+              key={piece}
+              onPress={() => {
+                void playSe('tap');
+              }}
+              className="h-10 w-10 items-center justify-center rounded-md border border-[#8b0000]/40 bg-[#fff7e6] active:scale-95"
+            >
               <Text className="text-lg font-black text-[#2f1b14]">{piece}</Text>
             </Pressable>
           ))}
@@ -34,13 +43,13 @@ export function DeckBuilderScreen() {
       </View>
 
       <View className="mt-4 flex-row gap-2">
-        <Pressable className="h-20 flex-1 items-center justify-center rounded-xl border-2 border-accent bg-white px-3 active:scale-95">
+        <Pressable onPress={() => void playSe('tap')} className="h-20 flex-1 items-center justify-center rounded-xl border-2 border-accent bg-white px-3 active:scale-95">
           <Text className="text-center text-lg font-black text-ink">デフォルト</Text>
         </Pressable>
-        <Pressable className="h-20 flex-1 items-center justify-center rounded-xl border-2 border-accent bg-white px-3 active:scale-95">
+        <Pressable onPress={() => void playSe('tap')} className="h-20 flex-1 items-center justify-center rounded-xl border-2 border-accent bg-white px-3 active:scale-95">
           <Text className="text-center text-lg font-black text-ink">読込</Text>
         </Pressable>
-        <Pressable className="h-20 flex-1 items-center justify-center rounded-xl bg-accent px-3 active:scale-95">
+        <Pressable onPress={() => void playSe('confirm')} className="h-20 flex-1 items-center justify-center rounded-xl bg-accent px-3 active:scale-95">
           <Text className="text-center text-lg font-black text-[#ffe6a5]">保存</Text>
         </Pressable>
       </View>

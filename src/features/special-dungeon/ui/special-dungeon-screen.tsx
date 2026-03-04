@@ -3,6 +3,8 @@ import { useRouter } from 'expo-router';
 import { Pressable, Text, View } from 'react-native';
 
 import { UiScreenShell } from '@/components/module/ui-screen-shell';
+import { useScreenBgm } from '@/hooks/common/use-screen-bgm';
+import { playSe } from '@/lib/audio/audio-manager';
 
 const eventDungeon = require('../../../../assets/special-dungeon/event-dungeon.png');
 
@@ -14,6 +16,7 @@ const eventStages = [
 
 export function SpecialDungeonScreen() {
   const router = useRouter();
+  useScreenBgm('specialDungeon');
 
   return (
     <UiScreenShell title="Special Dungeon" subtitle="期間限定ステージに挑戦">
@@ -30,7 +33,14 @@ export function SpecialDungeonScreen() {
         {eventStages.map((stage) => (
           <Pressable
             key={stage.id}
-            onPress={() => stage.open && router.push('/stage-shogi')}
+            onPress={() => {
+              if (!stage.open) {
+                void playSe('cancel');
+                return;
+              }
+              void playSe('confirm');
+              router.push('/stage-shogi');
+            }}
             disabled={!stage.open}
             className={`rounded-xl border px-3 py-3 ${stage.open ? 'border-[#a27700] bg-white active:scale-[0.99]' : 'border-gray-300 bg-gray-100'}`}
           >

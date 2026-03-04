@@ -7,6 +7,8 @@ import { AppLoadingScreen } from '@/components/module/app-loading-screen';
 import { TapToStartScreen } from '@/components/module/tap-to-start-screen';
 import { homeAssets } from '@/constants/home-assets';
 import { useAssetPreload } from '@/hooks/common/use-asset-preload';
+import { useScreenBgm } from '@/hooks/common/use-screen-bgm';
+import { playSe } from '@/lib/audio/audio-manager';
 
 export function TitleScreen() {
   const router = useRouter();
@@ -17,12 +19,22 @@ export function TitleScreen() {
   }, []);
 
   const { isReady } = useAssetPreload(preloadTargets);
+  useScreenBgm('title');
 
   return (
     <ImageBackground source={homeAssets.titleBackground} resizeMode="cover" className="flex-1">
       <SafeAreaView className="flex-1">
         <View className="flex-1 bg-black/20">
-          {isReady ? <TapToStartScreen onPressStart={() => router.replace('/home')} /> : <AppLoadingScreen imageSource={homeAssets.loadingImage} />}
+          {isReady ? (
+            <TapToStartScreen
+              onPressStart={() => {
+                void playSe('tap');
+                router.replace('/home');
+              }}
+            />
+          ) : (
+            <AppLoadingScreen imageSource={homeAssets.loadingImage} />
+          )}
         </View>
       </SafeAreaView>
     </ImageBackground>
