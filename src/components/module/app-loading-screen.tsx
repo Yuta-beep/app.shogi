@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { useEffect, useRef } from 'react';
-import { Animated, Easing, Text, View } from 'react-native';
+import { Animated, Easing, Text, View, useWindowDimensions } from 'react-native';
 
 type AppLoadingScreenProps = {
   label?: string;
@@ -63,11 +63,18 @@ function LoadingDots() {
 }
 
 export function AppLoadingScreen({ label = 'Loading', imageSource }: AppLoadingScreenProps) {
+  const { width, height } = useWindowDimensions();
+  const imageAspectRatio = 2 / 3;
+  const maxImageHeight = Math.min(height * 0.78, 620);
+  const maxImageWidth = Math.min(width * 0.9, 420);
+  const imageHeight = Math.min(maxImageHeight, maxImageWidth / imageAspectRatio);
+  const imageWidth = imageHeight * imageAspectRatio;
+
   return (
     <View className="flex-1 items-center justify-center px-6">
       {imageSource ? (
         <View className="relative">
-          <Image source={imageSource} contentFit="contain" style={{ width: 220, height: 220 }} />
+          <Image source={imageSource} contentFit="contain" style={{ width: imageWidth, height: imageHeight }} />
           <Text className="absolute bottom-1 right-2 text-[12px] font-light tracking-widest text-white">{label}</Text>
         </View>
       ) : (
