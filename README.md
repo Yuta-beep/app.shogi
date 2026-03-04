@@ -27,6 +27,11 @@ npx expo start
 npx expo start --clear
 ```
 
+### 3. Test
+```bash
+npm run test
+```
+
 ## Current App Flow
 - `/` : Title screen
   - Home用アセットを先読み
@@ -66,4 +71,3 @@ docs/                # 開発方針ドキュメント
 ## Notes
 - Expo 54 は Node の最新メジャーで不安定になる場合があります。
 - 可能なら Node 20/22 LTS の利用を推奨します。
-
