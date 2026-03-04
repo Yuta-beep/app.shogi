@@ -1,5 +1,5 @@
-import { ScreenPlaceholder } from '@/components/module/screen-placeholder';
+import { PieceInfoScreen } from '@/features/piece-info/ui/piece-info-screen';
 
 export default function PieceInfoRoute() {
-  return <ScreenPlaceholder title="Piece Info" />;
+  return <PieceInfoScreen />;
 }

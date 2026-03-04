@@ -1,5 +1,5 @@
-import { ScreenPlaceholder } from '@/components/module/screen-placeholder';
+import { DeckBuilderScreen } from '@/features/deck-builder/ui/deck-builder-screen';
 
 export default function DeckBuilderRoute() {
-  return <ScreenPlaceholder title="Deck Builder" />;
+  return <DeckBuilderScreen />;
 }

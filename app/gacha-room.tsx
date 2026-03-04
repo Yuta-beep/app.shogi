@@ -1,5 +1,5 @@
-import { ScreenPlaceholder } from '@/components/module/screen-placeholder';
+import { GachaRoomScreen } from '@/features/gacha-room/ui/gacha-room-screen';
 
 export default function GachaRoomRoute() {
-  return <ScreenPlaceholder title="Gacha Room" />;
+  return <GachaRoomScreen />;
 }
