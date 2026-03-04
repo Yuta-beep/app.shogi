@@ -2,15 +2,16 @@ import { Image } from 'expo-image';
 import { Pressable, Text, View } from 'react-native';
 
 import { UiScreenShell } from '@/components/module/ui-screen-shell';
+import { useDeckBuilderScreen } from '@/features/deck-builder/ui/use-deck-builder-screen';
 
 const deckAssets = {
   bg: require('../../../../assets/deck-builder/deck-bg.png'),
   board: require('../../../../assets/deck-builder/shogi-board.png'),
 } as const;
 
-const ownedPieces = ['忍', '影', '砲', '竜', '鳳', '炎', '火', '水', '波', '木', '葉'] as const;
-
 export function DeckBuilderScreen() {
+  const { ownedPieces } = useDeckBuilderScreen();
+
   return (
     <UiScreenShell title="マイデッキ作成" subtitle="将棋盤に駒を配置して保存">
       <View className="overflow-hidden rounded-2xl border border-[#8b0000]/50">
