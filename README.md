@@ -1,51 +1,69 @@
-# Welcome to your Expo app 👋
+# Shogi Mobile App Frontend
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Expo + React Native + TypeScript で開発する、将棋モバイルアプリのフロントエンドです。
 
-## Get started
+旧 `SHOGI_GAME` の HTML/CSS を参照しながら、UI起点で段階的に移植しています。
 
-1. Install dependencies
+## Tech Stack
+- Expo SDK 54
+- React Native
+- TypeScript
+- Expo Router
+- NativeWind (Tailwind for React Native)
 
-   ```bash
-   npm install
-   ```
-
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
+## Development
+### 1. Install
 ```bash
-npm run reset-project
+npm install
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+### 2. Start
+```bash
+npx expo start
+```
 
-## Learn more
+キャッシュ起因の不整合が出る場合:
+```bash
+npx expo start --clear
+```
 
-To learn more about developing your project with Expo, look at the following resources:
+## Current App Flow
+- `/` : Title screen
+  - Home用アセットを先読み
+  - `Loading...` 表示
+  - タップで `/home` に遷移
+- `/home` : Home screen（再現中）
+- その他画面: プレースホルダー導線のみ
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+## Directory Structure
+```text
+app/                 # Expo Router routes only
+assets/              # Images and static files
+src/
+  components/
+    atom/            # 最小単位のUI部品
+    module/          # atomを組み合わせた部品
+  constants/         # 定数・アセット参照・モック
+  features/          # 機能単位（画面UI本体）
+  hooks/             # 共通hooks
+docs/                # 開発方針ドキュメント
+```
 
-## Join the community
+## Architecture Policy
+- UIファーストで開発
+- `app/` はルーティング定義に限定
+- 実画面実装は `src/features/*` に置く
+- 共通UIは `src/components/atom|module` に集約
+- 依存方向は `UI -> (hooks/useCase/repository...)` を維持
 
-Join our community of developers creating universal apps.
+詳細方針:
+- `docs/ui-first-development-plan.md`
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
-# frontend
+## Naming Rules
+- Feature名はユーザー価値ベース
+- 例: `home`, `battle`, `stage-selection`, `deck-builder`, `piece-catalog`, `piece-shop`, `gacha`, `matching`, `player-profile`
+
+## Notes
+- Expo 54 は Node の最新メジャーで不安定になる場合があります。
+- 可能なら Node 20/22 LTS の利用を推奨します。
+
