@@ -1,9 +1,10 @@
+import { Image } from 'expo-image';
 import { useLocalSearchParams } from 'expo-router';
 import { Text, View } from 'react-native';
 
 import { UiScreenShell } from '@/components/module/ui-screen-shell';
 
-const boardCells = Array.from({ length: 81 }, (_, i) => i);
+const boardImage = require('../../../../assets/stage-shogi/shogi-board.png');
 
 export function StageShogiScreen() {
   const params = useLocalSearchParams<{ stage?: string }>();
@@ -16,12 +17,8 @@ export function StageShogiScreen() {
         <Text className="text-base font-black text-ink">{`${stageText}  先手: あなた / 後手: CPU`}</Text>
       </View>
 
-      <View className="mt-3 flex-row flex-wrap overflow-hidden rounded-xl border-2 border-[#a27700] bg-[#e3c690]">
-        {boardCells.map((cell) => (
-          <View key={cell} className="h-9 w-[11.11%] items-center justify-center border border-[#a27700]/40">
-            <Text className="text-[10px] text-[#6b4532]">{(cell % 9) + 1}</Text>
-          </View>
-        ))}
+      <View className="mt-3 overflow-hidden rounded-xl border-2 border-[#a27700] bg-[#e3c690] p-2">
+        <Image source={boardImage} contentFit="contain" style={{ width: '100%', height: 320 }} />
       </View>
 
       <View className="mt-3 rounded-xl border border-accent/60 bg-white p-3">
