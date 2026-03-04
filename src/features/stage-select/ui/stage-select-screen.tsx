@@ -1,6 +1,5 @@
-import { Asset } from 'expo-asset';
 import { useRouter } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ImageBackground, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
@@ -8,6 +7,7 @@ import Svg, { Path } from 'react-native-svg';
 import { AppLoadingScreen } from '@/components/module/app-loading-screen';
 import { homeAssets } from '@/constants/home-assets';
 import { stageNodes, stageRanges, stageSelectBackgrounds } from '@/constants/stage-select-data';
+import { useAssetPreload } from '@/hooks/common/use-asset-preload';
 
 const pagePaths: Record<number, string> = {
   1: 'M 350 2350 C 375 2300, 425 2250, 500 2150 C 575 2100, 625 2050, 700 2000 C 750 1900, 775 1850, 800 1800 C 800 1700, 775 1650, 700 1600 C 625 1500, 575 1450, 500 1400 C 425 1300, 375 1250, 350 1200 C 375 1100, 425 1050, 500 1000 C 575 900, 625 850, 700 800 C 750 700, 775 650, 800 600 C 800 500, 775 450, 700 400 C 625 300, 575 250, 500 200',
@@ -19,32 +19,11 @@ const pagePaths: Record<number, string> = {
 
 export function StageSelectScreen() {
   const router = useRouter();
-  const [isReady, setIsReady] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedStageId, setSelectedStageId] = useState<number | null>(null);
 
   const preloadTargets = useMemo(() => Object.values(stageSelectBackgrounds), []);
-
-  useEffect(() => {
-    let active = true;
-
-    async function preloadAssets() {
-      await Promise.all(preloadTargets.map((asset) => Asset.fromModule(asset).downloadAsync()));
-      if (active) {
-        setIsReady(true);
-      }
-    }
-
-    preloadAssets().catch(() => {
-      if (active) {
-        setIsReady(true);
-      }
-    });
-
-    return () => {
-      active = false;
-    };
-  }, [preloadTargets]);
+  const { isReady } = useAssetPreload(preloadTargets);
 
   const currentRange = stageRanges.find((range) => range.page === currentPage) ?? stageRanges[0];
   const nodesInPage = useMemo(
