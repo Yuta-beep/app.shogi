@@ -1,7 +1,10 @@
+import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { Pressable, Text, View } from 'react-native';
 
 import { UiScreenShell } from '@/components/module/ui-screen-shell';
+
+const eventDungeon = require('../../../../assets/special-dungeon/event-dungeon.png');
 
 const eventStages = [
   { id: 'EX-1', name: '夜叉の陣', rule: '5分切れ負け', open: true },
@@ -14,8 +17,12 @@ export function SpecialDungeonScreen() {
 
   return (
     <UiScreenShell title="Special Dungeon" subtitle="期間限定ステージに挑戦">
-      <View className="rounded-xl border-2 border-[#a27700] bg-[#fff5d6] p-4">
-        <Text className="text-lg font-black text-ink">期間限定イベント: 春の幻獣杯</Text>
+      <View className="overflow-hidden rounded-xl border-2 border-[#a27700]">
+        <Image source={eventDungeon} contentFit="cover" style={{ width: '100%', height: 180 }} />
+      </View>
+
+      <View className="mt-3 rounded-xl border border-[#a27700] bg-[#fff5d6] p-3">
+        <Text className="text-lg font-black text-ink">期間限定イベント</Text>
         <Text className="mt-1 text-sm text-[#6b4532]">開催期間: 2026/03/01 - 2026/03/14</Text>
       </View>
 
