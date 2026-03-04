@@ -1,5 +1,5 @@
-import { ScreenPlaceholder } from '@/components/module/screen-placeholder';
+import { StageSelectScreen } from '@/features/stage-select/ui/stage-select-screen';
 
 export default function StageSelectRoute() {
-  return <ScreenPlaceholder title="Stage Select" />;
+  return <StageSelectScreen />;
 }
