@@ -8,7 +8,25 @@ import { useScreenBgm } from '@/hooks/common/use-screen-bgm';
 
 const boardImage = require('../../../../assets/stage-shogi/shogi-board.png');
 const BOARD_SIZE = 9;
-const BOARD_PIXEL_HEIGHT = 320;
+const SHOGI_GAME_BOARD_PX = 540;
+const SHOGI_GAME_BOARD_PADDING_PX = 6;
+const SHOGI_GAME_BACKGROUND_SCALE = 1.07;
+const SHOGI_GAME_CELL_PX = (SHOGI_GAME_BOARD_PX - SHOGI_GAME_BOARD_PADDING_PX * 2) / BOARD_SIZE;
+const SHOGI_GAME_PIECE_PX = 72;
+const SHOGI_GAME_KING_PX = 88;
+const BOARD_INNER_RATIO = 1 - (SHOGI_GAME_BOARD_PADDING_PX * 2) / SHOGI_GAME_BOARD_PX;
+const BOARD_PADDING_RATIO = SHOGI_GAME_BOARD_PADDING_PX / SHOGI_GAME_BOARD_PX;
+const PIECE_RATIO = SHOGI_GAME_PIECE_PX / SHOGI_GAME_CELL_PX;
+const KING_RATIO = SHOGI_GAME_KING_PX / SHOGI_GAME_CELL_PX;
+
+function isEnemySide(side: string) {
+  const normalized = side.toLowerCase();
+  return normalized === 'enemy' || normalized === 'cpu' || normalized === 'gote' || normalized === 'computer';
+}
+
+function isKingChar(char: string) {
+  return char === '王' || char === '玉';
+}
 
 function normalizeCellIndex(value: number) {
   if (Number.isInteger(value) && value >= 1 && value <= BOARD_SIZE) {
@@ -21,8 +39,7 @@ function normalizeCellIndex(value: number) {
 }
 
 function sideBadgeClass(side: string) {
-  const normalized = side.toLowerCase();
-  if (normalized === 'enemy' || normalized === 'cpu' || normalized === 'gote') {
+  if (isEnemySide(side)) {
     return 'bg-[#7f1d1d] text-white';
   }
   return 'bg-[#14532d] text-white';
@@ -41,8 +58,18 @@ export function StageShogiScreen() {
       </View>
 
       <View className="mt-3 overflow-hidden rounded-xl border-2 border-[#a27700] bg-[#e3c690] p-2">
-        <View style={{ width: '100%', height: BOARD_PIXEL_HEIGHT }}>
-          <Image source={boardImage} contentFit="contain" style={{ width: '100%', height: BOARD_PIXEL_HEIGHT }} />
+        <View style={{ width: '100%', aspectRatio: 1 }}>
+          <Image
+            source={boardImage}
+            contentFit="cover"
+            style={{
+              position: 'absolute',
+              top: `${((1 - SHOGI_GAME_BACKGROUND_SCALE) / 2) * 100}%`,
+              left: `${((1 - SHOGI_GAME_BACKGROUND_SCALE) / 2) * 100}%`,
+              width: `${SHOGI_GAME_BACKGROUND_SCALE * 100}%`,
+              height: `${SHOGI_GAME_BACKGROUND_SCALE * 100}%`,
+            }}
+          />
 
           <View pointerEvents="none" style={{ position: 'absolute', inset: 0 }}>
             {snapshot.placements.map((placement, index) => {
@@ -53,8 +80,19 @@ export function StageShogiScreen() {
               }
 
               const cellPercent = 100 / (snapshot.boardSize || BOARD_SIZE);
-              const topPercent = rowIndex * cellPercent;
-              const leftPercent = colIndex * cellPercent;
+              const innerCellPercent = cellPercent * BOARD_INNER_RATIO;
+              const topPercent = BOARD_PADDING_RATIO * 100 + rowIndex * innerCellPercent;
+              const leftPercent = BOARD_PADDING_RATIO * 100 + colIndex * innerCellPercent;
+              const enemy = isEnemySide(placement.side);
+              const king = isKingChar(placement.char);
+              const pieceSize = king ? innerCellPercent * KING_RATIO : innerCellPercent * PIECE_RATIO;
+
+              let translateY = 0;
+              if (king && enemy) {
+                translateY = -pieceSize * (12 / SHOGI_GAME_KING_PX);
+              } else if (king) {
+                translateY = pieceSize * (6 / SHOGI_GAME_KING_PX);
+              }
 
               return (
                 <View
@@ -63,13 +101,21 @@ export function StageShogiScreen() {
                     position: 'absolute',
                     top: `${topPercent}%`,
                     left: `${leftPercent}%`,
-                    width: `${cellPercent}%`,
-                    height: `${cellPercent}%`,
+                    width: `${innerCellPercent}%`,
+                    height: `${innerCellPercent}%`,
                     alignItems: 'center',
                     justifyContent: 'center',
                   }}
                 >
-                  <View className={`h-7 w-7 items-center justify-center rounded-full border border-white/60 ${sideBadgeClass(placement.side)}`}>
+                  <View
+                    className={`items-center justify-center ${sideBadgeClass(placement.side)}`}
+                    style={{
+                      width: `${pieceSize}%`,
+                      height: `${pieceSize}%`,
+                      borderRadius: 999,
+                      transform: [{ rotate: enemy ? '180deg' : '0deg' }, { translateY }],
+                    }}
+                  >
                     <Text className="text-sm font-black">{placement.char}</Text>
                   </View>
                 </View>
