@@ -7,6 +7,8 @@ const emptySnapshot: StageBattleSnapshot = {
   stageLabel: 'STAGE',
   turnLabel: 'TURN 0 / 0',
   handLabel: '',
+  boardSize: 9,
+  placements: [],
 };
 
 export function useStageBattleScreen(stageId?: string) {

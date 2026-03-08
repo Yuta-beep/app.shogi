@@ -11,6 +11,8 @@ export class ApiPrepareStageBattleUseCase implements PrepareStageBattleUseCase {
         stageLabel: 'STAGE',
         turnLabel: 'TURN 1',
         handLabel: '持ち駒',
+        boardSize: 9,
+        placements: [],
       };
     }
 
@@ -20,6 +22,8 @@ export class ApiPrepareStageBattleUseCase implements PrepareStageBattleUseCase {
         stageLabel: 'STAGE',
         turnLabel: 'TURN 1',
         handLabel: '持ち駒',
+        boardSize: 9,
+        placements: [],
       };
     }
 
@@ -28,6 +32,13 @@ export class ApiPrepareStageBattleUseCase implements PrepareStageBattleUseCase {
       stageLabel: setup.labels.stageLabel,
       turnLabel: setup.labels.turnLabel,
       handLabel: setup.labels.handLabel,
+      boardSize: setup.board?.size ?? 9,
+      placements: (setup.board?.placements ?? []).map((placement) => ({
+        side: placement.side,
+        row: placement.row,
+        col: placement.col,
+        char: placement.piece.char ?? placement.piece.code ?? '?',
+      })),
     };
   }
 }

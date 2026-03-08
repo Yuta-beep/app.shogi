@@ -8,6 +8,8 @@ export class MockPrepareStageBattleUseCase implements PrepareStageBattleUseCase 
       stageLabel,
       turnLabel: 'TURN 12 / 99',
       handLabel: '歩 x2 / 桂 x1 / 角 x1',
+      boardSize: 9,
+      placements: [],
     };
   }
 }
