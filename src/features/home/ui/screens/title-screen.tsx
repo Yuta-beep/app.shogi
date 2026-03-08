@@ -50,7 +50,7 @@ export function TitleScreen() {
           {isReady && !isTransitioning ? (
             <TapToStartScreen onPressStart={startHomeTransition} />
           ) : (
-            <AppLoadingScreen imageSource={homeAssets.loadingImage} />
+            <AppLoadingScreen />
           )}
         </View>
       </SafeAreaView>
