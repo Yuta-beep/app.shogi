@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import { MockPrepareStageBattleUseCase } from '@/usecases/stage-battle/mock-stage-battle-usecases';
+import { createPrepareStageBattleUseCase } from '@/infra/di/usecase-factory';
 import { StageBattleSnapshot } from '@/usecases/stage-battle/prepare-stage-battle-usecase';
 
 const emptySnapshot: StageBattleSnapshot = {
@@ -10,7 +10,7 @@ const emptySnapshot: StageBattleSnapshot = {
 };
 
 export function useStageBattleScreen(stageId?: string) {
-  const useCase = useMemo(() => new MockPrepareStageBattleUseCase(), []);
+  const useCase = useMemo(() => createPrepareStageBattleUseCase(), []);
   const [snapshot, setSnapshot] = useState<StageBattleSnapshot>(emptySnapshot);
 
   useEffect(() => {

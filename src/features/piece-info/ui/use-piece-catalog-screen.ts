@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import { MockLoadPieceCatalogUseCase } from '@/usecases/piece-info/mock-piece-info-usecases';
+import { createLoadPieceCatalogUseCase } from '@/infra/di/usecase-factory';
 import { PieceCatalogItem } from '@/usecases/piece-info/load-piece-catalog-usecase';
 
 export function usePieceCatalogScreen() {
   const [items, setItems] = useState<PieceCatalogItem[]>([]);
   const [index, setIndex] = useState(0);
-  const loadUseCase = useMemo(() => new MockLoadPieceCatalogUseCase(), []);
+  const loadUseCase = useMemo(() => createLoadPieceCatalogUseCase(), []);
 
   useEffect(() => {
     let active = true;

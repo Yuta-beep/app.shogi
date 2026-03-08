@@ -32,6 +32,14 @@ npx expo start --clear
 npm run test
 ```
 
+## Environment Variables
+- `EXPO_PUBLIC_API_BASE_URL`
+  - BFF のベースURL（例: `http://localhost:3000`）
+- `EXPO_PUBLIC_DATA_SOURCE`
+  - `mock` または `api`
+  - `api` のとき `UseCase -> Repository -> DataSource(API)` で BFF 接続
+  - 未設定時は `mock` 扱い
+
 ## Current App Flow
 - `/` : Title screen
   - Home用アセットを先読み
@@ -49,8 +57,16 @@ src/
     atom/            # 最小単位のUI部品
     module/          # atomを組み合わせた部品
   constants/         # 定数・アセット参照・モック
+  domain/
+    repositories/    # Repository interface
   features/          # 機能単位（画面UI本体）
   hooks/             # 共通hooks
+  infra/
+    di/              # UseCase factory（mock/api切替）
+    http/            # APIクライアント
+    datasources/     # HTTP DataSource
+    repositories/    # Repository実装
+  usecases/          # ユースケース（mock / api 実装）
 docs/                # 開発方針ドキュメント
 ```
 
@@ -82,7 +98,7 @@ assets/audio/
 - `app/` はルーティング定義に限定
 - 実画面実装は `src/features/*` に置く
 - 共通UIは `src/components/atom|module` に集約
-- 依存方向は `UI -> (hooks/useCase/repository...)` を維持
+- 依存方向は `UI -> UseCase -> Repository(interface) -> DataSource(API)` を維持
 
 詳細方針:
 - `docs/ui-first-development-plan.md`

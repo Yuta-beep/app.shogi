@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { useModalState } from '@/hooks/common/use-modal-state';
-import { MockLoadShopCatalogUseCase, MockPurchaseShopItemUseCase } from '@/usecases/piece-shop/mock-piece-shop-usecases';
+import { createLoadShopCatalogUseCase, createPurchaseShopItemUseCase } from '@/infra/di/usecase-factory';
 import { ShopItem } from '@/usecases/piece-shop/load-shop-catalog-usecase';
 
 export type PieceShopVM = {
@@ -27,8 +27,8 @@ export function usePieceShopScreen(): PieceShopVM {
   const detail = useModalState<ShopItem>();
   const confirm = useModalState<ShopItem>();
 
-  const loadUseCase = useMemo(() => new MockLoadShopCatalogUseCase(), []);
-  const purchaseUseCase = useMemo(() => new MockPurchaseShopItemUseCase(), []);
+  const loadUseCase = useMemo(() => createLoadShopCatalogUseCase(), []);
+  const purchaseUseCase = useMemo(() => createPurchaseShopItemUseCase(), []);
 
   useEffect(() => {
     let active = true;
@@ -48,8 +48,12 @@ export function usePieceShopScreen(): PieceShopVM {
     if (!confirm.payload) {
       return;
     }
-    await purchaseUseCase.execute({ item: confirm.payload });
-    setOwned((prev) => (prev.includes(confirm.payload!.key) ? prev : [...prev, confirm.payload!.key]));
+
+    const result = await purchaseUseCase.execute({ item: confirm.payload });
+    if (result.success || result.reason === 'UI_ONLY') {
+      setOwned((prev) => (prev.includes(confirm.payload!.key) ? prev : [...prev, confirm.payload!.key]));
+    }
+
     confirm.close();
   }
 

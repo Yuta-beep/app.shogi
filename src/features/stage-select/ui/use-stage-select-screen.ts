@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { StageNodeData, stageRanges } from '@/constants/stage-select-data';
-import { MockLoadStageSelectUseCase, MockSelectStageUseCase } from '@/usecases/stage-select/mock-stage-select-usecases';
+import { createLoadStageSelectUseCase, createSelectStageUseCase } from '@/infra/di/usecase-factory';
 
 export type StageSelectScreenVM = {
   currentPage: number;
@@ -18,8 +18,8 @@ export function useStageSelectScreen(): StageSelectScreenVM {
   const [selectedStageId, setSelectedStageId] = useState<number | null>(null);
   const [nodes, setNodes] = useState<StageNodeData[]>([]);
 
-  const loadStageSelectUseCase = useMemo(() => new MockLoadStageSelectUseCase(), []);
-  const selectStageUseCase = useMemo(() => new MockSelectStageUseCase(), []);
+  const loadStageSelectUseCase = useMemo(() => createLoadStageSelectUseCase(), []);
+  const selectStageUseCase = useMemo(() => createSelectStageUseCase(), []);
 
   useEffect(() => {
     let active = true;
