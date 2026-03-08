@@ -5,7 +5,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 
 import { AppLoadingScreen } from '@/components/module/app-loading-screen';
-import { homeAssets } from '@/constants/home-assets';
 import { stageSelectBackgrounds } from '@/constants/stage-select-data';
 import { useAssetPreload } from '@/hooks/common/use-asset-preload';
 import { useStageSelectScreen } from '@/features/stage-select/ui/use-stage-select-screen';
@@ -34,7 +33,7 @@ export function StageSelectScreen() {
     return (
       <ImageBackground source={stageSelectBackgrounds[1]} resizeMode="cover" className="flex-1">
         <SafeAreaView className="flex-1 bg-black/20">
-          <AppLoadingScreen imageSource={homeAssets.loadingImage} />
+          <AppLoadingScreen />
         </SafeAreaView>
       </ImageBackground>
     );
