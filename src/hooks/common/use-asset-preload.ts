@@ -6,11 +6,13 @@ export type UseAssetPreloadResult = {
   error: Error | null;
 };
 
-export function useAssetPreload(assetModules: number[]): UseAssetPreloadResult {
+export function useAssetPreload(assetModules: readonly number[]): UseAssetPreloadResult {
   const [isReady, setIsReady] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
-  const targets = useMemo(() => assetModules.filter(Boolean), [assetModules]);
+  // JSON.stringify で中身ベースの比較にし、インライン配列でも再実行しない
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const targets = useMemo(() => assetModules.filter(Boolean), [JSON.stringify(assetModules)]);
 
   useEffect(() => {
     let active = true;
