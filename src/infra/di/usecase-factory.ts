@@ -1,3 +1,6 @@
+import { ApiLoadDeckBuilderUseCase } from '@/usecases/deck-builder/api-deck-builder-usecases';
+import { MockLoadDeckBuilderUseCase } from '@/usecases/deck-builder/mock-deck-builder-usecases';
+import { LoadDeckBuilderUseCase } from '@/usecases/deck-builder/load-deck-builder-usecase';
 import { ApiLoadHomeSnapshotUseCase } from '@/usecases/home/api-home-usecases';
 import { MockLoadHomeSnapshotUseCase } from '@/usecases/home/mock-home-usecases';
 import { LoadHomeSnapshotUseCase } from '@/usecases/home/load-home-snapshot-usecase';
@@ -50,4 +53,10 @@ export function createLoadShopCatalogUseCase(): LoadShopCatalogUseCase {
 
 export function createPurchaseShopItemUseCase(): PurchaseShopItemUseCase {
   return shouldUseApi() ? new ApiPurchaseShopItemUseCase() : new MockPurchaseShopItemUseCase();
+}
+
+export function createLoadDeckBuilderUseCase(token?: string): LoadDeckBuilderUseCase {
+  return shouldUseApi() && token
+    ? new ApiLoadDeckBuilderUseCase(token)
+    : new MockLoadDeckBuilderUseCase();
 }

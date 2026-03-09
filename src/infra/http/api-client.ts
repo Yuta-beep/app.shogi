@@ -52,18 +52,26 @@ async function parseEnvelope<T>(response: Response): Promise<T> {
   throw new ApiClientError({ code: 'INVALID_RESPONSE', message: 'Unexpected API response' }, response.status);
 }
 
-export async function getJson<T>(path: string): Promise<T> {
+type RequestOptions = {
+  token?: string;
+};
+
+function authHeaders(token?: string): Record<string, string> {
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+export async function getJson<T>(path: string, opts?: RequestOptions): Promise<T> {
   const url = `${baseUrl()}${path}`;
   console.log('[api-client] GET', url);
   const response = await fetch(url, {
     method: 'GET',
-    headers: { Accept: 'application/json' },
+    headers: { Accept: 'application/json', ...authHeaders(opts?.token) },
   });
 
   return parseEnvelope<T>(response);
 }
 
-export async function postJson<T>(path: string, body?: unknown): Promise<T> {
+export async function postJson<T>(path: string, body?: unknown, opts?: RequestOptions): Promise<T> {
   const url = `${baseUrl()}${path}`;
   console.log('[api-client] POST', url);
   const response = await fetch(url, {
@@ -71,8 +79,20 @@ export async function postJson<T>(path: string, body?: unknown): Promise<T> {
     headers: {
       Accept: 'application/json',
       'Content-Type': 'application/json',
+      ...authHeaders(opts?.token),
     },
     body: body === undefined ? undefined : JSON.stringify(body),
+  });
+
+  return parseEnvelope<T>(response);
+}
+
+export async function deleteJson<T>(path: string, opts?: RequestOptions): Promise<T> {
+  const url = `${baseUrl()}${path}`;
+  console.log('[api-client] DELETE', url);
+  const response = await fetch(url, {
+    method: 'DELETE',
+    headers: { Accept: 'application/json', ...authHeaders(opts?.token) },
   });
 
   return parseEnvelope<T>(response);

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import { MockLoadDeckBuilderUseCase } from '@/usecases/deck-builder/mock-deck-builder-usecases';
+import { supabase } from '@/lib/supabase/supabase-client';
+import { DeckBuilderApiDataSource } from '@/infra/datasources/deck-builder-datasource';
+import { createLoadDeckBuilderUseCase } from '@/infra/di/usecase-factory';
 import { OwnedPiece, SavedDeck } from '@/usecases/deck-builder/load-deck-builder-usecase';
 
 export function useDeckBuilderScreen() {
@@ -12,8 +14,19 @@ export function useDeckBuilderScreen() {
   const [loadModalOpen, setLoadModalOpen] = useState(false);
   const [defaultModalOpen, setDefaultModalOpen] = useState(false);
   const [deckName, setDeckName] = useState('');
+  const [token, setToken] = useState<string | undefined>(undefined);
 
-  const loadUseCase = useMemo(() => new MockLoadDeckBuilderUseCase(), []);
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setToken(data.session?.access_token);
+    });
+  }, []);
+
+  const loadUseCase = useMemo(
+    () => createLoadDeckBuilderUseCase(token),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [token]
+  );
 
   useEffect(() => {
     let active = true;
@@ -34,19 +47,41 @@ export function useDeckBuilderScreen() {
 
   function saveDeck() {
     if (!deckName.trim()) return;
+
     const newDeck: SavedDeck = {
       id: `deck-${Date.now()}`,
       name: deckName.trim(),
       pieces: ownedPieces.slice(0, 5).map((p) => p.char),
       savedAt: new Date().toLocaleString('ja-JP', { hour12: false }),
     };
-    setSavedDecks((prev) => [newDeck, ...prev]);
+
+    if (token) {
+      const ds = new DeckBuilderApiDataSource(token);
+      ds.saveDeck({ name: newDeck.name, placements: [] })
+        .then((res) => {
+          setSavedDecks((prev) => [{ ...newDeck, id: String(res.deckId) }, ...prev]);
+        })
+        .catch(() => {
+          setSavedDecks((prev) => [newDeck, ...prev]);
+        });
+    } else {
+      setSavedDecks((prev) => [newDeck, ...prev]);
+    }
+
     setDeckName('');
     setSaveModalOpen(false);
   }
 
   function deleteDeck(id: string) {
     setSavedDecks((prev) => prev.filter((d) => d.id !== id));
+
+    const numericId = parseInt(id, 10);
+    if (token && !isNaN(numericId)) {
+      const ds = new DeckBuilderApiDataSource(token);
+      ds.deleteDeck(numericId).catch(() => {
+        // ignore: UI already updated optimistically
+      });
+    }
   }
 
   return {
