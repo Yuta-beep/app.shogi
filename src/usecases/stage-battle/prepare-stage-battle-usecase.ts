@@ -7,7 +7,11 @@ export type StageBattleSnapshot = {
     side: string;
     row: number;
     col: number;
+    pieceId: number | null;
     char: string;
+    imageBucket: string | null;
+    imageKey: string | null;
+    imageSignedUrl: string | null;
   }>;
 };
 

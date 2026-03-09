@@ -37,7 +37,11 @@ export class ApiPrepareStageBattleUseCase implements PrepareStageBattleUseCase {
         side: placement.side,
         row: placement.row,
         col: placement.col,
+        pieceId: placement.piece.id ?? null,
         char: placement.piece.char ?? placement.piece.code ?? '?',
+        imageBucket: placement.piece.imageBucket ?? null,
+        imageKey: placement.piece.imageKey ?? null,
+        imageSignedUrl: placement.piece.imageSignedUrl ?? null,
       })),
     };
   }

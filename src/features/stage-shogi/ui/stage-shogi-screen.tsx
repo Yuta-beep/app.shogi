@@ -1,5 +1,6 @@
 import { Image } from 'expo-image';
 import { useLocalSearchParams } from 'expo-router';
+import { useState } from 'react';
 import { Text, View } from 'react-native';
 
 import { UiScreenShell } from '@/components/module/ui-screen-shell';
@@ -18,6 +19,7 @@ const BOARD_INNER_RATIO = 1 - (SHOGI_GAME_BOARD_PADDING_PX * 2) / SHOGI_GAME_BOA
 const BOARD_PADDING_RATIO = SHOGI_GAME_BOARD_PADDING_PX / SHOGI_GAME_BOARD_PX;
 const PIECE_RATIO = SHOGI_GAME_PIECE_PX / SHOGI_GAME_CELL_PX;
 const KING_RATIO = SHOGI_GAME_KING_PX / SHOGI_GAME_CELL_PX;
+const ENABLE_PIECE_IMAGES = process.env.EXPO_PUBLIC_ENABLE_PIECE_IMAGES !== 'false';
 
 function isEnemySide(side: string) {
   const normalized = side.toLowerCase();
@@ -28,12 +30,20 @@ function isKingChar(char: string) {
   return char === '王' || char === '玉';
 }
 
-function normalizeCellIndex(value: number) {
-  if (Number.isInteger(value) && value >= 1 && value <= BOARD_SIZE) {
-    return value - 1;
+function getPieceImageUri(imageSignedUrl: string | null) {
+  if (!ENABLE_PIECE_IMAGES) {
+    return null;
   }
+  if (imageSignedUrl) return imageSignedUrl;
+  return null;
+}
+
+function normalizeCellIndex(value: number) {
   if (Number.isInteger(value) && value >= 0 && value < BOARD_SIZE) {
     return value;
+  }
+  if (Number.isInteger(value) && value >= 1 && value <= BOARD_SIZE) {
+    return value - 1;
   }
   return null;
 }
@@ -48,6 +58,7 @@ function sideBadgeClass(side: string) {
 export function StageShogiScreen() {
   const params = useLocalSearchParams<{ stage?: string }>();
   const { snapshot } = useStageBattleScreen(params.stage);
+  const [failedImageKeys, setFailedImageKeys] = useState<Record<string, true>>({});
   useScreenBgm('battle');
 
   return (
@@ -85,18 +96,13 @@ export function StageShogiScreen() {
               const leftPercent = BOARD_PADDING_RATIO * 100 + colIndex * innerCellPercent;
               const enemy = isEnemySide(placement.side);
               const king = isKingChar(placement.char);
-              const pieceSize = king ? innerCellPercent * KING_RATIO : innerCellPercent * PIECE_RATIO;
-
-              let translateY = 0;
-              if (king && enemy) {
-                translateY = -pieceSize * (12 / SHOGI_GAME_KING_PX);
-              } else if (king) {
-                translateY = pieceSize * (6 / SHOGI_GAME_KING_PX);
-              }
+              const pieceScalePercent = (king ? KING_RATIO : PIECE_RATIO) * 100;
+              const placementKey = `${placement.side}-${placement.row}-${placement.col}-${index}`;
+              const imageUri = failedImageKeys[placementKey] ? null : getPieceImageUri(placement.imageSignedUrl);
 
               return (
                 <View
-                  key={`${placement.side}-${placement.row}-${placement.col}-${index}`}
+                  key={placementKey}
                   style={{
                     position: 'absolute',
                     top: `${topPercent}%`,
@@ -108,15 +114,27 @@ export function StageShogiScreen() {
                   }}
                 >
                   <View
-                    className={`items-center justify-center ${sideBadgeClass(placement.side)}`}
+                    className={`items-center justify-center ${imageUri ? '' : sideBadgeClass(placement.side)}`}
                     style={{
-                      width: `${pieceSize}%`,
-                      height: `${pieceSize}%`,
-                      borderRadius: 999,
-                      transform: [{ rotate: enemy ? '180deg' : '0deg' }, { translateY }],
+                      width: `${pieceScalePercent}%`,
+                      height: `${pieceScalePercent}%`,
+                      borderRadius: imageUri ? 0 : 999,
+                      overflow: 'hidden',
+                      transform: [{ rotate: enemy ? '180deg' : '0deg' }],
                     }}
                   >
-                    <Text className="text-sm font-black">{placement.char}</Text>
+                    {imageUri ? (
+                      <Image
+                        source={{ uri: imageUri }}
+                        contentFit="contain"
+                        style={{ width: '100%', height: '100%' }}
+                        onError={() => {
+                          setFailedImageKeys((prev) => ({ ...prev, [placementKey]: true }));
+                        }}
+                      />
+                    ) : (
+                      <Text className="text-sm font-black">{placement.char}</Text>
+                    )}
                   </View>
                 </View>
               );

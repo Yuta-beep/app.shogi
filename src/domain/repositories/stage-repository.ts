@@ -26,6 +26,9 @@ export type StageBattleSetup = {
         code: string | null;
         char: string | null;
         name: string | null;
+        imageBucket: string | null;
+        imageKey: string | null;
+        imageSignedUrl: string | null;
       };
     }>;
   };
