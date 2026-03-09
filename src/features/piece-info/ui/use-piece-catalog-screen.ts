@@ -6,15 +6,24 @@ import { PieceCatalogItem } from '@/usecases/piece-info/load-piece-catalog-useca
 export function usePieceCatalogScreen() {
   const [items, setItems] = useState<PieceCatalogItem[]>([]);
   const [index, setIndex] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
   const loadUseCase = useMemo(() => createLoadPieceCatalogUseCase(), []);
 
   useEffect(() => {
     let active = true;
-    loadUseCase.execute().then((next) => {
-      if (active) {
-        setItems(next);
-      }
-    });
+    setIsLoading(true);
+    loadUseCase
+      .execute()
+      .then((next) => {
+        if (active) {
+          setItems(next);
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setIsLoading(false);
+        }
+      });
     return () => {
       active = false;
     };
@@ -40,6 +49,7 @@ export function usePieceCatalogScreen() {
   }
 
   return {
+    isLoading,
     piece,
     index,
     total: items.length === 0 ? 1 : items.length,

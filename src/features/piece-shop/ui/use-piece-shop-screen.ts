@@ -5,6 +5,7 @@ import { createLoadShopCatalogUseCase, createPurchaseShopItemUseCase } from '@/i
 import { ShopItem } from '@/usecases/piece-shop/load-shop-catalog-usecase';
 
 export type PieceShopVM = {
+  isLoading: boolean;
   items: ShopItem[];
   pawnCurrency: number;
   goldCurrency: number;
@@ -19,6 +20,7 @@ export type PieceShopVM = {
 };
 
 export function usePieceShopScreen(): PieceShopVM {
+  const [isLoading, setIsLoading] = useState(true);
   const [items, setItems] = useState<ShopItem[]>([]);
   const [pawnCurrency, setPawnCurrency] = useState(0);
   const [goldCurrency, setGoldCurrency] = useState(0);
@@ -32,13 +34,21 @@ export function usePieceShopScreen(): PieceShopVM {
 
   useEffect(() => {
     let active = true;
-    loadUseCase.execute().then((snapshot) => {
-      if (!active) return;
-      setItems(snapshot.items);
-      setPawnCurrency(snapshot.pawnCurrency);
-      setGoldCurrency(snapshot.goldCurrency);
-      setOwned(snapshot.owned);
-    });
+    setIsLoading(true);
+    loadUseCase
+      .execute()
+      .then((snapshot) => {
+        if (!active) return;
+        setItems(snapshot.items);
+        setPawnCurrency(snapshot.pawnCurrency);
+        setGoldCurrency(snapshot.goldCurrency);
+        setOwned(snapshot.owned);
+      })
+      .finally(() => {
+        if (active) {
+          setIsLoading(false);
+        }
+      });
     return () => {
       active = false;
     };
@@ -49,15 +59,20 @@ export function usePieceShopScreen(): PieceShopVM {
       return;
     }
 
-    const result = await purchaseUseCase.execute({ item: confirm.payload });
-    if (result.success || result.reason === 'UI_ONLY') {
-      setOwned((prev) => (prev.includes(confirm.payload!.key) ? prev : [...prev, confirm.payload!.key]));
+    setIsLoading(true);
+    try {
+      const result = await purchaseUseCase.execute({ item: confirm.payload });
+      if (result.success || result.reason === 'UI_ONLY') {
+        setOwned((prev) => (prev.includes(confirm.payload!.key) ? prev : [...prev, confirm.payload!.key]));
+      }
+    } finally {
+      setIsLoading(false);
     }
-
     confirm.close();
   }
 
   return {
+    isLoading,
     items,
     pawnCurrency,
     goldCurrency,

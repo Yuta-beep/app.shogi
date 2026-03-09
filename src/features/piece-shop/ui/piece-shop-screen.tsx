@@ -3,7 +3,10 @@ import { useRouter } from 'expo-router';
 import { Modal, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AppLoadingScreen } from '@/components/module/app-loading-screen';
+import { homeAssets } from '@/constants/home-assets';
 import { usePieceShopScreen } from '@/features/piece-shop/ui/use-piece-shop-screen';
+import { useAssetPreload } from '@/hooks/common/use-asset-preload';
 import { useScreenBgm } from '@/hooks/common/use-screen-bgm';
 import { playSe } from '@/lib/audio/audio-manager';
 import { ShopItem } from '@/usecases/piece-shop/load-shop-catalog-usecase';
@@ -24,6 +27,11 @@ const shopAssets = {
 export function PieceShopScreen() {
   const router = useRouter();
   const vm = usePieceShopScreen();
+  const { isReady: areAssetsReady } = useAssetPreload([
+    shopAssets.background,
+    shopAssets.home,
+    ...Object.values(shopAssets.pieces),
+  ]);
   useScreenBgm('shop');
 
   function openPurchase(piece: ShopItem) {
@@ -33,6 +41,10 @@ export function PieceShopScreen() {
     }
     void playSe('confirm');
     vm.openConfirm(piece);
+  }
+
+  if (vm.isLoading || !areAssetsReady) {
+    return <AppLoadingScreen imageSource={homeAssets.loadingImage} />;
   }
 
   return (

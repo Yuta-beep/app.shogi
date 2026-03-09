@@ -12,20 +12,29 @@ const emptySession: OnlineBattleSession = {
 
 export function useOnlineBattleScreen(opponent?: string, rating?: string) {
   const [session, setSession] = useState<OnlineBattleSession>(emptySession);
+  const [isLoading, setIsLoading] = useState(true);
   const loadUseCase = useMemo(() => new MockLoadOnlineBattleSessionUseCase(), []);
 
   useEffect(() => {
     let active = true;
-    loadUseCase.execute({ opponent, rating }).then((next) => {
-      if (active) {
-        setSession(next);
-      }
-    });
+    setIsLoading(true);
+    loadUseCase
+      .execute({ opponent, rating })
+      .then((next) => {
+        if (active) {
+          setSession(next);
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setIsLoading(false);
+        }
+      });
 
     return () => {
       active = false;
     };
   }, [loadUseCase, opponent, rating]);
 
-  return { session };
+  return { session, isLoading };
 }

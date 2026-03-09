@@ -1,10 +1,16 @@
-import { View, Text, TextInput, Pressable, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AppLoadingScreen } from '@/components/module/app-loading-screen';
+import { homeAssets } from '@/constants/home-assets';
 import { useUsernameSetupScreen } from '@/features/username-setup/ui/use-username-setup-screen';
 
 export function UsernameSetupScreen() {
-  const { username, setUsername, isSubmitting, error, handleSubmit } = useUsernameSetupScreen();
+  const { username, setUsername, isInitializing, isSubmitting, error, handleSubmit } = useUsernameSetupScreen();
+
+  if (isInitializing || isSubmitting) {
+    return <AppLoadingScreen imageSource={homeAssets.loadingImage} />;
+  }
 
   return (
     <SafeAreaView className="flex-1 bg-gray-900 justify-center px-8">
@@ -28,11 +34,7 @@ export function UsernameSetupScreen() {
         onPress={() => void handleSubmit()}
         disabled={isSubmitting || username.trim().length === 0}
       >
-        {isSubmitting ? (
-          <ActivityIndicator color="#000" />
-        ) : (
-          <Text className="text-black text-lg font-bold">決定</Text>
-        )}
+        <Text className="text-black text-lg font-bold">決定</Text>
       </Pressable>
     </SafeAreaView>
   );

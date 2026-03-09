@@ -1,5 +1,5 @@
 import { getJson, postJson, deleteJson } from '@/infra/http/api-client';
-import { DeckBuilderSnapshot } from '@/usecases/deck-builder/load-deck-builder-usecase';
+import { DeckBuilderSnapshot, OwnedPiece, SavedDeck } from '@/usecases/deck-builder/load-deck-builder-usecase';
 
 export type SaveDeckPayload = {
   name: string;
@@ -8,11 +8,66 @@ export type SaveDeckPayload = {
 
 export type SaveDeckResponse = { deckId: number };
 
+type ApiOwnedPiece = {
+  pieceId: number;
+  char: string;
+  name: string;
+  acquiredAt: string;
+  source: string;
+};
+
+type ApiDeckPlacement = {
+  rowNo: number;
+  colNo: number;
+  pieceId: number;
+  char: string;
+  name: string;
+};
+
+type ApiDeck = {
+  deckId: number;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+  placements: ApiDeckPlacement[];
+};
+
+type ApiDeckSnapshot = {
+  ownedPieces: ApiOwnedPiece[];
+  decks: ApiDeck[];
+};
+
+function mapOwnedPiece(piece: ApiOwnedPiece): OwnedPiece {
+  return {
+    char: piece.char,
+    name: piece.name,
+    desc: `${piece.name}の詳細は準備中です。`,
+    skill: '準備中',
+    move: '準備中',
+  };
+}
+
+function mapSavedDeck(deck: ApiDeck): SavedDeck {
+  return {
+    id: String(deck.deckId),
+    name: deck.name,
+    pieces: deck.placements
+      .slice()
+      .sort((a, b) => (a.rowNo - b.rowNo) || (a.colNo - b.colNo))
+      .map((placement) => placement.char),
+    savedAt: deck.updatedAt,
+  };
+}
+
 export class DeckBuilderApiDataSource {
   constructor(private readonly token: string) {}
 
   async getSnapshot(): Promise<DeckBuilderSnapshot> {
-    return getJson<DeckBuilderSnapshot>('/api/v1/deck', { token: this.token });
+    const response = await getJson<ApiDeckSnapshot>('/api/v1/deck', { token: this.token });
+    return {
+      ownedPieces: response.ownedPieces.map(mapOwnedPiece),
+      savedDecks: response.decks.map(mapSavedDeck),
+    };
   }
 
   async saveDeck(payload: SaveDeckPayload): Promise<SaveDeckResponse> {

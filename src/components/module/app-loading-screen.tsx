@@ -2,6 +2,8 @@ import { Image } from 'expo-image';
 import { useEffect, useRef } from 'react';
 import { Animated, Easing, Text, View, useWindowDimensions } from 'react-native';
 
+import { homeAssets } from '@/constants/home-assets';
+
 type AppLoadingScreenProps = {
   label?: string;
   imageSource?: number;
@@ -62,7 +64,7 @@ function LoadingDots() {
   );
 }
 
-export function AppLoadingScreen({ label = 'Loading', imageSource }: AppLoadingScreenProps) {
+export function AppLoadingScreen({ label = 'Loading', imageSource = homeAssets.loadingImage }: AppLoadingScreenProps) {
   const { width, height } = useWindowDimensions();
 
   return (

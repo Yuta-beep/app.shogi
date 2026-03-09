@@ -11,24 +11,38 @@ const emptySnapshot: MatchingSnapshot = {
 
 export function useMatchingScreen() {
   const [snapshot, setSnapshot] = useState<MatchingSnapshot>(emptySnapshot);
+  const [isLoading, setIsLoading] = useState(true);
   const startUseCase = useMemo(() => new MockStartMatchingUseCase(), []);
   const cancelUseCase = useMemo(() => new MockCancelMatchingUseCase(), []);
 
   useEffect(() => {
     let active = true;
-    startUseCase.execute().then((next) => {
-      if (active) {
-        setSnapshot(next);
-      }
-    });
+    setIsLoading(true);
+    startUseCase
+      .execute()
+      .then((next) => {
+        if (active) {
+          setSnapshot(next);
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setIsLoading(false);
+        }
+      });
     return () => {
       active = false;
     };
   }, [startUseCase]);
 
   async function cancel() {
-    await cancelUseCase.execute();
+    setIsLoading(true);
+    try {
+      await cancelUseCase.execute();
+    } finally {
+      setIsLoading(false);
+    }
   }
 
-  return { snapshot, cancel };
+  return { snapshot, isLoading, cancel };
 }

@@ -7,14 +7,20 @@ import { setupUsername } from '@/usecases/player/setup-username-usecase';
 export function useUsernameSetupScreen() {
   const router = useRouter();
   const [userId, setUserId] = useState<string | null>(null);
+  const [isInitializing, setIsInitializing] = useState(true);
   const [username, setUsername] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setUserId(data.session?.user.id ?? null);
-    });
+    supabase.auth
+      .getSession()
+      .then(({ data }) => {
+        setUserId(data.session?.user.id ?? null);
+      })
+      .finally(() => {
+        setIsInitializing(false);
+      });
   }, []);
 
   const handleSubmit = async () => {
@@ -31,5 +37,5 @@ export function useUsernameSetupScreen() {
     }
   };
 
-  return { username, setUsername, isSubmitting, error, handleSubmit };
+  return { username, setUsername, isInitializing, isSubmitting, error, handleSubmit };
 }

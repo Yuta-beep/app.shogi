@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 
 import { AppLoadingScreen } from '@/components/module/app-loading-screen';
+import { homeAssets } from '@/constants/home-assets';
 import { stageSelectBackgrounds } from '@/constants/stage-select-data';
 import { useAssetPreload } from '@/hooks/common/use-asset-preload';
 import { useStageSelectScreen } from '@/features/stage-select/ui/use-stage-select-screen';
@@ -21,7 +22,7 @@ const pagePaths: Record<number, string> = {
 
 export function StageSelectScreen() {
   const router = useRouter();
-  const { currentPage, setCurrentPage, ranges, nodesInPage, selectedStageId, selectedStage, selectStage } = useStageSelectScreen();
+  const { isLoading, currentPage, setCurrentPage, ranges, nodesInPage, selectedStageId, selectedStage, selectStage } = useStageSelectScreen();
   useScreenBgm('dungeonSelect');
 
   const preloadTargets = useMemo(() => Object.values(stageSelectBackgrounds), []);
@@ -29,11 +30,11 @@ export function StageSelectScreen() {
 
   const currentRange = ranges.find((range) => range.page === currentPage) ?? ranges[0];
 
-  if (!isReady) {
+  if (!isReady || isLoading) {
     return (
       <ImageBackground source={stageSelectBackgrounds[1]} resizeMode="cover" className="flex-1">
         <SafeAreaView className="flex-1 bg-black/20">
-          <AppLoadingScreen />
+          <AppLoadingScreen imageSource={homeAssets.loadingImage} />
         </SafeAreaView>
       </ImageBackground>
     );

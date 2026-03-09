@@ -38,6 +38,7 @@ export class ApiPrepareStageBattleUseCase implements PrepareStageBattleUseCase {
         row: placement.row,
         col: placement.col,
         pieceId: placement.piece.id ?? null,
+        pieceCode: placement.piece.code ?? null,
         char: placement.piece.char ?? placement.piece.code ?? '?',
         imageBucket: placement.piece.imageBucket ?? null,
         imageKey: placement.piece.imageKey ?? null,

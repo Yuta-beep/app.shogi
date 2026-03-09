@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { supabase } from '@/lib/supabase/supabase-client';
 import { DeckBuilderApiDataSource } from '@/infra/datasources/deck-builder-datasource';
@@ -6,6 +6,7 @@ import { createLoadDeckBuilderUseCase } from '@/infra/di/usecase-factory';
 import { OwnedPiece, SavedDeck } from '@/usecases/deck-builder/load-deck-builder-usecase';
 
 export function useDeckBuilderScreen() {
+  const isApiMode = process.env.EXPO_PUBLIC_DATA_SOURCE === 'api';
   const [ownedPieces, setOwnedPieces] = useState<OwnedPiece[]>([]);
   const [savedDecks, setSavedDecks] = useState<SavedDeck[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -15,21 +16,41 @@ export function useDeckBuilderScreen() {
   const [defaultModalOpen, setDefaultModalOpen] = useState(false);
   const [deckName, setDeckName] = useState('');
   const [token, setToken] = useState<string | undefined>(undefined);
-
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setToken(data.session?.access_token);
-    });
-  }, []);
-
-  const loadUseCase = useMemo(
-    () => createLoadDeckBuilderUseCase(token),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [token]
-  );
+  const [isSessionResolved, setIsSessionResolved] = useState(false);
 
   useEffect(() => {
     let active = true;
+
+    supabase.auth.getSession().then(({ data }) => {
+      if (!active) return;
+      setToken(data.session?.access_token);
+      setIsSessionResolved(true);
+    });
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!active) return;
+      setToken(session?.access_token);
+      setIsSessionResolved(true);
+    });
+
+    return () => {
+      active = false;
+      authListener.subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isApiMode && !isSessionResolved) {
+      return;
+    }
+
+    if (isApiMode && !token) {
+      setIsLoading(true);
+      return;
+    }
+
+    let active = true;
+    const loadUseCase = createLoadDeckBuilderUseCase(token);
     setIsLoading(true);
     loadUseCase
       .execute()
@@ -43,7 +64,7 @@ export function useDeckBuilderScreen() {
         if (active) setIsLoading(false);
       });
     return () => { active = false; };
-  }, [loadUseCase]);
+  }, [isApiMode, isSessionResolved, token]);
 
   function saveDeck() {
     if (!deckName.trim()) return;

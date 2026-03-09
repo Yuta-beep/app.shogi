@@ -3,7 +3,10 @@ import { useRouter } from 'expo-router';
 import { Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AppLoadingScreen } from '@/components/module/app-loading-screen';
+import { homeAssets } from '@/constants/home-assets';
 import { useMatchingScreen } from '@/features/matching/ui/use-matching-screen';
+import { useAssetPreload } from '@/hooks/common/use-asset-preload';
 import { useScreenBgm } from '@/hooks/common/use-screen-bgm';
 import { playSe } from '@/lib/audio/audio-manager';
 
@@ -11,8 +14,13 @@ const matchingBg = require('../../../../assets/matching/matching-bg.png');
 
 export function MatchingScreen() {
   const router = useRouter();
-  const { snapshot, cancel } = useMatchingScreen();
+  const { snapshot, isLoading, cancel } = useMatchingScreen();
+  const { isReady: areAssetsReady } = useAssetPreload([matchingBg]);
   useScreenBgm('matching');
+
+  if (isLoading || !areAssetsReady) {
+    return <AppLoadingScreen imageSource={homeAssets.loadingImage} />;
+  }
 
   return (
     <SafeAreaView className="flex-1 bg-black">
@@ -31,9 +39,9 @@ export function MatchingScreen() {
           </View>
 
           <Pressable
-            onPress={() => {
+            onPress={async () => {
               void playSe('cancel');
-              void cancel();
+              await cancel();
               router.replace('/home');
             }}
             className="mt-4 self-center rounded-lg bg-red-500 px-4 py-2 active:scale-95"

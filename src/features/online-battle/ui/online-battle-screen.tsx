@@ -2,8 +2,11 @@ import { Image } from 'expo-image';
 import { useLocalSearchParams } from 'expo-router';
 import { Pressable, Text, View } from 'react-native';
 
+import { AppLoadingScreen } from '@/components/module/app-loading-screen';
+import { homeAssets } from '@/constants/home-assets';
 import { UiScreenShell } from '@/components/module/ui-screen-shell';
 import { useOnlineBattleScreen } from '@/features/online-battle/ui/use-online-battle-screen';
+import { useAssetPreload } from '@/hooks/common/use-asset-preload';
 import { useScreenBgm } from '@/hooks/common/use-screen-bgm';
 import { playSe } from '@/lib/audio/audio-manager';
 
@@ -11,8 +14,13 @@ const onlineBg = require('../../../../assets/online-battle/online-bg.png');
 
 export function OnlineBattleScreen() {
   const params = useLocalSearchParams<{ opponent?: string; rating?: string }>();
-  const { session } = useOnlineBattleScreen(params.opponent, params.rating);
+  const { session, isLoading } = useOnlineBattleScreen(params.opponent, params.rating);
+  const { isReady: areAssetsReady } = useAssetPreload([onlineBg]);
   useScreenBgm('onlineBattle');
+
+  if (isLoading || !areAssetsReady) {
+    return <AppLoadingScreen imageSource={homeAssets.loadingImage} />;
+  }
 
   return (
     <UiScreenShell title="Online Battle" subtitle="対戦接続状況">

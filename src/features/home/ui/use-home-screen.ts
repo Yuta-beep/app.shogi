@@ -5,6 +5,7 @@ import { HomeSnapshot } from '@/usecases/home/load-home-snapshot-usecase';
 
 export type HomeScreenVM = {
   snapshot: HomeSnapshot;
+  isLoading: boolean;
 };
 
 const emptySnapshot: HomeSnapshot = {
@@ -16,19 +17,28 @@ const emptySnapshot: HomeSnapshot = {
 
 export function useHomeScreen(): HomeScreenVM {
   const [snapshot, setSnapshot] = useState<HomeSnapshot>(emptySnapshot);
+  const [isLoading, setIsLoading] = useState(true);
   const loadUseCase = useMemo(() => createLoadHomeSnapshotUseCase(), []);
 
   useEffect(() => {
     let active = true;
-    loadUseCase.execute().then((next) => {
-      if (active) {
-        setSnapshot(next);
-      }
-    });
+    setIsLoading(true);
+    loadUseCase
+      .execute()
+      .then((next) => {
+        if (active) {
+          setSnapshot(next);
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setIsLoading(false);
+        }
+      });
     return () => {
       active = false;
     };
   }, [loadUseCase]);
 
-  return { snapshot };
+  return { snapshot, isLoading };
 }

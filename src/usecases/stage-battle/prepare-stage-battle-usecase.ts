@@ -8,6 +8,7 @@ export type StageBattleSnapshot = {
     row: number;
     col: number;
     pieceId: number | null;
+    pieceCode: string | null;
     char: string;
     imageBucket: string | null;
     imageKey: string | null;

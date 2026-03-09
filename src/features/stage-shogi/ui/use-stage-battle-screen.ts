@@ -14,18 +14,27 @@ const emptySnapshot: StageBattleSnapshot = {
 export function useStageBattleScreen(stageId?: string) {
   const useCase = useMemo(() => createPrepareStageBattleUseCase(), []);
   const [snapshot, setSnapshot] = useState<StageBattleSnapshot>(emptySnapshot);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
-    useCase.execute({ stageId }).then((next) => {
-      if (active) {
-        setSnapshot(next);
-      }
-    });
+    setIsLoading(true);
+    useCase
+      .execute({ stageId })
+      .then((next) => {
+        if (active) {
+          setSnapshot(next);
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setIsLoading(false);
+        }
+      });
     return () => {
       active = false;
     };
   }, [stageId, useCase]);
 
-  return { snapshot };
+  return { snapshot, isLoading };
 }
