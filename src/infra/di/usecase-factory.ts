@@ -1,6 +1,8 @@
 import { ApiLoadHomeSnapshotUseCase } from '@/usecases/home/api-home-usecases';
 import { MockLoadHomeSnapshotUseCase } from '@/usecases/home/mock-home-usecases';
 import { LoadHomeSnapshotUseCase } from '@/usecases/home/load-home-snapshot-usecase';
+import { ApiHomeRepository } from '@/infra/repositories/home-repository';
+import { HomeSupabaseDataSource } from '@/infra/datasources/home-supabase-datasource';
 import { ApiLoadPieceCatalogUseCase } from '@/usecases/piece-info/api-piece-info-usecases';
 import { MockLoadPieceCatalogUseCase } from '@/usecases/piece-info/mock-piece-info-usecases';
 import { LoadPieceCatalogUseCase } from '@/usecases/piece-info/load-piece-catalog-usecase';
@@ -21,7 +23,9 @@ function shouldUseApi() {
 }
 
 export function createLoadHomeSnapshotUseCase(): LoadHomeSnapshotUseCase {
-  return shouldUseApi() ? new ApiLoadHomeSnapshotUseCase() : new MockLoadHomeSnapshotUseCase();
+  return shouldUseApi()
+    ? new ApiLoadHomeSnapshotUseCase(new ApiHomeRepository(new HomeSupabaseDataSource()))
+    : new MockLoadHomeSnapshotUseCase();
 }
 
 export function createLoadStageSelectUseCase(): LoadStageSelectUseCase {
