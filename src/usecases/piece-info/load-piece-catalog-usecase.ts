@@ -1,3 +1,5 @@
+export type MoveVector = { dx: number; dy: number; maxStep: number };
+
 export type PieceCatalogItem = {
   char: string;
   name: string;
@@ -5,6 +7,8 @@ export type PieceCatalogItem = {
   desc: string;
   skill: string;
   move: string;
+  moveVectors: MoveVector[];
+  isRepeatable: boolean;
 };
 
 export interface LoadPieceCatalogUseCase {
