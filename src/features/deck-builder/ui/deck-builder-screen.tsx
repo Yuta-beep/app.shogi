@@ -1,5 +1,7 @@
 import { Image } from 'expo-image';
+import { useState } from 'react';
 import { Modal, Pressable, Text, TextInput, View, ScrollView } from 'react-native';
+import Svg, { Line, Rect } from 'react-native-svg';
 
 import { AppLoadingScreen } from '@/components/module/app-loading-screen';
 import { homeAssets } from '@/constants/home-assets';
@@ -11,12 +13,21 @@ import { playSe } from '@/lib/audio/audio-manager';
 
 const deckAssets = {
   bg: require('../../../../assets/deck-builder/deck-bg.png'),
-  board: require('../../../../assets/deck-builder/shogi-board.png'),
 } as const;
+const BOARD_SIZE = 9;
+const BOARD_VIEWBOX = 900;
+const BOARD_PADDING = 36;
+const BOARD_INNER = BOARD_VIEWBOX - BOARD_PADDING * 2;
+const BOARD_CELL = BOARD_INNER / BOARD_SIZE;
+const BOARD_PADDING_RATIO = BOARD_PADDING / BOARD_VIEWBOX;
+const BOARD_CELL_INNER_RATIO = 1 / BOARD_SIZE;
+const PLACED_PIECE_OFFSET_X = 0;
+const PLACED_PIECE_OFFSET_Y = -2;
 
 export function DeckBuilderScreen() {
   const vm = useDeckBuilderScreen();
-  const { isReady: areAssetsReady } = useAssetPreload([deckAssets.bg, deckAssets.board]);
+  const [activeCell, setActiveCell] = useState<{ row: number; col: number } | null>(null);
+  const { isReady: areAssetsReady } = useAssetPreload([deckAssets.bg]);
   useScreenBgm('deckBuilder');
 
   if (vm.isLoading || !areAssetsReady) {
@@ -29,24 +40,142 @@ export function DeckBuilderScreen() {
         <Image source={deckAssets.bg} contentFit="cover" style={{ width: '100%', height: 180 }} />
       </View>
 
-      <View className="mt-3 rounded-2xl border-4 border-[#a27700] bg-[#e4c58f] p-3">
-        <Image source={deckAssets.board} contentFit="contain" style={{ width: '100%', height: 260 }} />
+      <View className="mt-3">
+        <View className="relative w-full self-center" style={{ aspectRatio: 1 }}>
+          <Svg width="100%" height="100%" viewBox={`0 0 ${BOARD_VIEWBOX} ${BOARD_VIEWBOX}`}>
+            <Rect x={0} y={0} width={BOARD_VIEWBOX} height={BOARD_VIEWBOX} fill="#deb887" />
+            <Rect
+              x={BOARD_PADDING}
+              y={BOARD_PADDING}
+              width={BOARD_INNER}
+              height={BOARD_INNER}
+              fill="#e8c88e"
+              stroke="#7a4b20"
+              strokeWidth={2}
+            />
+            {Array.from({ length: BOARD_SIZE + 1 }).map((_, i) => {
+              const p = BOARD_PADDING + BOARD_CELL * i;
+              return (
+                <Line
+                  key={`v-${i}`}
+                  x1={p}
+                  y1={BOARD_PADDING}
+                  x2={p}
+                  y2={BOARD_PADDING + BOARD_INNER}
+                  stroke="#6b3f1a"
+                  strokeWidth={1.5}
+                />
+              );
+            })}
+            {Array.from({ length: BOARD_SIZE + 1 }).map((_, i) => {
+              const p = BOARD_PADDING + BOARD_CELL * i;
+              return (
+                <Line
+                  key={`h-${i}`}
+                  x1={BOARD_PADDING}
+                  y1={p}
+                  x2={BOARD_PADDING + BOARD_INNER}
+                  y2={p}
+                  stroke="#6b3f1a"
+                  strokeWidth={1.5}
+                />
+              );
+            })}
+          </Svg>
+          <View
+            className="absolute"
+            style={{
+              top: `${BOARD_PADDING_RATIO * 100}%`,
+              left: `${BOARD_PADDING_RATIO * 100}%`,
+              width: `${(BOARD_INNER / BOARD_VIEWBOX) * 100}%`,
+              height: `${(BOARD_INNER / BOARD_VIEWBOX) * 100}%`,
+            }}
+          >
+            <Svg
+              width="100%"
+              height="100%"
+              viewBox={`0 0 ${BOARD_INNER} ${BOARD_INNER}`}
+              style={{ position: 'absolute', top: 0, left: 0 }}
+              pointerEvents="none"
+            >
+              {activeCell ? (
+                <Rect
+                  x={activeCell.col * BOARD_CELL}
+                  y={activeCell.row * BOARD_CELL}
+                  width={BOARD_CELL}
+                  height={BOARD_CELL}
+                  fill="none"
+                  stroke="#ef4444"
+                  strokeWidth={4}
+                />
+              ) : null}
+            </Svg>
+            {Array.from({ length: BOARD_SIZE }).map((_, row) =>
+              Array.from({ length: BOARD_SIZE }).map((__, col) => {
+                const placement = vm.boardPlacements.find((cell) => cell.row === row && cell.col === col) ?? null;
+                return (
+                  <Pressable
+                    key={`cell-${row}-${col}`}
+                    className="absolute items-center justify-center overflow-visible"
+                    style={{
+                      top: `${row * BOARD_CELL_INNER_RATIO * 100}%`,
+                      left: `${col * BOARD_CELL_INNER_RATIO * 100}%`,
+                      width: `${BOARD_CELL_INNER_RATIO * 100}%`,
+                      height: `${BOARD_CELL_INNER_RATIO * 100}%`,
+                    }}
+                    onPress={() => {
+                      setActiveCell({ row, col });
+                      vm.placeSelectedPieceAt(row, col);
+                    }}
+                  >
+                    {placement ? (
+                      placement.piece.imageSignedUrl ? (
+                        <Image
+                          source={{ uri: placement.piece.imageSignedUrl }}
+                          contentFit="contain"
+                          style={{
+                            width: '140%',
+                            height: '140%',
+                            transform: [{ translateX: PLACED_PIECE_OFFSET_X }, { translateY: PLACED_PIECE_OFFSET_Y }],
+                          }}
+                        />
+                      ) : (
+                        <Text className="text-base font-black text-[#2f1b14]">{placement.piece.char}</Text>
+                      )
+                    ) : null}
+                  </Pressable>
+                );
+              })
+            )}
+          </View>
+        </View>
       </View>
 
       {/* 所持駒パレット */}
       <View className="mt-4 rounded-xl border border-[#8b0000]/30 bg-white p-3">
-        <Text className="text-sm font-black text-[#2f1b14]">所持駒（タップで詳細）</Text>
+        <Text className="text-sm font-black text-[#2f1b14]">
+          所持駒（駒を選択して盤面マスをタップで配置・未選択ならマスの駒を削除）
+        </Text>
         <View className="mt-2 flex-row flex-wrap gap-2">
           {vm.ownedPieces.map((piece) => (
             <Pressable
               key={piece.char}
               onPress={() => {
                 void playSe('tap');
+                vm.selectPieceForPlacement(piece);
+              }}
+              onLongPress={() => {
                 vm.openPieceDetail(piece);
               }}
-              className="h-10 w-10 items-center justify-center rounded-md border border-[#8b0000]/40 bg-[#fff7e6] active:scale-95"
+              className={`h-16 w-16 items-center justify-center active:scale-95 ${
+                vm.selectedPieceForPlacement?.pieceId === piece.pieceId ? 'rounded-md border border-[#8b0000]/50 bg-[#fff7e6]' : ''
+              }`}
             >
-              <Text className="text-lg font-black text-[#2f1b14]">{piece.char}</Text>
+              {piece.imageSignedUrl ? (
+                <Image source={{ uri: piece.imageSignedUrl }} contentFit="contain" style={{ width: 60, height: 60 }} />
+              ) : (
+                <Text className="text-lg font-black text-[#2f1b14]">{piece.char}</Text>
+              )}
             </Pressable>
           ))}
         </View>
@@ -78,7 +207,15 @@ export function DeckBuilderScreen() {
       <Modal visible={!!vm.selectedPiece} transparent animationType="fade" onRequestClose={vm.closePieceDetail}>
         <View className="flex-1 items-center justify-center bg-black/45 px-6">
           <View className="w-full max-w-sm rounded-xl bg-[#fff7e6] p-4">
-            <Text className="text-3xl font-black text-[#2f1b14] text-center">{vm.selectedPiece?.char}</Text>
+            {vm.selectedPiece?.imageSignedUrl ? (
+              <Image
+                source={{ uri: vm.selectedPiece.imageSignedUrl }}
+                contentFit="contain"
+                style={{ width: 56, height: 56, alignSelf: 'center' }}
+              />
+            ) : (
+              <Text className="text-3xl font-black text-[#2f1b14] text-center">{vm.selectedPiece?.char}</Text>
+            )}
             <Text className="mt-1 text-base font-black text-[#2f1b14] text-center">{vm.selectedPiece?.name}</Text>
             <Text className="mt-3 text-xs font-black text-[#7f1d1d]">【スキルの説明】</Text>
             <Text className="mt-1 text-sm text-[#1f2937]">{vm.selectedPiece?.desc}</Text>

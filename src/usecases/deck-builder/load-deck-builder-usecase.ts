@@ -1,6 +1,8 @@
 export type OwnedPiece = {
+  pieceId?: number;
   char: string;
   name: string;
+  imageSignedUrl?: string | null;
   desc: string;
   skill: string;
   move: string;

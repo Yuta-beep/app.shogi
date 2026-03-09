@@ -12,6 +12,7 @@ type ApiOwnedPiece = {
   pieceId: number;
   char: string;
   name: string;
+  imageSignedUrl: string | null;
   acquiredAt: string;
   source: string;
 };
@@ -39,8 +40,10 @@ type ApiDeckSnapshot = {
 
 function mapOwnedPiece(piece: ApiOwnedPiece): OwnedPiece {
   return {
+    pieceId: piece.pieceId,
     char: piece.char,
     name: piece.name,
+    imageSignedUrl: piece.imageSignedUrl,
     desc: `${piece.name}の詳細は準備中です。`,
     skill: '準備中',
     move: '準備中',

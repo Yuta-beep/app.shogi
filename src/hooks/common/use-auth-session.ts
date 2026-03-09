@@ -9,6 +9,20 @@ type AuthSessionState = {
   error: Error | null;
 };
 
+function normalizeUnknownError(error: unknown): Error {
+  if (error instanceof Error) return error;
+  if (typeof error === 'string') return new Error(error);
+
+  if (error && typeof error === 'object') {
+    const maybe = error as { message?: unknown; code?: unknown; details?: unknown; hint?: unknown };
+    const message = typeof maybe.message === 'string' ? maybe.message : 'Unknown auth error';
+    const extras = [maybe.code, maybe.details, maybe.hint].filter((v) => typeof v === 'string');
+    return new Error(extras.length > 0 ? `${message} (${extras.join(' | ')})` : message);
+  }
+
+  return new Error(String(error));
+}
+
 export function useAuthSession(): AuthSessionState {
   const [state, setState] = useState<AuthSessionState>({
     isReady: false,
@@ -27,7 +41,7 @@ export function useAuthSession(): AuthSessionState {
           isReady: true,
           userId: null,
           needsUsernameSetup: false,
-          error: error instanceof Error ? error : new Error(String(error)),
+          error: normalizeUnknownError(error),
         });
       });
   }, []);

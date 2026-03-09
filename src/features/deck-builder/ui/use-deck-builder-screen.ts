@@ -5,6 +5,12 @@ import { DeckBuilderApiDataSource } from '@/infra/datasources/deck-builder-datas
 import { createLoadDeckBuilderUseCase } from '@/infra/di/usecase-factory';
 import { OwnedPiece, SavedDeck } from '@/usecases/deck-builder/load-deck-builder-usecase';
 
+type BoardPlacement = {
+  row: number;
+  col: number;
+  piece: OwnedPiece;
+};
+
 export function useDeckBuilderScreen() {
   const isApiMode = process.env.EXPO_PUBLIC_DATA_SOURCE === 'api';
   const [ownedPieces, setOwnedPieces] = useState<OwnedPiece[]>([]);
@@ -17,6 +23,8 @@ export function useDeckBuilderScreen() {
   const [deckName, setDeckName] = useState('');
   const [token, setToken] = useState<string | undefined>(undefined);
   const [isSessionResolved, setIsSessionResolved] = useState(false);
+  const [selectedPieceForPlacement, setSelectedPieceForPlacement] = useState<OwnedPiece | null>(null);
+  const [boardPlacements, setBoardPlacements] = useState<BoardPlacement[]>([]);
 
   useEffect(() => {
     let active = true;
@@ -69,16 +77,24 @@ export function useDeckBuilderScreen() {
   function saveDeck() {
     if (!deckName.trim()) return;
 
+    const apiPlacements = boardPlacements
+      .filter((placement) => typeof placement.piece.pieceId === 'number')
+      .map((placement) => ({
+        rowNo: placement.row,
+        colNo: placement.col,
+        pieceId: placement.piece.pieceId as number,
+      }));
+
     const newDeck: SavedDeck = {
       id: `deck-${Date.now()}`,
       name: deckName.trim(),
-      pieces: ownedPieces.slice(0, 5).map((p) => p.char),
+      pieces: boardPlacements.map((placement) => placement.piece.char),
       savedAt: new Date().toLocaleString('ja-JP', { hour12: false }),
     };
 
     if (token) {
       const ds = new DeckBuilderApiDataSource(token);
-      ds.saveDeck({ name: newDeck.name, placements: [] })
+      ds.saveDeck({ name: newDeck.name, placements: apiPlacements })
         .then((res) => {
           setSavedDecks((prev) => [{ ...newDeck, id: String(res.deckId) }, ...prev]);
         })
@@ -107,9 +123,22 @@ export function useDeckBuilderScreen() {
 
   return {
     ownedPieces,
+    selectedPieceForPlacement,
     savedDecks,
+    boardPlacements,
     isLoading,
     selectedPiece,
+    selectPieceForPlacement: (piece: OwnedPiece) => setSelectedPieceForPlacement(piece),
+    placeSelectedPieceAt: (row: number, col: number) => {
+      if (!selectedPieceForPlacement) {
+        setBoardPlacements((prev) => prev.filter((placement) => !(placement.row === row && placement.col === col)));
+        return;
+      }
+      setBoardPlacements((prev) => {
+        const withoutCell = prev.filter((placement) => !(placement.row === row && placement.col === col));
+        return [...withoutCell, { row, col, piece: selectedPieceForPlacement }];
+      });
+    },
     openPieceDetail: (piece: OwnedPiece) => setSelectedPiece(piece),
     closePieceDetail: () => setSelectedPiece(null),
     saveModalOpen,
