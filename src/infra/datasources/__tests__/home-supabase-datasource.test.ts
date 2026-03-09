@@ -1,15 +1,15 @@
 import { HomeSupabaseDataSource } from '../home-supabase-datasource';
 
-const mockSingle = jest.fn();
-const mockEq = jest.fn(() => ({ single: mockSingle }));
-const mockSelect = jest.fn(() => ({ eq: mockEq }));
-const mockFrom = jest.fn(() => ({ select: mockSelect }));
-const mockGetSession = jest.fn();
+const mockSingle: jest.Mock = jest.fn();
+const mockEq: jest.Mock = jest.fn(() => ({ single: mockSingle }));
+const mockSelect: jest.Mock = jest.fn(() => ({ eq: mockEq }));
+const mockFrom: jest.Mock = jest.fn(() => ({ select: mockSelect }));
+const mockGetSession: jest.Mock = jest.fn();
 
 jest.mock('@/lib/supabase/supabase-client', () => ({
   supabase: {
-    auth: { getSession: (...args: unknown[]) => mockGetSession(...args) },
-    from: (...args: unknown[]) => mockFrom(...args),
+    auth: { getSession: () => mockGetSession() },
+    from: (table: string) => mockFrom(table),
   },
 }));
 

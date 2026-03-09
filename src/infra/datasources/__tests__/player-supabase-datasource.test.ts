@@ -1,14 +1,14 @@
 import { PlayerSupabaseDataSource } from '../player-supabase-datasource';
 
-const mockSingle = jest.fn();
-const mockUpdateEq = jest.fn();
-const mockSelectEq = jest.fn(() => ({ single: mockSingle }));
-const mockUpdate = jest.fn(() => ({ eq: mockUpdateEq }));
-const mockSelect = jest.fn(() => ({ eq: mockSelectEq }));
-const mockFrom = jest.fn(() => ({ select: mockSelect, update: mockUpdate }));
+const mockSingle: jest.Mock = jest.fn();
+const mockUpdateEq: jest.Mock = jest.fn();
+const mockSelectEq: jest.Mock = jest.fn(() => ({ single: mockSingle }));
+const mockUpdate: jest.Mock = jest.fn(() => ({ eq: mockUpdateEq }));
+const mockSelect: jest.Mock = jest.fn(() => ({ eq: mockSelectEq }));
+const mockFrom: jest.Mock = jest.fn(() => ({ select: mockSelect, update: mockUpdate }));
 
 jest.mock('@/lib/supabase/supabase-client', () => ({
-  supabase: { from: (...args: unknown[]) => mockFrom(...args) },
+  supabase: { from: (table: string) => mockFrom(table) },
 }));
 
 describe('PlayerSupabaseDataSource', () => {

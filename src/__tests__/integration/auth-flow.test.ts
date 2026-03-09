@@ -8,22 +8,22 @@
 
 import { renderHook, waitFor } from '@testing-library/react-native';
 
-const mockGetSession = jest.fn();
-const mockSignInAnonymously = jest.fn();
-const mockSingle = jest.fn();
-const mockEq = jest.fn(() => ({ single: mockSingle }));
-const mockSelect = jest.fn(() => ({ eq: mockEq }));
-const mockUpdateEq = jest.fn();
-const mockUpdate = jest.fn(() => ({ eq: mockUpdateEq }));
-const mockFrom = jest.fn(() => ({ select: mockSelect, update: mockUpdate }));
+const mockGetSession: jest.Mock = jest.fn();
+const mockSignInAnonymously: jest.Mock = jest.fn();
+const mockSingle: jest.Mock = jest.fn();
+const mockEq: jest.Mock = jest.fn(() => ({ single: mockSingle }));
+const mockSelect: jest.Mock = jest.fn(() => ({ eq: mockEq }));
+const mockUpdateEq: jest.Mock = jest.fn();
+const mockUpdate: jest.Mock = jest.fn(() => ({ eq: mockUpdateEq }));
+const mockFrom: jest.Mock = jest.fn(() => ({ select: mockSelect, update: mockUpdate }));
 
 jest.mock('@/lib/supabase/supabase-client', () => ({
   supabase: {
     auth: {
-      getSession: (...args: unknown[]) => mockGetSession(...args),
-      signInAnonymously: (...args: unknown[]) => mockSignInAnonymously(...args),
+      getSession: () => mockGetSession(),
+      signInAnonymously: () => mockSignInAnonymously(),
     },
-    from: (...args: unknown[]) => mockFrom(...args),
+    from: (table: string) => mockFrom(table),
   },
 }));
 
