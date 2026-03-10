@@ -79,6 +79,20 @@ describe('ensureSession', () => {
       expect(result).toEqual({ userId, isNewUser: true, needsUsernameSetup: true });
     });
 
+    it('getSession -> signInAnonymously -> getDisplayName の順で呼ばれる', async () => {
+      mockSignInAnonymously.mockResolvedValueOnce({ data: { user: { id: userId } }, error: null });
+      mockGetDisplayName.mockResolvedValueOnce('プレイヤー名');
+
+      await ensureSession();
+
+      const getSessionOrder = mockGetSession.mock.invocationCallOrder[0];
+      const signInOrder = mockSignInAnonymously.mock.invocationCallOrder[0];
+      const getDisplayNameOrder = mockGetDisplayName.mock.invocationCallOrder[0];
+
+      expect(getSessionOrder).toBeLessThan(signInOrder);
+      expect(signInOrder).toBeLessThan(getDisplayNameOrder);
+    });
+
     it('signInAnonymouslyがrejectした場合はthrowする', async () => {
       mockSignInAnonymously.mockRejectedValueOnce(new Error('network timeout'));
 
