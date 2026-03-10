@@ -2,6 +2,7 @@ import { Image } from 'expo-image';
 import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
+import Svg, { Line, Rect } from 'react-native-svg';
 
 import { AppLoadingScreen } from '@/components/organism/app-loading-screen';
 import { homeAssets } from '@/constants/home-assets';
@@ -30,18 +31,15 @@ import { useScreenBgm } from '@/hooks/common/use-screen-bgm';
 import { postJson } from '@/infra/http/api-client';
 import { MoveVector, PieceCatalogItem } from '@/usecases/piece-info/load-piece-catalog-usecase';
 
-const boardImage = require('../../../../assets/stage-shogi/shogi-board.png');
 const BOARD_SIZE = 9;
-const SHOGI_GAME_BOARD_PX = 540;
-const SHOGI_GAME_BOARD_PADDING_PX = 6;
-const SHOGI_GAME_BACKGROUND_SCALE = 1.07;
-const SHOGI_GAME_CELL_PX = (SHOGI_GAME_BOARD_PX - SHOGI_GAME_BOARD_PADDING_PX * 2) / BOARD_SIZE;
-const SHOGI_GAME_PIECE_PX = 72;
-const SHOGI_GAME_KING_PX = 88;
-const BOARD_INNER_RATIO = 1 - (SHOGI_GAME_BOARD_PADDING_PX * 2) / SHOGI_GAME_BOARD_PX;
-const BOARD_PADDING_RATIO = SHOGI_GAME_BOARD_PADDING_PX / SHOGI_GAME_BOARD_PX;
-const PIECE_RATIO = SHOGI_GAME_PIECE_PX / SHOGI_GAME_CELL_PX;
-const KING_RATIO = SHOGI_GAME_KING_PX / SHOGI_GAME_CELL_PX;
+const BOARD_VIEWBOX = 900;
+const BOARD_PADDING = 36;
+const BOARD_INNER = BOARD_VIEWBOX - BOARD_PADDING * 2;
+const BOARD_CELL = BOARD_INNER / BOARD_SIZE;
+const BOARD_PADDING_RATIO = BOARD_PADDING / BOARD_VIEWBOX;
+const BOARD_CELL_INNER_RATIO = 1 / BOARD_SIZE;
+const NORMAL_PIECE_SIZE_PERCENT = 120;
+const KING_PIECE_SIZE_PERCENT = 136;
 const ENABLE_PIECE_IMAGES = process.env.EXPO_PUBLIC_ENABLE_PIECE_IMAGES !== 'false';
 
 type BoardPiece = RuleBoardPiece & {
@@ -216,6 +214,35 @@ const KING_ORTHOGONAL_VECTORS: MoveVector[] = [
   { dx: 0, dy: 1, maxStep: 1 },
   { dx: 0, dy: -1, maxStep: 1 },
 ];
+const DEFAULT_MOVE_VECTORS_BY_CODE: Record<string, MoveVector[]> = {
+  FU: [{ dx: 0, dy: -1, maxStep: 1 }],
+  KY: [{ dx: 0, dy: -1, maxStep: 8 }],
+  KE: [
+    { dx: -1, dy: -2, maxStep: 1 },
+    { dx: 1, dy: -2, maxStep: 1 },
+  ],
+  GI: [
+    { dx: 0, dy: -1, maxStep: 1 },
+    { dx: -1, dy: -1, maxStep: 1 },
+    { dx: 1, dy: -1, maxStep: 1 },
+    { dx: -1, dy: 1, maxStep: 1 },
+    { dx: 1, dy: 1, maxStep: 1 },
+  ],
+  KI: GOLD_MOVE_VECTORS,
+  KA: [
+    { dx: 1, dy: 1, maxStep: 8 },
+    { dx: 1, dy: -1, maxStep: 8 },
+    { dx: -1, dy: 1, maxStep: 8 },
+    { dx: -1, dy: -1, maxStep: 8 },
+  ],
+  HI: [
+    { dx: 1, dy: 0, maxStep: 8 },
+    { dx: -1, dy: 0, maxStep: 8 },
+    { dx: 0, dy: 1, maxStep: 8 },
+    { dx: 0, dy: -1, maxStep: 8 },
+  ],
+  OU: [...KING_ORTHOGONAL_VECTORS, ...KING_DIAGONAL_VECTORS],
+};
 
 function isEnemySide(side: string) {
   const normalized = side.toLowerCase();
@@ -328,10 +355,6 @@ function findPieceAt(placements: BoardPiece[], row: number, col: number) {
   return placements.find((piece) => piece.row === row && piece.col === col) ?? null;
 }
 
-function cellKey(row: number, col: number) {
-  return `${row}:${col}`;
-}
-
 function getDisplayChar(piece: BoardPiece) {
   if (piece.promoted && piece.pieceCode && PROMOTED_CODE_TO_CHAR[piece.pieceCode]) {
     return PROMOTED_CODE_TO_CHAR[piece.pieceCode];
@@ -345,7 +368,8 @@ function resolveMoveVectors(
 ) {
   const code = piece.pieceCode ?? null;
   if (!code) return [];
-  const baseVectors = pieceDefsByCode[code]?.moveVectors ?? [];
+  const baseVectors =
+    pieceDefsByCode[code]?.moveVectors ?? DEFAULT_MOVE_VECTORS_BY_CODE[code] ?? [];
   if (!piece.promoted) return baseVectors;
   if (code === 'FU' || code === 'KY' || code === 'KE' || code === 'GI') {
     return GOLD_MOVE_VECTORS;
@@ -528,11 +552,11 @@ function applyAiMove(
 
 export function StageShogiScreen() {
   const params = useLocalSearchParams<{ stage?: string }>();
-  const { snapshot, isLoading } = useStageBattleScreen(params.stage);
+  const stageParam = Array.isArray(params.stage) ? params.stage[0] : params.stage;
+  const { snapshot, isLoading } = useStageBattleScreen(stageParam);
   const { userId } = useAuthSession();
-  const { isReady: areAssetsReady } = useAssetPreload([boardImage]);
+  const { isReady: areAssetsReady } = useAssetPreload([]);
   const [failedImageKeys, setFailedImageKeys] = useState<Record<string, true>>({});
-  const [arePieceImagesReady, setArePieceImagesReady] = useState(true);
   const [pieces, setPieces] = useState<BoardPiece[]>([]);
   const [sideToMove, setSideToMove] = useState<Side>('player');
   const [moveNo, setMoveNo] = useState(1);
@@ -549,6 +573,10 @@ export function StageShogiScreen() {
   const [winner, setWinner] = useState<Side | null>(null);
   const loadPieceCatalogUseCase = useMemo(() => createLoadPieceCatalogUseCase(), []);
   const isMountedRef = useRef(true);
+  const prevStageRef = useRef<string | undefined>(undefined);
+  const aiThinkingRef = useRef(false);
+  const inFlightAiKeyRef = useRef<string | null>(null);
+  const lastSuccessfulAiKeyRef = useRef<string | null>(null);
   useScreenBgm('battle');
 
   useEffect(() => {
@@ -594,6 +622,12 @@ export function StageShogiScreen() {
       })
       .filter((value): value is BoardPiece => value !== null);
 
+    const stageChanged = prevStageRef.current !== stageParam;
+    prevStageRef.current = stageParam;
+    if (!stageChanged && gameId) {
+      return;
+    }
+
     setPieces(next);
     setSideToMove('player');
     setMoveNo(1);
@@ -605,7 +639,10 @@ export function StageShogiScreen() {
     setHands(createEmptyHandsState());
     setPendingPromotion(null);
     setWinner(null);
-  }, [snapshot]);
+    aiThinkingRef.current = false;
+    inFlightAiKeyRef.current = null;
+    lastSuccessfulAiKeyRef.current = null;
+  }, [gameId, snapshot, stageParam]);
 
   useEffect(() => {
     let active = true;
@@ -632,7 +669,7 @@ export function StageShogiScreen() {
 
     setIsCreatingGame(true);
 
-    const stageNo = Number(params.stage);
+    const stageNo = Number(stageParam);
     void postJson<unknown>('/api/v1/games', {
       playerId: userId,
       stageNo: Number.isInteger(stageNo) && stageNo > 0 ? stageNo : undefined,
@@ -666,7 +703,7 @@ export function StageShogiScreen() {
     isCreatingGame,
     isLoading,
     moveNo,
-    params.stage,
+    stageParam,
     pieces,
     hands,
     sideToMove,
@@ -687,9 +724,6 @@ export function StageShogiScreen() {
       if (Object.keys(failedImageKeys).length > 0) {
         setFailedImageKeys({});
       }
-      if (!arePieceImagesReady) {
-        setArePieceImagesReady(true);
-      }
       return;
     }
 
@@ -697,22 +731,12 @@ export function StageShogiScreen() {
       setFailedImageKeys({});
     }
 
-    let active = true;
-    if (arePieceImagesReady) {
-      setArePieceImagesReady(false);
-    }
     Image.prefetch(remoteImageUrls)
       .catch(() => undefined)
-      .finally(() => {
-        if (active) {
-          setArePieceImagesReady((prev) => (prev ? prev : true));
-        }
-      });
+      .finally(() => undefined);
 
-    return () => {
-      active = false;
-    };
-  }, [arePieceImagesReady, failedImageKeys, remoteImageUrls]);
+    return () => undefined;
+  }, [remoteImageUrls]);
 
   const handleAiMove = async (
     nextPieces: BoardPiece[],
@@ -720,7 +744,12 @@ export function StageShogiScreen() {
     nextMoveNo: number,
     nextSideToMove: Side,
   ) => {
-    if (!gameId || isAiThinking || isCreatingGame) return;
+    if (!gameId || isAiThinking || isCreatingGame || aiThinkingRef.current) return;
+    const requestKey = `${gameId}:${nextMoveNo}:${nextSideToMove}`;
+    if (inFlightAiKeyRef.current === requestKey) return;
+    if (lastSuccessfulAiKeyRef.current === requestKey) return;
+    aiThinkingRef.current = true;
+    inFlightAiKeyRef.current = requestKey;
     setIsAiThinking(true);
     setAiError(null);
 
@@ -753,6 +782,7 @@ export function StageShogiScreen() {
       setHands(afterAiHands);
       setSideToMove('player');
       setMoveNo((prev) => prev + 1);
+      lastSuccessfulAiKeyRef.current = requestKey;
       if (!hasKing(afterAiPieces, 'player')) {
         setWinner('enemy');
       } else if (!hasKing(afterAiPieces, 'enemy')) {
@@ -762,6 +792,8 @@ export function StageShogiScreen() {
       setAiError(error instanceof Error ? error.message : String(error));
       setSideToMove('enemy');
     } finally {
+      aiThinkingRef.current = false;
+      inFlightAiKeyRef.current = null;
       setIsAiThinking(false);
     }
   };
@@ -939,19 +971,10 @@ export function StageShogiScreen() {
     );
   }
 
-  const legalTargetSet = useMemo(
-    () => new Set(legalTargets.map((target) => cellKey(target.row, target.col))),
-    [legalTargets],
-  );
   const isWaitingForGameId =
-    !isLoading &&
-    areAssetsReady &&
-    arePieceImagesReady &&
-    !gameId &&
-    isCreatingGame &&
-    aiError === null;
+    !isLoading && areAssetsReady && !gameId && isCreatingGame && aiError === null;
 
-  if (isLoading || !areAssetsReady || !arePieceImagesReady || isWaitingForGameId) {
+  if (isLoading || !areAssetsReady || isWaitingForGameId) {
     return <AppLoadingScreen imageSource={homeAssets.loadingImage} />;
   }
 
@@ -960,8 +983,6 @@ export function StageShogiScreen() {
       <View className="rounded-xl border-2 border-accent bg-[#f3ead3] p-3">
         <Text className="text-sm font-bold text-[#6b4532]">{`TURN ${moveNo}`}</Text>
         <Text className="text-base font-black text-ink">{`${snapshot.stageLabel}  手番: ${sideToMove === 'player' ? 'あなた' : 'CPU'}`}</Text>
-        <Text className="text-xs text-[#6b4532]">{`gameId: ${gameId}`}</Text>
-        <Text className="text-xs text-[#6b4532]">{`api: ${process.env.EXPO_PUBLIC_API_BASE_URL ?? 'unset'}`}</Text>
         {isFinished ? (
           <Text className="mt-1 text-sm font-black text-[#7f1d1d]">{`対局終了: ${winner === 'player' ? 'あなたの勝ち' : 'CPUの勝ち'}`}</Text>
         ) : null}
@@ -978,122 +999,171 @@ export function StageShogiScreen() {
             void handleAiMove(pieces, hands, moveNo, sideToMove);
           }}
         >
-          <Text className="font-bold text-white">
-            {isAiThinking ? 'AI思考中...' : 'AI応手を再試行'}
-          </Text>
+          <Text className="font-bold text-white">AI応手を再試行</Text>
         </Pressable>
       </View>
 
-      <View className="mt-3 overflow-hidden rounded-xl border-2 border-[#a27700] bg-[#e3c690] p-2">
-        <View style={{ width: '100%', aspectRatio: 1 }}>
-          <Image
-            source={boardImage}
-            contentFit="cover"
-            style={{
-              position: 'absolute',
-              top: `${((1 - SHOGI_GAME_BACKGROUND_SCALE) / 2) * 100}%`,
-              left: `${((1 - SHOGI_GAME_BACKGROUND_SCALE) / 2) * 100}%`,
-              width: `${SHOGI_GAME_BACKGROUND_SCALE * 100}%`,
-              height: `${SHOGI_GAME_BACKGROUND_SCALE * 100}%`,
-            }}
-          />
-
-          <View style={{ position: 'absolute', inset: 0 }}>
-            {Array.from({ length: BOARD_SIZE }).map((_, rowIndex) =>
-              Array.from({ length: BOARD_SIZE }).map((__, colIndex) => {
-                const cellPercent = 100 / BOARD_SIZE;
-                const innerCellPercent = cellPercent * BOARD_INNER_RATIO;
-                const topPercent = BOARD_PADDING_RATIO * 100 + rowIndex * innerCellPercent;
-                const leftPercent = BOARD_PADDING_RATIO * 100 + colIndex * innerCellPercent;
-                const selected =
-                  selectedCell !== null &&
-                  selectedCell.row === rowIndex &&
-                  selectedCell.col === colIndex;
-                const legalTarget = legalTargetSet.has(cellKey(rowIndex, colIndex));
-                return (
-                  <Pressable
-                    key={`cell-${rowIndex}-${colIndex}`}
-                    testID={`board-cell-${rowIndex}-${colIndex}`}
-                    onPress={() => {
-                      handleCellPress(rowIndex, colIndex);
-                    }}
-                    style={{
-                      position: 'absolute',
-                      top: `${topPercent}%`,
-                      left: `${leftPercent}%`,
-                      width: `${innerCellPercent}%`,
-                      height: `${innerCellPercent}%`,
-                      backgroundColor: selected
-                        ? 'rgba(37, 99, 235, 0.30)'
-                        : legalTarget
-                          ? 'rgba(16, 185, 129, 0.24)'
-                          : 'transparent',
-                    }}
-                  />
-                );
-              }),
-            )}
-          </View>
-
-          <View pointerEvents="none" style={{ position: 'absolute', inset: 0 }}>
-            {pieces.map((placement, index) => {
-              const rowIndex = normalizeCellIndex(placement.row);
-              const colIndex = normalizeCellIndex(placement.col);
-              if (rowIndex === null || colIndex === null) {
-                return null;
-              }
-
-              const cellPercent = 100 / BOARD_SIZE;
-              const innerCellPercent = cellPercent * BOARD_INNER_RATIO;
-              const topPercent = BOARD_PADDING_RATIO * 100 + rowIndex * innerCellPercent;
-              const leftPercent = BOARD_PADDING_RATIO * 100 + colIndex * innerCellPercent;
-              const enemy = isEnemySide(placement.side);
-              const king = placement.pieceCode === 'OU' || isKingChar(placement.char);
-              const pieceScalePercent = (king ? KING_RATIO : PIECE_RATIO) * 100;
-              const placementKey = `${placement.side}-${placement.row}-${placement.col}-${index}`;
-              const imageUri = failedImageKeys[placementKey]
-                ? null
-                : getPieceImageUri(placement.imageSignedUrl);
-
+      <View className="mt-3 overflow-hidden rounded-xl border-2 border-[#a27700] bg-[#e3c690]">
+        <View className="relative w-full self-center" style={{ aspectRatio: 1 }}>
+          <Svg width="100%" height="100%" viewBox={`0 0 ${BOARD_VIEWBOX} ${BOARD_VIEWBOX}`}>
+            <Rect x={0} y={0} width={BOARD_VIEWBOX} height={BOARD_VIEWBOX} fill="#deb887" />
+            <Rect
+              x={BOARD_PADDING}
+              y={BOARD_PADDING}
+              width={BOARD_INNER}
+              height={BOARD_INNER}
+              fill="#e8c88e"
+              stroke="#7a4b20"
+              strokeWidth={2}
+            />
+            {Array.from({ length: BOARD_SIZE + 1 }).map((_, i) => {
+              const p = BOARD_PADDING + BOARD_CELL * i;
               return (
-                <View
-                  key={placementKey}
-                  style={{
-                    position: 'absolute',
-                    top: `${topPercent}%`,
-                    left: `${leftPercent}%`,
-                    width: `${innerCellPercent}%`,
-                    height: `${innerCellPercent}%`,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <View
-                    className={`items-center justify-center ${imageUri ? '' : sideBadgeClass(placement.side)}`}
-                    style={{
-                      width: `${pieceScalePercent}%`,
-                      height: `${pieceScalePercent}%`,
-                      borderRadius: imageUri ? 0 : 999,
-                      overflow: 'hidden',
-                      transform: [{ rotate: enemy ? '180deg' : '0deg' }],
-                    }}
-                  >
-                    {imageUri ? (
-                      <Image
-                        source={{ uri: imageUri }}
-                        contentFit="contain"
-                        style={{ width: '100%', height: '100%' }}
-                        onError={() => {
-                          setFailedImageKeys((prev) => ({ ...prev, [placementKey]: true }));
-                        }}
-                      />
-                    ) : (
-                      <Text className="text-sm font-black">{getDisplayChar(placement)}</Text>
-                    )}
-                  </View>
-                </View>
+                <Line
+                  key={`v-${i}`}
+                  x1={p}
+                  y1={BOARD_PADDING}
+                  x2={p}
+                  y2={BOARD_PADDING + BOARD_INNER}
+                  stroke="#6b3f1a"
+                  strokeWidth={1.5}
+                />
               );
             })}
+            {Array.from({ length: BOARD_SIZE + 1 }).map((_, i) => {
+              const p = BOARD_PADDING + BOARD_CELL * i;
+              return (
+                <Line
+                  key={`h-${i}`}
+                  x1={BOARD_PADDING}
+                  y1={p}
+                  x2={BOARD_PADDING + BOARD_INNER}
+                  y2={p}
+                  stroke="#6b3f1a"
+                  strokeWidth={1.5}
+                />
+              );
+            })}
+          </Svg>
+
+          <View
+            className="absolute"
+            style={{
+              top: `${BOARD_PADDING_RATIO * 100}%`,
+              left: `${BOARD_PADDING_RATIO * 100}%`,
+              width: `${(BOARD_INNER / BOARD_VIEWBOX) * 100}%`,
+              height: `${(BOARD_INNER / BOARD_VIEWBOX) * 100}%`,
+            }}
+          >
+            <Svg
+              width="100%"
+              height="100%"
+              viewBox={`0 0 ${BOARD_INNER} ${BOARD_INNER}`}
+              style={{ position: 'absolute', top: 0, left: 0 }}
+              pointerEvents="none"
+            >
+              {selectedCell ? (
+                <Rect
+                  x={selectedCell.col * BOARD_CELL}
+                  y={selectedCell.row * BOARD_CELL}
+                  width={BOARD_CELL}
+                  height={BOARD_CELL}
+                  fill="none"
+                  stroke="#2563eb"
+                  strokeWidth={4}
+                />
+              ) : null}
+              {legalTargets.map((target) => (
+                <Rect
+                  key={`legal-${target.row}-${target.col}`}
+                  x={target.col * BOARD_CELL}
+                  y={target.row * BOARD_CELL}
+                  width={BOARD_CELL}
+                  height={BOARD_CELL}
+                  fill="none"
+                  stroke="#16a34a"
+                  strokeWidth={4}
+                />
+              ))}
+            </Svg>
+
+            {Array.from({ length: BOARD_SIZE }).map((_, rowIndex) =>
+              Array.from({ length: BOARD_SIZE }).map((__, colIndex) => (
+                <Pressable
+                  key={`cell-${rowIndex}-${colIndex}`}
+                  testID={`board-cell-${rowIndex}-${colIndex}`}
+                  className="absolute items-center justify-center"
+                  style={{
+                    top: `${rowIndex * BOARD_CELL_INNER_RATIO * 100}%`,
+                    left: `${colIndex * BOARD_CELL_INNER_RATIO * 100}%`,
+                    width: `${BOARD_CELL_INNER_RATIO * 100}%`,
+                    height: `${BOARD_CELL_INNER_RATIO * 100}%`,
+                  }}
+                  onPress={() => {
+                    handleCellPress(rowIndex, colIndex);
+                  }}
+                />
+              )),
+            )}
+
+            <View pointerEvents="none" style={{ position: 'absolute', inset: 0 }}>
+              {pieces.map((placement) => {
+                const rowIndex = normalizeCellIndex(placement.row);
+                const colIndex = normalizeCellIndex(placement.col);
+                if (rowIndex === null || colIndex === null) {
+                  return null;
+                }
+
+                const enemy = isEnemySide(placement.side);
+                const king = placement.pieceCode === 'OU' || isKingChar(placement.char);
+                const pieceScalePercent = king
+                  ? KING_PIECE_SIZE_PERCENT
+                  : NORMAL_PIECE_SIZE_PERCENT;
+                const placementKey = `${placement.side}-${placement.pieceCode ?? 'X'}-${placement.row}-${placement.col}`;
+                const imageUri = failedImageKeys[placementKey]
+                  ? null
+                  : getPieceImageUri(placement.imageSignedUrl);
+
+                return (
+                  <View
+                    key={placementKey}
+                    style={{
+                      position: 'absolute',
+                      top: `${rowIndex * BOARD_CELL_INNER_RATIO * 100}%`,
+                      left: `${colIndex * BOARD_CELL_INNER_RATIO * 100}%`,
+                      width: `${BOARD_CELL_INNER_RATIO * 100}%`,
+                      height: `${BOARD_CELL_INNER_RATIO * 100}%`,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <View
+                      className={`items-center justify-center ${imageUri ? '' : sideBadgeClass(placement.side)}`}
+                      style={{
+                        width: `${pieceScalePercent}%`,
+                        height: `${pieceScalePercent}%`,
+                        borderRadius: imageUri ? 0 : 999,
+                        overflow: 'hidden',
+                        transform: [{ rotate: enemy ? '180deg' : '0deg' }],
+                      }}
+                    >
+                      {imageUri ? (
+                        <Image
+                          source={{ uri: imageUri }}
+                          contentFit="contain"
+                          style={{ width: '100%', height: '100%' }}
+                          onError={() => {
+                            setFailedImageKeys((prev) => ({ ...prev, [placementKey]: true }));
+                          }}
+                        />
+                      ) : (
+                        <Text className="text-sm font-black">{getDisplayChar(placement)}</Text>
+                      )}
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
           </View>
         </View>
       </View>
@@ -1139,6 +1209,12 @@ export function StageShogiScreen() {
       ) : null}
       {snapshot.handLabel ? (
         <Text className="mt-2 text-xs text-[#6b4532]">{snapshot.handLabel}</Text>
+      ) : null}
+
+      {isAiThinking ? (
+        <View className="absolute bottom-3 right-3 rounded-md bg-black/65 px-2 py-1">
+          <Text className="text-xs font-bold text-white">Loading...</Text>
+        </View>
       ) : null}
     </UiScreenShell>
   );

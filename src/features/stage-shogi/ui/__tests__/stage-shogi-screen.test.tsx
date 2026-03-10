@@ -183,7 +183,7 @@ describe('StageShogiScreen ai call', () => {
       expect(getByText('歩')).toBeTruthy();
     });
     await waitFor(() => {
-      expect(getByText('gameId: game-1')).toBeTruthy();
+      expect(mockPostJson).toHaveBeenCalledWith('/api/v1/games', expect.any(Object));
     });
 
     fireEvent.press(getByTestId('board-cell-6-4'));
