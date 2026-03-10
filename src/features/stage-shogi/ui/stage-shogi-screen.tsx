@@ -561,6 +561,7 @@ export function StageShogiScreen() {
                 return (
                   <Pressable
                     key={`cell-${rowIndex}-${colIndex}`}
+                    testID={`board-cell-${rowIndex}-${colIndex}`}
                     onPress={() => {
                       handleCellPress(rowIndex, colIndex);
                     }}
