@@ -1,8 +1,13 @@
 import {
+  addHandPiece,
   applyPlayerMove,
   BoardPiece,
+  canDropPiece,
+  canPromoteByMove,
+  createEmptyHandsState,
   getLegalTargetsFromVectors,
   hasKing,
+  mustPromoteByMove,
 } from '@/features/stage-shogi/domain/game-rules';
 
 function sortCells(cells: { row: number; col: number }[]) {
@@ -58,7 +63,44 @@ describe('stage shogi game rules', () => {
 
     const next = applyPlayerMove(placements, { row: 6, col: 4 }, { row: 5, col: 4 });
 
-    expect(next).toEqual([{ side: 'player', row: 5, col: 4, pieceCode: 'FU', char: '歩' }]);
+    expect(next).toEqual([
+      { side: 'player', row: 5, col: 4, pieceCode: 'FU', char: '歩', promoted: false },
+    ]);
+  });
+
+  it('judges optional promotion and forced promotion', () => {
+    const pawn: BoardPiece = {
+      side: 'player',
+      row: 3,
+      col: 4,
+      pieceCode: 'FU',
+      char: '歩',
+      promoted: false,
+    };
+
+    expect(canPromoteByMove(pawn, { row: 3, col: 4 }, { row: 2, col: 4 })).toBe(true);
+    expect(mustPromoteByMove(pawn, { row: 0, col: 4 })).toBe(true);
+  });
+
+  it('validates legal drop with nifu and dead-end checks', () => {
+    const placements: BoardPiece[] = [
+      { side: 'player', row: 6, col: 4, pieceCode: 'FU', char: '歩', promoted: false },
+    ];
+    let hands = createEmptyHandsState();
+    hands = addHandPiece(hands, 'player', 'FU', 1);
+    hands = addHandPiece(hands, 'player', 'KE', 1);
+
+    expect(canDropPiece(placements, hands, 'player', 'FU', { row: 4, col: 4 })).toBe(false);
+    expect(canDropPiece(placements, hands, 'player', 'FU', { row: 4, col: 3 })).toBe(true);
+    expect(canDropPiece(placements, hands, 'player', 'KE', { row: 0, col: 2 })).toBe(false);
+  });
+
+  it('applies promoted player move when requested', () => {
+    const placements: BoardPiece[] = [
+      { side: 'player', row: 1, col: 4, pieceCode: 'FU', char: '歩', promoted: false },
+    ];
+    const next = applyPlayerMove(placements, { row: 1, col: 4 }, { row: 0, col: 4 }, true);
+    expect(next[0].promoted).toBe(true);
   });
 
   it('detects game end by king presence', () => {

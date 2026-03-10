@@ -7,13 +7,20 @@ import { AppLoadingScreen } from '@/components/organism/app-loading-screen';
 import { homeAssets } from '@/constants/home-assets';
 import { UiScreenShell } from '@/components/organism/ui-screen-shell';
 import {
+  addHandPiece,
   applyPlayerMove,
   BoardCell,
   BoardPiece as RuleBoardPiece,
+  canDropPiece,
+  canPromoteByMove,
+  createEmptyHandsState,
+  getHandCount,
   getLegalTargetsFromVectors,
   hasKing,
+  mustPromoteByMove,
   sameCell,
   Side,
+  HandsState,
 } from '@/features/stage-shogi/domain/game-rules';
 import { createLoadPieceCatalogUseCase } from '@/infra/di/usecase-factory';
 import { useStageBattleScreen } from '@/features/stage-shogi/ui/use-stage-battle-screen';
@@ -21,7 +28,7 @@ import { useAssetPreload } from '@/hooks/common/use-asset-preload';
 import { useAuthSession } from '@/hooks/common/use-auth-session';
 import { useScreenBgm } from '@/hooks/common/use-screen-bgm';
 import { postJson } from '@/infra/http/api-client';
-import { PieceCatalogItem } from '@/usecases/piece-info/load-piece-catalog-usecase';
+import { MoveVector, PieceCatalogItem } from '@/usecases/piece-info/load-piece-catalog-usecase';
 
 const boardImage = require('../../../../assets/stage-shogi/shogi-board.png');
 const BOARD_SIZE = 9;
@@ -39,6 +46,10 @@ const ENABLE_PIECE_IMAGES = process.env.EXPO_PUBLIC_ENABLE_PIECE_IMAGES !== 'fal
 
 type BoardPiece = RuleBoardPiece & {
   imageSignedUrl: string | null;
+};
+type PendingPromotion = {
+  from: BoardCell;
+  to: BoardCell;
 };
 
 type CreateGameResponse = {
@@ -70,6 +81,79 @@ type AiMoveResponse = {
   };
 };
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object') return null;
+  return value as Record<string, unknown>;
+}
+
+function asString(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
+function parseCreateGameResponse(raw: unknown): CreateGameResponse {
+  const obj = asRecord(raw);
+  if (!obj) {
+    throw new Error('create game response is not an object');
+  }
+  const gameId = asString(obj.gameId) ?? asString(obj.game_id) ?? asString(obj.id);
+  const status = asString(obj.status);
+  const startedAt = asString(obj.startedAt) ?? asString(obj.started_at);
+  if (!gameId || !status || !startedAt) {
+    const keys = Object.keys(obj).join(', ');
+    throw new Error(`invalid create game response keys: [${keys}]`);
+  }
+  return { gameId, status, startedAt };
+}
+
+function parseAiMoveResponse(raw: unknown): AiMoveResponse {
+  const obj = asRecord(raw);
+  if (!obj) {
+    throw new Error('ai move response is not an object');
+  }
+  const moveObj = asRecord(obj.selectedMove) ?? asRecord(obj.selected_move);
+  if (!moveObj) {
+    const keys = Object.keys(obj).join(', ');
+    throw new Error(`invalid ai move response keys: [${keys}]`);
+  }
+  const fromRow = moveObj.fromRow ?? moveObj.from_row ?? null;
+  const fromCol = moveObj.fromCol ?? moveObj.from_col ?? null;
+  const toRow = moveObj.toRow ?? moveObj.to_row;
+  const toCol = moveObj.toCol ?? moveObj.to_col;
+  const pieceCode = asString(moveObj.pieceCode ?? moveObj.piece_code);
+  const promote = moveObj.promote ?? false;
+  const dropPieceCode = (moveObj.dropPieceCode ?? moveObj.drop_piece_code ?? null) as string | null;
+  const capturedPieceCode = (moveObj.capturedPieceCode ?? moveObj.captured_piece_code ?? null) as
+    | string
+    | null;
+  const notation = (moveObj.notation ?? null) as string | null;
+
+  if (
+    typeof toRow !== 'number' ||
+    typeof toCol !== 'number' ||
+    !pieceCode ||
+    (fromRow !== null && typeof fromRow !== 'number') ||
+    (fromCol !== null && typeof fromCol !== 'number')
+  ) {
+    const keys = Object.keys(moveObj).join(', ');
+    throw new Error(`invalid ai selected move keys: [${keys}]`);
+  }
+
+  return {
+    selectedMove: {
+      fromRow: fromRow as number | null,
+      fromCol: fromCol as number | null,
+      toRow,
+      toCol,
+      pieceCode,
+      promote: Boolean(promote),
+      dropPieceCode,
+      capturedPieceCode,
+      notation,
+    },
+    meta: (asRecord(obj.meta) ?? {}) as AiMoveResponse['meta'],
+  };
+}
+
 const CODE_TO_CHAR: Record<string, string> = {
   FU: '歩',
   KY: '香',
@@ -79,6 +163,14 @@ const CODE_TO_CHAR: Record<string, string> = {
   KA: '角',
   HI: '飛',
   OU: '王',
+};
+const PROMOTED_CODE_TO_CHAR: Record<string, string> = {
+  FU: 'と',
+  KY: '杏',
+  KE: '圭',
+  GI: '全',
+  KA: '馬',
+  HI: '龍',
 };
 
 const CHAR_TO_CODE: Record<string, string> = {
@@ -103,6 +195,27 @@ const CODE_TO_SFEN: Record<string, string> = {
   HI: 'R',
   OU: 'K',
 };
+const HAND_CODES_IN_SFEN_ORDER = ['HI', 'KA', 'KI', 'GI', 'KE', 'KY', 'FU'];
+const GOLD_MOVE_VECTORS: MoveVector[] = [
+  { dx: 0, dy: -1, maxStep: 1 },
+  { dx: -1, dy: -1, maxStep: 1 },
+  { dx: 1, dy: -1, maxStep: 1 },
+  { dx: -1, dy: 0, maxStep: 1 },
+  { dx: 1, dy: 0, maxStep: 1 },
+  { dx: 0, dy: 1, maxStep: 1 },
+];
+const KING_DIAGONAL_VECTORS: MoveVector[] = [
+  { dx: 1, dy: 1, maxStep: 1 },
+  { dx: 1, dy: -1, maxStep: 1 },
+  { dx: -1, dy: 1, maxStep: 1 },
+  { dx: -1, dy: -1, maxStep: 1 },
+];
+const KING_ORTHOGONAL_VECTORS: MoveVector[] = [
+  { dx: 1, dy: 0, maxStep: 1 },
+  { dx: -1, dy: 0, maxStep: 1 },
+  { dx: 0, dy: 1, maxStep: 1 },
+  { dx: 0, dy: -1, maxStep: 1 },
+];
 
 function isEnemySide(side: string) {
   const normalized = side.toLowerCase();
@@ -162,7 +275,8 @@ function toSfenBoard(placements: BoardPiece[]) {
     if (!code) continue;
     const sfen = CODE_TO_SFEN[code];
     if (!sfen) continue;
-    board[p.row][p.col] = p.side === 'player' ? sfen : sfen.toLowerCase();
+    const withPromotion = p.promoted ? `+${sfen}` : sfen;
+    board[p.row][p.col] = p.side === 'player' ? withPromotion : withPromotion.toLowerCase();
   }
 
   return board
@@ -186,10 +300,28 @@ function toSfenBoard(placements: BoardPiece[]) {
     .join('/');
 }
 
-function buildSfen(placements: BoardPiece[], sideToMove: Side, moveNo: number) {
+function toSfenHands(hands: HandsState) {
+  const chunks: string[] = [];
+  for (const code of HAND_CODES_IN_SFEN_ORDER) {
+    const sfen = CODE_TO_SFEN[code];
+    if (!sfen) continue;
+    const playerCount = hands.player[code] ?? 0;
+    const enemyCount = hands.enemy[code] ?? 0;
+    if (playerCount > 0) {
+      chunks.push(`${playerCount > 1 ? String(playerCount) : ''}${sfen}`);
+    }
+    if (enemyCount > 0) {
+      chunks.push(`${enemyCount > 1 ? String(enemyCount) : ''}${sfen.toLowerCase()}`);
+    }
+  }
+  return chunks.length > 0 ? chunks.join('') : '-';
+}
+
+function buildSfen(placements: BoardPiece[], hands: HandsState, sideToMove: Side, moveNo: number) {
   const board = toSfenBoard(placements);
   const side = sideToMove === 'player' ? 'b' : 'w';
-  return `${board} ${side} - ${Math.max(1, moveNo)}`;
+  const sfenHands = toSfenHands(hands);
+  return `${board} ${side} ${sfenHands} ${Math.max(1, moveNo)}`;
 }
 
 function findPieceAt(placements: BoardPiece[], row: number, col: number) {
@@ -200,57 +332,198 @@ function cellKey(row: number, col: number) {
   return `${row}:${col}`;
 }
 
-function normalizePieceChar(piece: BoardPiece) {
+function getDisplayChar(piece: BoardPiece) {
+  if (piece.promoted && piece.pieceCode && PROMOTED_CODE_TO_CHAR[piece.pieceCode]) {
+    return PROMOTED_CODE_TO_CHAR[piece.pieceCode];
+  }
   return piece.char ?? (piece.pieceCode ? (CODE_TO_CHAR[piece.pieceCode] ?? '?') : '?');
+}
+
+function resolveMoveVectors(
+  piece: BoardPiece,
+  pieceDefsByCode: Partial<Record<string, PieceCatalogItem>>,
+) {
+  const code = piece.pieceCode ?? null;
+  if (!code) return [];
+  const baseVectors = pieceDefsByCode[code]?.moveVectors ?? [];
+  if (!piece.promoted) return baseVectors;
+  if (code === 'FU' || code === 'KY' || code === 'KE' || code === 'GI') {
+    return GOLD_MOVE_VECTORS;
+  }
+  if (code === 'KA') {
+    return [...baseVectors, ...KING_ORTHOGONAL_VECTORS];
+  }
+  if (code === 'HI') {
+    return [...baseVectors, ...KING_DIAGONAL_VECTORS];
+  }
+  return baseVectors;
+}
+
+function applyMoveWithHands(
+  placements: BoardPiece[],
+  hands: HandsState,
+  side: Side,
+  from: BoardCell,
+  to: BoardCell,
+  promote: boolean,
+) {
+  const captured = findPieceAt(placements, to.row, to.col);
+  let nextHands = hands;
+  if (captured?.pieceCode && captured.pieceCode !== 'OU') {
+    nextHands = addHandPiece(nextHands, side, captured.pieceCode, 1);
+  }
+
+  const moved = applyPlayerMove(placements as RuleBoardPiece[], from, to, promote) as BoardPiece[];
+  if (side === 'player') {
+    return { pieces: moved, hands: nextHands };
+  }
+  const next = placements.filter((p) => !(p.row === to.row && p.col === to.col));
+  const pieceIndex = next.findIndex(
+    (p) => p.side === side && p.row === from.row && p.col === from.col,
+  );
+  if (pieceIndex >= 0) {
+    const moving = next[pieceIndex] as BoardPiece;
+    next[pieceIndex] = {
+      ...moving,
+      row: to.row,
+      col: to.col,
+      promoted: promote || moving.promoted === true,
+    };
+    return { pieces: next, hands: nextHands };
+  }
+  return { pieces: placements, hands: nextHands };
+}
+
+function applyDropWithHands(
+  placements: BoardPiece[],
+  hands: HandsState,
+  side: Side,
+  to: BoardCell,
+  pieceCode: string,
+) {
+  const char = CODE_TO_CHAR[pieceCode] ?? '?';
+  const nextHands = addHandPiece(hands, side, pieceCode, -1);
+  const next: BoardPiece[] = [...placements];
+  next.push({
+    side,
+    row: to.row,
+    col: to.col,
+    pieceCode,
+    char,
+    promoted: false,
+    imageSignedUrl: null,
+  });
+  return { pieces: next, hands: nextHands };
+}
+
+function buildLegalMoves(
+  placements: BoardPiece[],
+  hands: HandsState,
+  sideToMove: Side,
+  pieceDefsByCode: Partial<Record<string, PieceCatalogItem>>,
+) {
+  const moves: {
+    fromRow: number | null;
+    fromCol: number | null;
+    toRow: number;
+    toCol: number;
+    pieceCode: string;
+    promote: boolean;
+    dropPieceCode: string | null;
+  }[] = [];
+
+  for (const piece of placements) {
+    if (piece.side !== sideToMove || !piece.pieceCode) continue;
+    const vectors = resolveMoveVectors(piece, pieceDefsByCode);
+    if (vectors.length === 0) continue;
+    const targets = getLegalTargetsFromVectors(placements, piece, vectors, BOARD_SIZE);
+    for (const to of targets) {
+      const from = { row: piece.row, col: piece.col };
+      const optionalPromotion = canPromoteByMove(piece, from, to, BOARD_SIZE);
+      const forcedPromotion = mustPromoteByMove(piece, to, BOARD_SIZE);
+      if (forcedPromotion) {
+        moves.push({
+          fromRow: piece.row,
+          fromCol: piece.col,
+          toRow: to.row,
+          toCol: to.col,
+          pieceCode: piece.pieceCode,
+          promote: true,
+          dropPieceCode: null,
+        });
+      } else {
+        moves.push({
+          fromRow: piece.row,
+          fromCol: piece.col,
+          toRow: to.row,
+          toCol: to.col,
+          pieceCode: piece.pieceCode,
+          promote: false,
+          dropPieceCode: null,
+        });
+        if (optionalPromotion) {
+          moves.push({
+            fromRow: piece.row,
+            fromCol: piece.col,
+            toRow: to.row,
+            toCol: to.col,
+            pieceCode: piece.pieceCode,
+            promote: true,
+            dropPieceCode: null,
+          });
+        }
+      }
+    }
+  }
+
+  const hand = hands[sideToMove];
+  for (const [pieceCode, count] of Object.entries(hand)) {
+    if (count <= 0) continue;
+    for (let row = 0; row < BOARD_SIZE; row += 1) {
+      for (let col = 0; col < BOARD_SIZE; col += 1) {
+        if (!canDropPiece(placements, hands, sideToMove, pieceCode, { row, col }, BOARD_SIZE)) {
+          continue;
+        }
+        moves.push({
+          fromRow: null,
+          fromCol: null,
+          toRow: row,
+          toCol: col,
+          pieceCode,
+          promote: false,
+          dropPieceCode: pieceCode,
+        });
+      }
+    }
+  }
+
+  return moves;
 }
 
 function applyAiMove(
   placements: BoardPiece[],
-  side: Side,
+  hands: HandsState,
   move: AiMoveResponse['selectedMove'],
-): BoardPiece[] {
-  const next = placements.filter((p) => !(p.row === move.toRow && p.col === move.toCol));
-
-  const code = move.dropPieceCode ?? move.pieceCode;
-  const char = CODE_TO_CHAR[code] ?? '?';
-
+) {
   if (move.fromRow === null || move.fromCol === null) {
-    next.push({
-      side,
-      row: move.toRow,
-      col: move.toCol,
-      pieceCode: code,
-      char,
-      imageSignedUrl: null,
-    });
-    return next;
+    const pieceCode = move.dropPieceCode ?? move.pieceCode;
+    if (!pieceCode) return { pieces: placements, hands };
+    return applyDropWithHands(
+      placements,
+      hands,
+      'enemy',
+      { row: move.toRow, col: move.toCol },
+      pieceCode,
+    );
   }
-
-  const pieceIndex = next.findIndex(
-    (p) => p.side === side && p.row === move.fromRow && p.col === move.fromCol,
+  return applyMoveWithHands(
+    placements,
+    hands,
+    'enemy',
+    { row: move.fromRow, col: move.fromCol },
+    { row: move.toRow, col: move.toCol },
+    move.promote,
   );
-  if (pieceIndex >= 0) {
-    const moving = next[pieceIndex];
-    next[pieceIndex] = {
-      ...moving,
-      row: move.toRow,
-      col: move.toCol,
-      pieceCode: move.pieceCode,
-      char: CODE_TO_CHAR[move.pieceCode] ?? moving.char,
-    };
-    return next;
-  }
-
-  next.push({
-    side,
-    row: move.toRow,
-    col: move.toCol,
-    pieceCode: move.pieceCode,
-    char: CODE_TO_CHAR[move.pieceCode] ?? '?',
-    imageSignedUrl: null,
-  });
-
-  return next;
 }
 
 export function StageShogiScreen() {
@@ -268,7 +541,10 @@ export function StageShogiScreen() {
   const [isAiThinking, setIsAiThinking] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
   const [selectedCell, setSelectedCell] = useState<BoardCell | null>(null);
+  const [selectedDropPieceCode, setSelectedDropPieceCode] = useState<string | null>(null);
   const [legalTargets, setLegalTargets] = useState<BoardCell[]>([]);
+  const [hands, setHands] = useState<HandsState>(createEmptyHandsState());
+  const [pendingPromotion, setPendingPromotion] = useState<PendingPromotion | null>(null);
   const [pieceCatalog, setPieceCatalog] = useState<PieceCatalogItem[]>([]);
   const [winner, setWinner] = useState<Side | null>(null);
   const loadPieceCatalogUseCase = useMemo(() => createLoadPieceCatalogUseCase(), []);
@@ -288,6 +564,15 @@ export function StageShogiScreen() {
         PieceCatalogItem
       >,
     [pieceCatalog],
+  );
+  const pieceDefsByCode = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(CODE_TO_CHAR)
+          .map(([code, char]) => [code, pieceDefsByChar[char]])
+          .filter((entry): entry is [string, PieceCatalogItem] => Boolean(entry[1])),
+      ),
+    [pieceDefsByChar],
   );
 
   const isFinished = winner !== null;
@@ -315,7 +600,10 @@ export function StageShogiScreen() {
     setGameId(null);
     setAiError(null);
     setSelectedCell(null);
+    setSelectedDropPieceCode(null);
     setLegalTargets([]);
+    setHands(createEmptyHandsState());
+    setPendingPromotion(null);
     setWinner(null);
   }, [snapshot]);
 
@@ -345,20 +633,21 @@ export function StageShogiScreen() {
     setIsCreatingGame(true);
 
     const stageNo = Number(params.stage);
-    void postJson<CreateGameResponse>('/api/v1/games', {
+    void postJson<unknown>('/api/v1/games', {
       playerId: userId,
       stageNo: Number.isInteger(stageNo) && stageNo > 0 ? stageNo : undefined,
       initialPosition: {
         sideToMove,
         turnNumber: moveNo,
         moveCount: moveNo - 1,
-        sfen: buildSfen(pieces, sideToMove, moveNo),
+        sfen: buildSfen(pieces, hands, sideToMove, moveNo),
         boardState: {},
-        hands: {},
+        hands,
       },
     })
-      .then((res) => {
+      .then((raw) => {
         if (isMountedRef.current) {
+          const res = parseCreateGameResponse(raw);
           setGameId(res.gameId);
         }
       })
@@ -379,6 +668,7 @@ export function StageShogiScreen() {
     moveNo,
     params.stage,
     pieces,
+    hands,
     sideToMove,
     snapshot,
     userId,
@@ -426,6 +716,7 @@ export function StageShogiScreen() {
 
   const handleAiMove = async (
     nextPieces: BoardPiece[],
+    nextHands: HandsState,
     nextMoveNo: number,
     nextSideToMove: Side,
   ) => {
@@ -441,24 +732,30 @@ export function StageShogiScreen() {
           sideToMove: nextSideToMove,
           turnNumber: nextMoveNo,
           moveCount: nextMoveNo - 1,
-          sfen: buildSfen(nextPieces, nextSideToMove, nextMoveNo),
+          sfen: buildSfen(nextPieces, nextHands, nextSideToMove, nextMoveNo),
           stateHash: null,
           boardState: {},
-          hands: {},
-          legalMoves: [],
+          hands: nextHands,
+          legalMoves: buildLegalMoves(nextPieces, nextHands, nextSideToMove, pieceDefsByCode),
         },
         engineConfig: {},
       };
 
-      const response = await postJson<AiMoveResponse>('/api/v1/ai/move', payload);
+      const rawResponse = await postJson<unknown>('/api/v1/ai/move', payload);
+      const response = parseAiMoveResponse(rawResponse);
 
-      const afterAi = applyAiMove(nextPieces, 'enemy', response.selectedMove);
-      setPieces(afterAi);
+      const { pieces: afterAiPieces, hands: afterAiHands } = applyAiMove(
+        nextPieces,
+        nextHands,
+        response.selectedMove,
+      );
+      setPieces(afterAiPieces);
+      setHands(afterAiHands);
       setSideToMove('player');
       setMoveNo((prev) => prev + 1);
-      if (!hasKing(afterAi, 'player')) {
+      if (!hasKing(afterAiPieces, 'player')) {
         setWinner('enemy');
-      } else if (!hasKing(afterAi, 'enemy')) {
+      } else if (!hasKing(afterAiPieces, 'enemy')) {
         setWinner('player');
       }
     } catch (error: unknown) {
@@ -469,33 +766,98 @@ export function StageShogiScreen() {
     }
   };
 
-  function legalTargetsForCell(row: number, col: number) {
-    const piece = findPieceAt(pieces, row, col);
+  function legalTargetsForCell(row: number, col: number, board: BoardPiece[] = pieces) {
+    const piece = findPieceAt(board, row, col);
     if (!piece || piece.side !== 'player') return [];
-    const pieceDef = pieceDefsByChar[normalizePieceChar(piece)];
-    if (!pieceDef || pieceDef.moveVectors.length === 0) return [];
-    return getLegalTargetsFromVectors(pieces, piece, pieceDef.moveVectors);
+    const vectors = resolveMoveVectors(piece, pieceDefsByCode);
+    if (vectors.length === 0) return [];
+    return getLegalTargetsFromVectors(board, piece, vectors, BOARD_SIZE);
+  }
+
+  function commitPlayerMove(from: BoardCell, to: BoardCell, promote: boolean) {
+    const { pieces: movedPieces, hands: movedHands } = applyMoveWithHands(
+      pieces,
+      hands,
+      'player',
+      from,
+      to,
+      promote,
+    );
+    setPieces(movedPieces);
+    setHands(movedHands);
+    setSelectedCell(null);
+    setSelectedDropPieceCode(null);
+    setLegalTargets([]);
+    setPendingPromotion(null);
+    setAiError(null);
+    if (!hasKing(movedPieces, 'enemy')) {
+      setWinner('player');
+      return;
+    }
+    setSideToMove('enemy');
+    setMoveNo((prev) => prev + 1);
+    void handleAiMove(movedPieces, movedHands, moveNo + 1, 'enemy');
+  }
+
+  function commitPlayerDrop(pieceCode: string, to: BoardCell) {
+    if (!canDropPiece(pieces, hands, 'player', pieceCode, to, BOARD_SIZE)) return;
+    const { pieces: droppedPieces, hands: droppedHands } = applyDropWithHands(
+      pieces,
+      hands,
+      'player',
+      to,
+      pieceCode,
+    );
+    setPieces(droppedPieces);
+    setHands(droppedHands);
+    setSelectedCell(null);
+    setSelectedDropPieceCode(null);
+    setLegalTargets([]);
+    setPendingPromotion(null);
+    setAiError(null);
+    if (!hasKing(droppedPieces, 'enemy')) {
+      setWinner('player');
+      return;
+    }
+    setSideToMove('enemy');
+    setMoveNo((prev) => prev + 1);
+    void handleAiMove(droppedPieces, droppedHands, moveNo + 1, 'enemy');
   }
 
   function handleCellPress(row: number, col: number) {
     if (sideToMove !== 'player' || isAiThinking || isCreatingGame || isFinished) return;
+    if (pendingPromotion) return;
 
     const tapped = { row, col };
+    if (selectedDropPieceCode) {
+      const canDrop = legalTargets.some((target) => sameCell(target, tapped));
+      if (canDrop) {
+        commitPlayerDrop(selectedDropPieceCode, tapped);
+      }
+      return;
+    }
+
     if (selectedCell) {
       const canMove = legalTargets.some((target) => sameCell(target, tapped));
       if (canMove) {
-        const moved = applyPlayerMove(pieces, selectedCell, tapped);
-        setPieces(moved);
-        setSelectedCell(null);
-        setLegalTargets([]);
-        setAiError(null);
-        if (!hasKing(moved, 'enemy')) {
-          setWinner('player');
+        const movingPiece = findPieceAt(pieces, selectedCell.row, selectedCell.col);
+        if (!movingPiece) {
+          setSelectedCell(null);
+          setLegalTargets([]);
           return;
         }
-        setSideToMove('enemy');
-        setMoveNo((prev) => prev + 1);
-        void handleAiMove(moved, moveNo + 1, 'enemy');
+
+        const force = mustPromoteByMove(movingPiece, tapped, BOARD_SIZE);
+        const can = canPromoteByMove(movingPiece, selectedCell, tapped, BOARD_SIZE);
+        if (force) {
+          commitPlayerMove(selectedCell, tapped, true);
+          return;
+        }
+        if (can) {
+          setPendingPromotion({ from: selectedCell, to: tapped });
+          return;
+        }
+        commitPlayerMove(selectedCell, tapped, false);
         return;
       }
     }
@@ -514,16 +876,82 @@ export function StageShogiScreen() {
       return;
     }
 
+    setSelectedDropPieceCode(null);
     setSelectedCell({ row, col });
     setLegalTargets(targets);
+  }
+
+  function handleHandPiecePress(pieceCode: string) {
+    if (sideToMove !== 'player' || isAiThinking || isCreatingGame || isFinished) return;
+    if (pendingPromotion) return;
+    if (getHandCount(hands, 'player', pieceCode) <= 0) return;
+
+    const targets: BoardCell[] = [];
+    for (let row = 0; row < BOARD_SIZE; row += 1) {
+      for (let col = 0; col < BOARD_SIZE; col += 1) {
+        if (canDropPiece(pieces, hands, 'player', pieceCode, { row, col }, BOARD_SIZE)) {
+          targets.push({ row, col });
+        }
+      }
+    }
+    setSelectedCell(null);
+    setSelectedDropPieceCode(pieceCode);
+    setLegalTargets(targets);
+  }
+
+  function renderHandsRow(side: Side) {
+    const entries = HAND_CODES_IN_SFEN_ORDER.map((code) => ({
+      code,
+      count: hands[side][code] ?? 0,
+    })).filter((entry) => entry.count > 0);
+
+    if (entries.length === 0) {
+      return <Text className="text-xs text-[#6b4532]">なし</Text>;
+    }
+
+    return (
+      <View className="mt-1 flex-row flex-wrap gap-2">
+        {entries.map((entry) => {
+          const isPlayer = side === 'player';
+          const disabled =
+            !isPlayer ||
+            sideToMove !== 'player' ||
+            isAiThinking ||
+            isCreatingGame ||
+            isFinished ||
+            pendingPromotion !== null;
+          const selected = isPlayer && selectedDropPieceCode === entry.code;
+          return (
+            <Pressable
+              key={`${side}-${entry.code}`}
+              testID={`hand-${side}-${entry.code}`}
+              disabled={disabled}
+              onPress={() => {
+                handleHandPiecePress(entry.code);
+              }}
+              className={`rounded-md border px-2 py-1 ${selected ? 'border-blue-700 bg-blue-100' : 'border-[#b08b5a] bg-[#f9f1e0]'} ${disabled ? 'opacity-60' : ''}`}
+            >
+              <Text className="text-sm font-bold text-[#5d3b2e]">{`${CODE_TO_CHAR[entry.code] ?? entry.code} x${entry.count}`}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    );
   }
 
   const legalTargetSet = useMemo(
     () => new Set(legalTargets.map((target) => cellKey(target.row, target.col))),
     [legalTargets],
   );
+  const isWaitingForGameId =
+    !isLoading &&
+    areAssetsReady &&
+    arePieceImagesReady &&
+    !gameId &&
+    isCreatingGame &&
+    aiError === null;
 
-  if (isLoading || !areAssetsReady || !arePieceImagesReady) {
+  if (isLoading || !areAssetsReady || !arePieceImagesReady || isWaitingForGameId) {
     return <AppLoadingScreen imageSource={homeAssets.loadingImage} />;
   }
 
@@ -532,7 +960,8 @@ export function StageShogiScreen() {
       <View className="rounded-xl border-2 border-accent bg-[#f3ead3] p-3">
         <Text className="text-sm font-bold text-[#6b4532]">{`TURN ${moveNo}`}</Text>
         <Text className="text-base font-black text-ink">{`${snapshot.stageLabel}  手番: ${sideToMove === 'player' ? 'あなた' : 'CPU'}`}</Text>
-        <Text className="text-xs text-[#6b4532]">{`gameId: ${gameId ?? '(作成中...)'}`}</Text>
+        <Text className="text-xs text-[#6b4532]">{`gameId: ${gameId}`}</Text>
+        <Text className="text-xs text-[#6b4532]">{`api: ${process.env.EXPO_PUBLIC_API_BASE_URL ?? 'unset'}`}</Text>
         {isFinished ? (
           <Text className="mt-1 text-sm font-black text-[#7f1d1d]">{`対局終了: ${winner === 'player' ? 'あなたの勝ち' : 'CPUの勝ち'}`}</Text>
         ) : null}
@@ -546,7 +975,7 @@ export function StageShogiScreen() {
             isAiThinking || isCreatingGame || !gameId || sideToMove !== 'enemy' || isFinished
           }
           onPress={() => {
-            void handleAiMove(pieces, moveNo, sideToMove);
+            void handleAiMove(pieces, hands, moveNo, sideToMove);
           }}
         >
           <Text className="font-bold text-white">
@@ -619,7 +1048,7 @@ export function StageShogiScreen() {
               const topPercent = BOARD_PADDING_RATIO * 100 + rowIndex * innerCellPercent;
               const leftPercent = BOARD_PADDING_RATIO * 100 + colIndex * innerCellPercent;
               const enemy = isEnemySide(placement.side);
-              const king = isKingChar(placement.char);
+              const king = placement.pieceCode === 'OU' || isKingChar(placement.char);
               const pieceScalePercent = (king ? KING_RATIO : PIECE_RATIO) * 100;
               const placementKey = `${placement.side}-${placement.row}-${placement.col}-${index}`;
               const imageUri = failedImageKeys[placementKey]
@@ -659,7 +1088,7 @@ export function StageShogiScreen() {
                         }}
                       />
                     ) : (
-                      <Text className="text-sm font-black">{placement.char}</Text>
+                      <Text className="text-sm font-black">{getDisplayChar(placement)}</Text>
                     )}
                   </View>
                 </View>
@@ -670,9 +1099,47 @@ export function StageShogiScreen() {
       </View>
 
       <View className="mt-3 rounded-xl border border-accent/60 bg-white p-3">
-        <Text className="text-sm font-bold text-ink">手駒</Text>
-        <Text className="mt-1 text-sm text-[#6b4532]">{snapshot.handLabel}</Text>
+        <Text className="text-sm font-bold text-ink">CPU持ち駒</Text>
+        {renderHandsRow('enemy')}
+        <View className="my-2 h-px bg-[#e5d1ae]" />
+        <Text className="text-sm font-bold text-ink">あなたの持ち駒</Text>
+        {renderHandsRow('player')}
       </View>
+
+      {pendingPromotion ? (
+        <View className="absolute inset-0 items-center justify-center bg-black/35 p-6">
+          <View className="w-full max-w-sm rounded-xl border border-[#8b5e34] bg-[#fffaf0] p-4">
+            <Text className="text-base font-black text-ink">成りますか？</Text>
+            <View className="mt-3 flex-row gap-3">
+              <Pressable
+                testID="promotion-yes"
+                className="flex-1 rounded-md bg-[#166534] px-3 py-2"
+                onPress={() => {
+                  commitPlayerMove(pendingPromotion.from, pendingPromotion.to, true);
+                }}
+              >
+                <Text className="text-center font-bold text-white">成る</Text>
+              </Pressable>
+              <Pressable
+                testID="promotion-no"
+                className="flex-1 rounded-md bg-[#92400e] px-3 py-2"
+                onPress={() => {
+                  commitPlayerMove(pendingPromotion.from, pendingPromotion.to, false);
+                }}
+              >
+                <Text className="text-center font-bold text-white">成らない</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      ) : null}
+
+      {selectedDropPieceCode && legalTargets.length === 0 ? (
+        <Text className="mt-2 text-xs text-red-600">その駒は打てる場所がありません。</Text>
+      ) : null}
+      {snapshot.handLabel ? (
+        <Text className="mt-2 text-xs text-[#6b4532]">{snapshot.handLabel}</Text>
+      ) : null}
     </UiScreenShell>
   );
 }
