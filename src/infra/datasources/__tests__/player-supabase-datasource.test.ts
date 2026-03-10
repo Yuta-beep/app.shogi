@@ -18,7 +18,10 @@ describe('PlayerSupabaseDataSource', () => {
 
   describe('getDisplayName', () => {
     it('display_nameがある場合はその値を返す', async () => {
-      mockMaybeSingle.mockResolvedValueOnce({ data: { display_name: 'テストユーザー' }, error: null });
+      mockMaybeSingle.mockResolvedValueOnce({
+        data: { display_name: 'テストユーザー' },
+        error: null,
+      });
 
       const result = await ds.getDisplayName(userId);
 

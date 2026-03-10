@@ -6,11 +6,22 @@ import { Pressable, Text, View } from 'react-native';
 import { AppLoadingScreen } from '@/components/organism/app-loading-screen';
 import { homeAssets } from '@/constants/home-assets';
 import { UiScreenShell } from '@/components/organism/ui-screen-shell';
+import {
+  applyPlayerMove,
+  BoardCell,
+  BoardPiece as RuleBoardPiece,
+  getLegalTargetsFromVectors,
+  hasKing,
+  sameCell,
+  Side,
+} from '@/features/stage-shogi/domain/game-rules';
+import { createLoadPieceCatalogUseCase } from '@/infra/di/usecase-factory';
 import { useStageBattleScreen } from '@/features/stage-shogi/ui/use-stage-battle-screen';
 import { useAssetPreload } from '@/hooks/common/use-asset-preload';
 import { useAuthSession } from '@/hooks/common/use-auth-session';
 import { useScreenBgm } from '@/hooks/common/use-screen-bgm';
 import { postJson } from '@/infra/http/api-client';
+import { PieceCatalogItem } from '@/usecases/piece-info/load-piece-catalog-usecase';
 
 const boardImage = require('../../../../assets/stage-shogi/shogi-board.png');
 const BOARD_SIZE = 9;
@@ -26,14 +37,7 @@ const PIECE_RATIO = SHOGI_GAME_PIECE_PX / SHOGI_GAME_CELL_PX;
 const KING_RATIO = SHOGI_GAME_KING_PX / SHOGI_GAME_CELL_PX;
 const ENABLE_PIECE_IMAGES = process.env.EXPO_PUBLIC_ENABLE_PIECE_IMAGES !== 'false';
 
-type Side = 'player' | 'enemy';
-
-type BoardPiece = {
-  side: Side;
-  row: number;
-  col: number;
-  pieceCode: string | null;
-  char: string;
+type BoardPiece = RuleBoardPiece & {
   imageSignedUrl: string | null;
 };
 
@@ -188,6 +192,18 @@ function buildSfen(placements: BoardPiece[], sideToMove: Side, moveNo: number) {
   return `${board} ${side} - ${Math.max(1, moveNo)}`;
 }
 
+function findPieceAt(placements: BoardPiece[], row: number, col: number) {
+  return placements.find((piece) => piece.row === row && piece.col === col) ?? null;
+}
+
+function cellKey(row: number, col: number) {
+  return `${row}:${col}`;
+}
+
+function normalizePieceChar(piece: BoardPiece) {
+  return piece.char ?? (piece.pieceCode ? (CODE_TO_CHAR[piece.pieceCode] ?? '?') : '?');
+}
+
 function applyAiMove(
   placements: BoardPiece[],
   side: Side,
@@ -251,7 +267,23 @@ export function StageShogiScreen() {
   const [isCreatingGame, setIsCreatingGame] = useState(false);
   const [isAiThinking, setIsAiThinking] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
+  const [selectedCell, setSelectedCell] = useState<BoardCell | null>(null);
+  const [legalTargets, setLegalTargets] = useState<BoardCell[]>([]);
+  const [pieceCatalog, setPieceCatalog] = useState<PieceCatalogItem[]>([]);
+  const [winner, setWinner] = useState<Side | null>(null);
+  const loadPieceCatalogUseCase = useMemo(() => createLoadPieceCatalogUseCase(), []);
   useScreenBgm('battle');
+
+  const pieceDefsByChar = useMemo(
+    () =>
+      Object.fromEntries(pieceCatalog.map((item) => [item.char, item])) as Record<
+        string,
+        PieceCatalogItem
+      >,
+    [pieceCatalog],
+  );
+
+  const isFinished = winner !== null;
 
   useEffect(() => {
     const next = snapshot.placements
@@ -275,7 +307,29 @@ export function StageShogiScreen() {
     setMoveNo(1);
     setGameId(null);
     setAiError(null);
+    setSelectedCell(null);
+    setLegalTargets([]);
+    setWinner(null);
   }, [snapshot]);
+
+  useEffect(() => {
+    let active = true;
+    loadPieceCatalogUseCase
+      .execute()
+      .then((items) => {
+        if (active) {
+          setPieceCatalog(items);
+        }
+      })
+      .catch((error: unknown) => {
+        if (active) {
+          setAiError(error instanceof Error ? error.message : String(error));
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [loadPieceCatalogUseCase]);
 
   useEffect(() => {
     if (isLoading || isCreatingGame || gameId || !userId) return;
@@ -347,7 +401,11 @@ export function StageShogiScreen() {
     };
   }, [remoteImageUrls]);
 
-  const handleAiMove = async () => {
+  const handleAiMove = async (
+    nextPieces: BoardPiece[],
+    nextMoveNo: number,
+    nextSideToMove: Side,
+  ) => {
     if (!gameId || isAiThinking || isCreatingGame) return;
     setIsAiThinking(true);
     setAiError(null);
@@ -355,12 +413,12 @@ export function StageShogiScreen() {
     try {
       const payload = {
         gameId,
-        moveNo,
+        moveNo: nextMoveNo,
         position: {
-          sideToMove,
-          turnNumber: moveNo,
-          moveCount: moveNo - 1,
-          sfen: buildSfen(pieces, sideToMove, moveNo),
+          sideToMove: nextSideToMove,
+          turnNumber: nextMoveNo,
+          moveCount: nextMoveNo - 1,
+          sfen: buildSfen(nextPieces, nextSideToMove, nextMoveNo),
           stateHash: null,
           boardState: {},
           hands: {},
@@ -371,15 +429,76 @@ export function StageShogiScreen() {
 
       const response = await postJson<AiMoveResponse>('/api/v1/ai/move', payload);
 
-      setPieces((prev) => applyAiMove(prev, sideToMove, response.selectedMove));
-      setSideToMove((prev) => (prev === 'player' ? 'enemy' : 'player'));
+      const afterAi = applyAiMove(nextPieces, 'enemy', response.selectedMove);
+      setPieces(afterAi);
+      setSideToMove('player');
       setMoveNo((prev) => prev + 1);
+      if (!hasKing(afterAi, 'player')) {
+        setWinner('enemy');
+      } else if (!hasKing(afterAi, 'enemy')) {
+        setWinner('player');
+      }
     } catch (error: unknown) {
       setAiError(error instanceof Error ? error.message : String(error));
+      setSideToMove('enemy');
     } finally {
       setIsAiThinking(false);
     }
   };
+
+  function legalTargetsForCell(row: number, col: number) {
+    const piece = findPieceAt(pieces, row, col);
+    if (!piece || piece.side !== 'player') return [];
+    const pieceDef = pieceDefsByChar[normalizePieceChar(piece)];
+    if (!pieceDef || pieceDef.moveVectors.length === 0) return [];
+    return getLegalTargetsFromVectors(pieces, piece, pieceDef.moveVectors);
+  }
+
+  function handleCellPress(row: number, col: number) {
+    if (sideToMove !== 'player' || isAiThinking || isCreatingGame || isFinished) return;
+
+    const tapped = { row, col };
+    if (selectedCell) {
+      const canMove = legalTargets.some((target) => sameCell(target, tapped));
+      if (canMove) {
+        const moved = applyPlayerMove(pieces, selectedCell, tapped);
+        setPieces(moved);
+        setSelectedCell(null);
+        setLegalTargets([]);
+        setAiError(null);
+        if (!hasKing(moved, 'enemy')) {
+          setWinner('player');
+          return;
+        }
+        setSideToMove('enemy');
+        setMoveNo((prev) => prev + 1);
+        void handleAiMove(moved, moveNo + 1, 'enemy');
+        return;
+      }
+    }
+
+    const piece = findPieceAt(pieces, row, col);
+    if (!piece || piece.side !== 'player') {
+      setSelectedCell(null);
+      setLegalTargets([]);
+      return;
+    }
+
+    const targets = legalTargetsForCell(row, col);
+    if (targets.length === 0) {
+      setSelectedCell(null);
+      setLegalTargets([]);
+      return;
+    }
+
+    setSelectedCell({ row, col });
+    setLegalTargets(targets);
+  }
+
+  const legalTargetSet = useMemo(
+    () => new Set(legalTargets.map((target) => cellKey(target.row, target.col))),
+    [legalTargets],
+  );
 
   if (isLoading || !areAssetsReady || !arePieceImagesReady) {
     return <AppLoadingScreen imageSource={homeAssets.loadingImage} />;
@@ -391,19 +510,24 @@ export function StageShogiScreen() {
         <Text className="text-sm font-bold text-[#6b4532]">{`TURN ${moveNo}`}</Text>
         <Text className="text-base font-black text-ink">{`${snapshot.stageLabel}  手番: ${sideToMove === 'player' ? 'あなた' : 'CPU'}`}</Text>
         <Text className="text-xs text-[#6b4532]">{`gameId: ${gameId ?? '(作成中...)'}`}</Text>
+        {isFinished ? (
+          <Text className="mt-1 text-sm font-black text-[#7f1d1d]">{`対局終了: ${winner === 'player' ? 'あなたの勝ち' : 'CPUの勝ち'}`}</Text>
+        ) : null}
         {aiError ? <Text className="mt-1 text-xs text-red-600">{aiError}</Text> : null}
       </View>
 
       <View className="mt-3 flex-row items-center gap-2">
         <Pressable
-          className={`rounded-lg px-4 py-2 ${isAiThinking || isCreatingGame || !gameId ? 'bg-gray-400' : 'bg-[#1e40af]'}`}
-          disabled={isAiThinking || isCreatingGame || !gameId}
+          className={`rounded-lg px-4 py-2 ${isAiThinking || isCreatingGame || !gameId || sideToMove !== 'enemy' || isFinished ? 'bg-gray-400' : 'bg-[#1e40af]'}`}
+          disabled={
+            isAiThinking || isCreatingGame || !gameId || sideToMove !== 'enemy' || isFinished
+          }
           onPress={() => {
-            void handleAiMove();
+            void handleAiMove(pieces, moveNo, sideToMove);
           }}
         >
           <Text className="font-bold text-white">
-            {isAiThinking ? 'AI思考中...' : 'AIに指させる'}
+            {isAiThinking ? 'AI思考中...' : 'AI応手を再試行'}
           </Text>
         </Pressable>
       </View>
@@ -421,6 +545,42 @@ export function StageShogiScreen() {
               height: `${SHOGI_GAME_BACKGROUND_SCALE * 100}%`,
             }}
           />
+
+          <View style={{ position: 'absolute', inset: 0 }}>
+            {Array.from({ length: BOARD_SIZE }).map((_, rowIndex) =>
+              Array.from({ length: BOARD_SIZE }).map((__, colIndex) => {
+                const cellPercent = 100 / BOARD_SIZE;
+                const innerCellPercent = cellPercent * BOARD_INNER_RATIO;
+                const topPercent = BOARD_PADDING_RATIO * 100 + rowIndex * innerCellPercent;
+                const leftPercent = BOARD_PADDING_RATIO * 100 + colIndex * innerCellPercent;
+                const selected =
+                  selectedCell !== null &&
+                  selectedCell.row === rowIndex &&
+                  selectedCell.col === colIndex;
+                const legalTarget = legalTargetSet.has(cellKey(rowIndex, colIndex));
+                return (
+                  <Pressable
+                    key={`cell-${rowIndex}-${colIndex}`}
+                    onPress={() => {
+                      handleCellPress(rowIndex, colIndex);
+                    }}
+                    style={{
+                      position: 'absolute',
+                      top: `${topPercent}%`,
+                      left: `${leftPercent}%`,
+                      width: `${innerCellPercent}%`,
+                      height: `${innerCellPercent}%`,
+                      backgroundColor: selected
+                        ? 'rgba(37, 99, 235, 0.30)'
+                        : legalTarget
+                          ? 'rgba(16, 185, 129, 0.24)'
+                          : 'transparent',
+                    }}
+                  />
+                );
+              }),
+            )}
+          </View>
 
           <View pointerEvents="none" style={{ position: 'absolute', inset: 0 }}>
             {pieces.map((placement, index) => {

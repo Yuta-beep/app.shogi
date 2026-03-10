@@ -1,0 +1,21 @@
+pre-commit:
+  parallel: true
+  commands:
+    format:
+      run: bun run format:check
+    lint:
+      run: bun run lint
+
+pre-push:
+  parallel: false
+  commands:
+    format:
+      run: bun run format:check
+    build:
+      run: bun run build:check
+    test:
+      run: bun run test -- --runInBand
+    typecheck:
+      run: bun run typecheck
+    lint:
+      run: bun run lint

@@ -106,7 +106,10 @@ describe('認証フロー 統合テスト', () => {
       mockGetSession.mockResolvedValueOnce({
         data: { session: { user: { id: NEW_USER_ID } } },
       });
-      mockMaybeSingle.mockResolvedValueOnce({ data: { display_name: '新プレイヤー' }, error: null });
+      mockMaybeSingle.mockResolvedValueOnce({
+        data: { display_name: '新プレイヤー' },
+        error: null,
+      });
 
       const { result } = renderHook(() => useAuthSession());
 
