@@ -8,10 +8,11 @@ jest.mock('../../../global.css', () => ({}));
 const mockReplace = jest.fn();
 const mockReleaseAudioPlayers = jest.fn();
 const mockUseAuthSession = jest.fn();
+const mockText = Text;
 
 jest.mock('expo-router', () => {
   return {
-    Stack: () => <Text testID="stack">stack</Text>,
+    Stack: () => <mockText testID="stack">stack</mockText>,
     useRouter: () => ({
       replace: (...args: unknown[]) => mockReplace(...args),
     }),
@@ -24,7 +25,7 @@ jest.mock('expo-status-bar', () => ({
 
 jest.mock('@/components/organism/app-loading-screen', () => {
   return {
-    AppLoadingScreen: () => <Text>loading-screen</Text>,
+    AppLoadingScreen: () => <mockText>loading-screen</mockText>,
   };
 });
 
