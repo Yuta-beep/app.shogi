@@ -1,4 +1,4 @@
-import { PieceCatalogItem } from '@/usecases/piece-info/load-piece-catalog-usecase';
+import type { PieceCatalogItem } from '@/domain/models/piece';
 
 export interface PieceRepository {
   listCatalog(): Promise<PieceCatalogItem[]>;

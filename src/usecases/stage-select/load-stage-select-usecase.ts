@@ -1,4 +1,4 @@
-import { StageNodeData, StageRange } from '@/constants/stage-select-data';
+import type { StageNodeData, StageRange } from '@/domain/models/stage-select';
 
 export type StageSelectSnapshot = {
   ranges: StageRange[];

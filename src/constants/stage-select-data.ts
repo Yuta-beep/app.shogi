@@ -1,20 +1,4 @@
-export type StageRange = {
-  page: number;
-  label: string;
-  start: number;
-  end: number;
-  height: number;
-};
-
-export type StageNodeData = {
-  id: number;
-  name: string;
-  page: number;
-  top: number;
-  left: number;
-  color: string;
-  unlockPieces: string[];
-};
+import type { StageNodeData, StageRange } from '@/domain/models/stage-select';
 
 const stageNames = [
   '基本の森', '忍者の里', '大門', '古城', '炎のダンジョン', '水のダンジョン', '木のダンジョン',

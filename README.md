@@ -50,14 +50,17 @@ npm run test
 
 ## Directory Structure
 ```text
-app/                 # Expo Router routes only
 assets/              # Images and static files
 src/
+  app/               # Expo Router routes only
   components/
     atom/            # 最小単位のUI部品
-    module/          # atomを組み合わせた部品
+    molecule/        # atomを組み合わせた中位部品
+    organism/        # 画面セクション単位の複合UI
+    module/          # 互換レイヤー（段階移行用）
   constants/         # 定数・アセット参照・モック
   domain/
+    models/          # ドメイン型
     repositories/    # Repository interface
   features/          # 機能単位（画面UI本体）
   hooks/             # 共通hooks
@@ -95,9 +98,9 @@ assets/audio/
 
 ## Architecture Policy
 - UIファーストで開発
-- `app/` はルーティング定義に限定
+- `src/app/` はルーティング定義に限定（Expo Router）
 - 実画面実装は `src/features/*` に置く
-- 共通UIは `src/components/atom|module` に集約
+- 共通UIは `src/components/atom|molecule|organism` に集約
 - 依存方向は `UI -> UseCase -> Repository(interface) -> DataSource(API)` を維持
 
 詳細方針:

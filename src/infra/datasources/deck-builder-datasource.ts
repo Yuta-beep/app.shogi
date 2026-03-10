@@ -1,12 +1,11 @@
+import type {
+  DeckBuilderSnapshot,
+  OwnedPiece,
+  SaveDeckPayload,
+  SaveDeckResponse,
+  SavedDeck,
+} from '@/domain/models/deck-builder';
 import { getJson, postJson, deleteJson } from '@/infra/http/api-client';
-import { DeckBuilderSnapshot, OwnedPiece, SavedDeck } from '@/usecases/deck-builder/load-deck-builder-usecase';
-
-export type SaveDeckPayload = {
-  name: string;
-  placements: { rowNo: number; colNo: number; pieceId: number }[];
-};
-
-export type SaveDeckResponse = { deckId: number };
 
 type ApiOwnedPiece = {
   pieceId: number;

@@ -4,11 +4,11 @@ import { useEffect } from 'react';
 import { View, Text } from 'react-native';
 import 'react-native-reanimated';
 
-import { AppLoadingScreen } from '@/components/module/app-loading-screen';
+import { AppLoadingScreen } from '@/components/organism/app-loading-screen';
 import { useAuthSession } from '@/hooks/common/use-auth-session';
 import { releaseAudioPlayers } from '@/lib/audio/audio-manager';
 
-import '../global.css';
+import '../../global.css';
 
 export default function RootLayout() {
   const router = useRouter();
@@ -24,7 +24,7 @@ export default function RootLayout() {
     if (isReady && !error && needsUsernameSetup) {
       router.replace('/username-setup');
     }
-  }, [isReady, error, needsUsernameSetup]);
+  }, [isReady, error, needsUsernameSetup, router]);
 
   if (!isReady) {
     return <AppLoadingScreen />;

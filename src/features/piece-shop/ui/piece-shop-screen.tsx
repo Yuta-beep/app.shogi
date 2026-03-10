@@ -3,13 +3,13 @@ import { useRouter } from 'expo-router';
 import { Modal, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { AppLoadingScreen } from '@/components/module/app-loading-screen';
+import { AppLoadingScreen } from '@/components/organism/app-loading-screen';
 import { homeAssets } from '@/constants/home-assets';
 import { usePieceShopScreen } from '@/features/piece-shop/ui/use-piece-shop-screen';
 import { useAssetPreload } from '@/hooks/common/use-asset-preload';
 import { useScreenBgm } from '@/hooks/common/use-screen-bgm';
 import { playSe } from '@/lib/audio/audio-manager';
-import { ShopItem } from '@/usecases/piece-shop/load-shop-catalog-usecase';
+import { ShopItem } from '@/domain/models/shop';
 
 const shopAssets = {
   background: require('../../../../assets/piece-shop/shop-bg.png'),

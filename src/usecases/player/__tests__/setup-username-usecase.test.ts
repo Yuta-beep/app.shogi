@@ -1,3 +1,5 @@
+import { setupUsername } from '../setup-username-usecase';
+
 const mockUpdateDisplayName = jest.fn();
 
 jest.mock('@/infra/datasources/player-supabase-datasource', () => ({
@@ -5,8 +7,6 @@ jest.mock('@/infra/datasources/player-supabase-datasource', () => ({
     updateDisplayName: (...args: unknown[]) => mockUpdateDisplayName(...args),
   })),
 }));
-
-import { setupUsername } from '../setup-username-usecase';
 
 describe('setupUsername', () => {
   const userId = 'user-uuid-abc';

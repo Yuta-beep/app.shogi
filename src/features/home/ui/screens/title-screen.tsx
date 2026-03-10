@@ -3,8 +3,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ImageBackground, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { AppLoadingScreen } from '@/components/module/app-loading-screen';
-import { TapToStartScreen } from '@/components/module/tap-to-start-screen';
+import { AppLoadingScreen } from '@/components/organism/app-loading-screen';
+import { TapToStartScreen } from '@/components/organism/tap-to-start-screen';
 import { homeAssets } from '@/constants/home-assets';
 import { TITLE_TO_HOME_LOADING_MS } from '@/constants/loading';
 import { useAssetPreload } from '@/hooks/common/use-asset-preload';

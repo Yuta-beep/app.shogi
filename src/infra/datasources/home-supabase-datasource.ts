@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase/supabase-client';
-import { HomeSnapshot } from '@/usecases/home/load-home-snapshot-usecase';
+import { HomeSnapshot } from '@/domain/models/home';
 
 export class HomeSupabaseDataSource {
   async getSnapshot(): Promise<HomeSnapshot> {

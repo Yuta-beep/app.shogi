@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react';
 
+import type { OwnedPiece, SavedDeck } from '@/domain/models/deck-builder';
 import { supabase } from '@/lib/supabase/supabase-client';
-import { DeckBuilderApiDataSource } from '@/infra/datasources/deck-builder-datasource';
-import { createLoadDeckBuilderUseCase } from '@/infra/di/usecase-factory';
-import { OwnedPiece, SavedDeck } from '@/usecases/deck-builder/load-deck-builder-usecase';
+import { createDeleteDeckUseCase, createLoadDeckBuilderUseCase, createSaveDeckUseCase } from '@/infra/di/usecase-factory';
 
 type BoardPlacement = {
   row: number;
@@ -92,18 +91,15 @@ export function useDeckBuilderScreen() {
       savedAt: new Date().toLocaleString('ja-JP', { hour12: false }),
     };
 
-    if (token) {
-      const ds = new DeckBuilderApiDataSource(token);
-      ds.saveDeck({ name: newDeck.name, placements: apiPlacements })
-        .then((res) => {
-          setSavedDecks((prev) => [{ ...newDeck, id: String(res.deckId) }, ...prev]);
-        })
-        .catch(() => {
-          setSavedDecks((prev) => [newDeck, ...prev]);
-        });
-    } else {
-      setSavedDecks((prev) => [newDeck, ...prev]);
-    }
+    const saveDeckUseCase = createSaveDeckUseCase(token);
+    saveDeckUseCase
+      .execute({ name: newDeck.name, placements: apiPlacements })
+      .then((result) => {
+        setSavedDecks((prev) => [{ ...newDeck, id: result.savedDeckId ?? newDeck.id }, ...prev]);
+      })
+      .catch(() => {
+        setSavedDecks((prev) => [newDeck, ...prev]);
+      });
 
     setDeckName('');
     setSaveModalOpen(false);
@@ -113,9 +109,9 @@ export function useDeckBuilderScreen() {
     setSavedDecks((prev) => prev.filter((d) => d.id !== id));
 
     const numericId = parseInt(id, 10);
-    if (token && !isNaN(numericId)) {
-      const ds = new DeckBuilderApiDataSource(token);
-      ds.deleteDeck(numericId).catch(() => {
+    if (!isNaN(numericId)) {
+      const deleteDeckUseCase = createDeleteDeckUseCase(token);
+      deleteDeckUseCase.execute({ deckId: numericId }).catch(() => {
         // ignore: UI already updated optimistically
       });
     }

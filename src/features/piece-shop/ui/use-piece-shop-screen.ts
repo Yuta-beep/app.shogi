@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { useModalState } from '@/hooks/common/use-modal-state';
 import { createLoadShopCatalogUseCase, createPurchaseShopItemUseCase } from '@/infra/di/usecase-factory';
-import { ShopItem } from '@/usecases/piece-shop/load-shop-catalog-usecase';
+import { ShopItem } from '@/domain/models/shop';
 
 export type PieceShopVM = {
   isLoading: boolean;

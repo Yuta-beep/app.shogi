@@ -3,9 +3,9 @@ import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
-import { AppLoadingScreen } from '@/components/module/app-loading-screen';
+import { AppLoadingScreen } from '@/components/organism/app-loading-screen';
 import { homeAssets } from '@/constants/home-assets';
-import { UiScreenShell } from '@/components/module/ui-screen-shell';
+import { UiScreenShell } from '@/components/organism/ui-screen-shell';
 import { useStageBattleScreen } from '@/features/stage-shogi/ui/use-stage-battle-screen';
 import { useAssetPreload } from '@/hooks/common/use-asset-preload';
 import { useAuthSession } from '@/hooks/common/use-auth-session';

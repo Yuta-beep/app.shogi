@@ -17,7 +17,7 @@ export type StageBattleSetup = {
   };
   board?: {
     size: number;
-    placements: Array<{
+    placements: {
       side: string;
       row: number;
       col: number;
@@ -30,7 +30,7 @@ export type StageBattleSetup = {
         imageKey: string | null;
         imageSignedUrl: string | null;
       };
-    }>;
+    }[];
   };
 };
 

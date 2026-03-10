@@ -7,6 +7,8 @@
  */
 
 import { renderHook, waitFor } from '@testing-library/react-native';
+import { useAuthSession } from '@/hooks/common/use-auth-session';
+import { setupUsername } from '@/usecases/player/setup-username-usecase';
 
 const mockGetSession: jest.Mock = jest.fn();
 const mockSignInAnonymously: jest.Mock = jest.fn();
@@ -26,9 +28,6 @@ jest.mock('@/lib/supabase/supabase-client', () => ({
     from: (table: string) => mockFrom(table),
   },
 }));
-
-import { useAuthSession } from '@/hooks/common/use-auth-session';
-import { setupUsername } from '@/usecases/player/setup-username-usecase';
 
 const NEW_USER_ID = 'new-user-uuid';
 const EXISTING_USER_ID = 'existing-user-uuid';

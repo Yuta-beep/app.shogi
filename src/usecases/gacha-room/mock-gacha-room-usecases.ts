@@ -13,7 +13,11 @@ type GachaConfig = {
   goldFailRate: number;
   pawnFailReward: number;
   goldFailReward: number;
-  pieces: Array<GachaPiece & { weight: number; isCurrency?: boolean; currencyType?: 'pawn' | 'gold' }>;
+  pieces: (GachaPiece & {
+    weight: number;
+    isCurrency?: boolean;
+    currencyType?: 'pawn' | 'gold';
+  })[];
 };
 
 const GACHA_CONFIGS: Record<string, GachaConfig> = {

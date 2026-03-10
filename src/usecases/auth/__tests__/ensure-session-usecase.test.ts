@@ -1,3 +1,5 @@
+import { ensureSession } from '../ensure-session-usecase';
+
 const mockGetSession = jest.fn();
 const mockSignInAnonymously = jest.fn();
 const mockGetDisplayName = jest.fn();
@@ -16,8 +18,6 @@ jest.mock('@/infra/datasources/player-supabase-datasource', () => ({
     getDisplayName: (...args: unknown[]) => mockGetDisplayName(...args),
   })),
 }));
-
-import { ensureSession } from '../ensure-session-usecase';
 
 describe('ensureSession', () => {
   const userId = 'user-uuid-abc';

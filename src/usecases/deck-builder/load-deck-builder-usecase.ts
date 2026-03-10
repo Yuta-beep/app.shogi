@@ -1,24 +1,6 @@
-export type OwnedPiece = {
-  pieceId?: number;
-  char: string;
-  name: string;
-  imageSignedUrl?: string | null;
-  desc: string;
-  skill: string;
-  move: string;
-};
+import type { DeckBuilderSnapshot } from '@/domain/models/deck-builder';
 
-export type SavedDeck = {
-  id: string;
-  name: string;
-  pieces: string[];
-  savedAt: string;
-};
-
-export type DeckBuilderSnapshot = {
-  ownedPieces: OwnedPiece[];
-  savedDecks: SavedDeck[];
-};
+export type { DeckBuilderSnapshot, OwnedPiece, SavedDeck } from '@/domain/models/deck-builder';
 
 export interface LoadDeckBuilderUseCase {
   execute(): Promise<DeckBuilderSnapshot>;

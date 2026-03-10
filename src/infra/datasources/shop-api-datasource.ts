@@ -1,6 +1,5 @@
+import type { PurchaseShopItemResult, ShopCatalogSnapshot, ShopItem } from '@/domain/models/shop';
 import { getJson, postJson } from '@/infra/http/api-client';
-import { ShopCatalogSnapshot, ShopItem } from '@/usecases/piece-shop/load-shop-catalog-usecase';
-import { PurchaseShopItemResult } from '@/usecases/piece-shop/purchase-shop-item-usecase';
 
 type ShopCatalogResponse = ShopCatalogSnapshot;
 

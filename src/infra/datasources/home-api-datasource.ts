@@ -1,5 +1,5 @@
+import type { HomeSnapshot } from '@/domain/models/home';
 import { getJson } from '@/infra/http/api-client';
-import { HomeSnapshot } from '@/usecases/home/load-home-snapshot-usecase';
 
 type HomeSnapshotResponse = HomeSnapshot;
 

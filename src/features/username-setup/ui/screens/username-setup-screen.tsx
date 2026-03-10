@@ -1,7 +1,7 @@
-import { View, Text, TextInput, Pressable } from 'react-native';
+import { Text, TextInput, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { AppLoadingScreen } from '@/components/module/app-loading-screen';
+import { AppLoadingScreen } from '@/components/organism/app-loading-screen';
 import { homeAssets } from '@/constants/home-assets';
 import { useUsernameSetupScreen } from '@/features/username-setup/ui/use-username-setup-screen';
 

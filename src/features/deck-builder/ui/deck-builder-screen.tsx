@@ -3,9 +3,9 @@ import { useState } from 'react';
 import { Modal, Pressable, Text, TextInput, View, ScrollView } from 'react-native';
 import Svg, { Line, Rect } from 'react-native-svg';
 
-import { AppLoadingScreen } from '@/components/module/app-loading-screen';
+import { AppLoadingScreen } from '@/components/organism/app-loading-screen';
 import { homeAssets } from '@/constants/home-assets';
-import { UiScreenShell } from '@/components/module/ui-screen-shell';
+import { UiScreenShell } from '@/components/organism/ui-screen-shell';
 import { useDeckBuilderScreen } from '@/features/deck-builder/ui/use-deck-builder-screen';
 import { useAssetPreload } from '@/hooks/common/use-asset-preload';
 import { useScreenBgm } from '@/hooks/common/use-screen-bgm';

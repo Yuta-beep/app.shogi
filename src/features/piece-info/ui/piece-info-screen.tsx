@@ -3,13 +3,13 @@ import { useRouter } from 'expo-router';
 import { ScrollView, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { AppLoadingScreen } from '@/components/module/app-loading-screen';
+import { AppLoadingScreen } from '@/components/organism/app-loading-screen';
 import { homeAssets } from '@/constants/home-assets';
 import { usePieceCatalogScreen } from '@/features/piece-info/ui/use-piece-catalog-screen';
 import { useAssetPreload } from '@/hooks/common/use-asset-preload';
 import { useScreenBgm } from '@/hooks/common/use-screen-bgm';
 import { playSe } from '@/lib/audio/audio-manager';
-import { MoveVector } from '@/usecases/piece-info/load-piece-catalog-usecase';
+import { MoveVector } from '@/domain/models/piece';
 
 const pieceTemplate = require('../../../../assets/piece-info/piece-template.png');
 const homeBack = require('../../../../assets/shared/home-back.png');

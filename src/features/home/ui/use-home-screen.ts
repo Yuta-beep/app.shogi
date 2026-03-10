@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { createLoadHomeSnapshotUseCase } from '@/infra/di/usecase-factory';
-import { HomeSnapshot } from '@/usecases/home/load-home-snapshot-usecase';
+import { HomeSnapshot } from '@/domain/models/home';
 
 export type HomeScreenVM = {
   snapshot: HomeSnapshot;

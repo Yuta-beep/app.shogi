@@ -2,9 +2,9 @@ import { Image } from 'expo-image';
 import { useLocalSearchParams } from 'expo-router';
 import { Pressable, Text, View } from 'react-native';
 
-import { AppLoadingScreen } from '@/components/module/app-loading-screen';
+import { AppLoadingScreen } from '@/components/organism/app-loading-screen';
 import { homeAssets } from '@/constants/home-assets';
-import { UiScreenShell } from '@/components/module/ui-screen-shell';
+import { UiScreenShell } from '@/components/organism/ui-screen-shell';
 import { useOnlineBattleScreen } from '@/features/online-battle/ui/use-online-battle-screen';
 import { useAssetPreload } from '@/hooks/common/use-asset-preload';
 import { useScreenBgm } from '@/hooks/common/use-screen-bgm';

@@ -1,4 +1,5 @@
-import { DeckBuilderSnapshot, LoadDeckBuilderUseCase } from '@/usecases/deck-builder/load-deck-builder-usecase';
+import type { DeckBuilderSnapshot } from '@/domain/models/deck-builder';
+import type { LoadDeckBuilderUseCase } from '@/usecases/deck-builder/load-deck-builder-usecase';
 
 export class MockLoadDeckBuilderUseCase implements LoadDeckBuilderUseCase {
   async execute(): Promise<DeckBuilderSnapshot> {

@@ -3,7 +3,7 @@ import { useRouter } from 'expo-router';
 import { Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { AppLoadingScreen } from '@/components/module/app-loading-screen';
+import { AppLoadingScreen } from '@/components/organism/app-loading-screen';
 import { homeAssets } from '@/constants/home-assets';
 import { useMatchingScreen } from '@/features/matching/ui/use-matching-screen';
 import { useAssetPreload } from '@/hooks/common/use-asset-preload';

@@ -2,7 +2,7 @@ import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { Pressable, Text, View } from 'react-native';
 
-import { UiScreenShell } from '@/components/module/ui-screen-shell';
+import { UiScreenShell } from '@/components/organism/ui-screen-shell';
 import { useScreenBgm } from '@/hooks/common/use-screen-bgm';
 import { playSe } from '@/lib/audio/audio-manager';
 

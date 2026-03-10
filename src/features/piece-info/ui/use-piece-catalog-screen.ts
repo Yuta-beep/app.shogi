@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { createLoadPieceCatalogUseCase } from '@/infra/di/usecase-factory';
-import { PieceCatalogItem } from '@/usecases/piece-info/load-piece-catalog-usecase';
+import { PieceCatalogItem } from '@/domain/models/piece';
 
 export function usePieceCatalogScreen() {
   const [items, setItems] = useState<PieceCatalogItem[]>([]);

@@ -4,7 +4,7 @@ import { ImageBackground, Pressable, ScrollView, Text, View } from 'react-native
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 
-import { AppLoadingScreen } from '@/components/module/app-loading-screen';
+import { AppLoadingScreen } from '@/components/organism/app-loading-screen';
 import { homeAssets } from '@/constants/home-assets';
 import { stageSelectBackgrounds } from '@/constants/stage-select-data';
 import { useAssetPreload } from '@/hooks/common/use-asset-preload';

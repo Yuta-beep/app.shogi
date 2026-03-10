@@ -1,5 +1,4 @@
-import { ShopCatalogSnapshot, ShopItem } from '@/usecases/piece-shop/load-shop-catalog-usecase';
-import { PurchaseShopItemResult } from '@/usecases/piece-shop/purchase-shop-item-usecase';
+import type { PurchaseShopItemResult, ShopCatalogSnapshot, ShopItem } from '@/domain/models/shop';
 
 export interface ShopRepository {
   loadPieceShopCatalog(): Promise<ShopCatalogSnapshot>;

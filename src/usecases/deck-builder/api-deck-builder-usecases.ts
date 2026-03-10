@@ -1,5 +1,6 @@
 import { DeckBuilderApiDataSource } from '@/infra/datasources/deck-builder-datasource';
-import { DeckBuilderSnapshot, LoadDeckBuilderUseCase } from '@/usecases/deck-builder/load-deck-builder-usecase';
+import type { DeckBuilderSnapshot } from '@/domain/models/deck-builder';
+import type { LoadDeckBuilderUseCase } from '@/usecases/deck-builder/load-deck-builder-usecase';
 
 export class ApiLoadDeckBuilderUseCase implements LoadDeckBuilderUseCase {
   private readonly dataSource: DeckBuilderApiDataSource;

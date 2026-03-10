@@ -1,4 +1,4 @@
-import { HomeSnapshot } from '@/usecases/home/load-home-snapshot-usecase';
+import type { HomeSnapshot } from '@/domain/models/home';
 
 export interface HomeRepository {
   loadSnapshot(): Promise<HomeSnapshot>;

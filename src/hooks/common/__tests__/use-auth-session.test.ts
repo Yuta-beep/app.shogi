@@ -1,12 +1,11 @@
 import { renderHook, waitFor } from '@testing-library/react-native';
+import { useAuthSession } from '../use-auth-session';
 
 const mockEnsureSession = jest.fn();
 
 jest.mock('@/usecases/auth/ensure-session-usecase', () => ({
   ensureSession: (...args: unknown[]) => mockEnsureSession(...args),
 }));
-
-import { useAuthSession } from '../use-auth-session';
 
 describe('useAuthSession', () => {
   it('初期状態は isReady: false', () => {

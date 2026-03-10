@@ -3,7 +3,7 @@ export type StageBattleSnapshot = {
   turnLabel: string;
   handLabel: string;
   boardSize: number;
-  placements: Array<{
+  placements: {
     side: string;
     row: number;
     col: number;
@@ -13,7 +13,7 @@ export type StageBattleSnapshot = {
     imageBucket: string | null;
     imageKey: string | null;
     imageSignedUrl: string | null;
-  }>;
+  }[];
 };
 
 export interface PrepareStageBattleUseCase {

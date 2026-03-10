@@ -2,7 +2,7 @@ import { useRouter } from 'expo-router';
 import { ImageBackground, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { AppLoadingScreen } from '@/components/module/app-loading-screen';
+import { AppLoadingScreen } from '@/components/organism/app-loading-screen';
 import { homeAssets } from '@/constants/home-assets';
 import { HomeActionGridSection } from '@/features/home/ui/sections/home-action-grid-section';
 import { HomeBackgroundSection } from '@/features/home/ui/sections/home-background-section';

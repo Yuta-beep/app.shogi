@@ -1,6 +1,7 @@
+import type { StageNodeData } from '@/domain/models/stage-select';
 import { useEffect, useMemo, useState } from 'react';
 
-import { StageNodeData, stageRanges } from '@/constants/stage-select-data';
+import { stageRanges } from '@/constants/stage-select-data';
 import { createLoadStageSelectUseCase, createSelectStageUseCase } from '@/infra/di/usecase-factory';
 
 export type StageSelectScreenVM = {

@@ -1,11 +1,11 @@
 import { getJson, postJson } from '@/infra/http/api-client';
 
 type StageListResponse = {
-  stages: Array<{
+  stages: {
     stageNo: number;
     stageName: string;
     canStart: boolean;
-  }>;
+  }[];
 };
 
 type StageSelectResponse = {
@@ -21,7 +21,7 @@ type StageBattleSetupResponse = {
   };
   board?: {
     size: number;
-    placements: Array<{
+    placements: {
       side: string;
       row: number;
       col: number;
@@ -34,7 +34,7 @@ type StageBattleSetupResponse = {
         imageKey: string | null;
         imageSignedUrl: string | null;
       };
-    }>;
+    }[];
   };
 };
 

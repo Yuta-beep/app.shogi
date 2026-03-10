@@ -52,8 +52,8 @@ function newPlayer(): MockPlayer {
   return player;
 }
 
-function loadManager() {
-  return require('@/lib/audio/audio-manager') as typeof import('@/lib/audio/audio-manager');
+async function loadManager() {
+  return import('@/lib/audio/audio-manager');
 }
 
 describe('audio-manager', () => {
@@ -64,7 +64,7 @@ describe('audio-manager', () => {
   });
 
   it('plays BGM by creating a looping player', async () => {
-    const manager = loadManager();
+    const manager = await loadManager();
 
     await manager.playBgm('title', 0.4);
 
@@ -77,7 +77,7 @@ describe('audio-manager', () => {
   });
 
   it('reuses the same player when the same BGM track is requested again', async () => {
-    const manager = loadManager();
+    const manager = await loadManager();
 
     await manager.playBgm('home', 0.3);
     await manager.playBgm('home', 0.6);
@@ -89,7 +89,7 @@ describe('audio-manager', () => {
   });
 
   it('plays SE from the beginning', async () => {
-    const manager = loadManager();
+    const manager = await loadManager();
 
     await manager.playSe('tap', 0.8);
 
