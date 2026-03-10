@@ -52,7 +52,14 @@ bun run format
 
 ## Environment Variables
 - `EXPO_PUBLIC_API_BASE_URL`
-  - BFF のベースURL（例: `http://localhost:3000`）
+  - BFF のベースURL（実機検証時は `http://<実機のIP>:3000` を使う）
+  - 例: `http://192.168.1.25:3000`
+  - 実機と開発PCを同じWi-Fi/LANに接続すること
+  - 実機IPの確認コマンド:
+    - macOS: `ipconfig getifaddr en0`
+      - 値が取れない場合: `ifconfig | grep \"inet \"`
+    - Windows: `ipconfig`
+      - `IPv4 Address`（または `IPv4 アドレス`）の値を使う
 - `EXPO_PUBLIC_DATA_SOURCE`
   - `mock` または `api`
   - `api` のとき `UseCase -> Repository -> DataSource(API)` で BFF 接続
