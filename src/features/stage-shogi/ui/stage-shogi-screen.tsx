@@ -721,15 +721,11 @@ export function StageShogiScreen() {
 
   useEffect(() => {
     if (remoteImageUrls.length === 0) {
-      if (Object.keys(failedImageKeys).length > 0) {
-        setFailedImageKeys({});
-      }
+      setFailedImageKeys((prev) => (Object.keys(prev).length > 0 ? {} : prev));
       return;
     }
 
-    if (Object.keys(failedImageKeys).length > 0) {
-      setFailedImageKeys({});
-    }
+    setFailedImageKeys((prev) => (Object.keys(prev).length > 0 ? {} : prev));
 
     Image.prefetch(remoteImageUrls)
       .catch(() => undefined)
