@@ -13,6 +13,13 @@ import { MoveVector } from '@/domain/models/piece';
 
 const pieceTemplate = require('../../../../assets/piece-info/piece-template.png');
 const homeBack = require('../../../../assets/shared/home-back.png');
+const pieceImages: Record<string, number> = {
+  香: require('../../../../assets/piece-info/pieces/香.png'),
+  桂: require('../../../../assets/piece-info/pieces/桂.png'),
+  銀: require('../../../../assets/piece-info/pieces/銀.png'),
+  忍: require('../../../../assets/piece-info/pieces/忍.png'),
+  竜: require('../../../../assets/piece-info/pieces/竜.png'),
+};
 
 // 5x5グリッド（中心 [2][2] = 駒位置）
 const GRID_SIZE = 5;
@@ -67,7 +74,14 @@ function MovementGrid({ vectors, isRepeatable }: { vectors: MoveVector[]; isRepe
 export function PieceInfoScreen() {
   const router = useRouter();
   const { piece, index, total, previous, next, isLoading } = usePieceCatalogScreen();
-  const { isReady: areAssetsReady } = useAssetPreload([pieceTemplate, homeBack]);
+  const currentPieceImage = piece.imageSignedUrl
+    ? { uri: piece.imageSignedUrl }
+    : (pieceImages[piece.char] ?? null);
+  const { isReady: areAssetsReady } = useAssetPreload([
+    pieceTemplate,
+    homeBack,
+    ...Object.values(pieceImages),
+  ]);
   useScreenBgm('catalog');
 
   if (isLoading || !areAssetsReady) {
@@ -91,21 +105,35 @@ export function PieceInfoScreen() {
               void playSe('tap');
               router.replace('/home');
             }}
-            className="active:scale-95"
+            className="h-[35px] w-[112px] overflow-hidden active:scale-95"
           >
-            <Image source={homeBack} contentFit="contain" style={{ width: 140, height: 44 }} />
+            <Image
+              source={homeBack}
+              contentFit="contain"
+              style={{ width: '100%', height: '100%' }}
+            />
           </Pressable>
           <Text className="text-lg font-black text-[#2f1b14]">駒情報</Text>
         </View>
 
         <ScrollView className="flex-1 mt-4" showsVerticalScrollIndicator={false}>
           <View className="items-center">
-            <Text className="text-6xl font-black text-[#2f1b14]">{piece.char}</Text>
+            {currentPieceImage ? (
+              <Image
+                source={currentPieceImage}
+                contentFit="contain"
+                style={{ width: 220, height: 220 }}
+              />
+            ) : (
+              <Text className="text-6xl font-black text-[#2f1b14]">{piece.char}</Text>
+            )}
             <Text className="mt-2 text-base font-black text-[#2f1b14]">{piece.name}</Text>
             <Text className="text-xs font-bold text-[#6b4532]">{`解放: ${piece.unlock}`}</Text>
           </View>
 
-          <View className="mt-4 rounded-xl border border-[#8b0000]/50 bg-white/90 p-4">
+          <View className="h-20" />
+
+          <View className="rounded-xl border border-[#8b0000]/50 bg-white/90 p-4">
             <Text className="text-sm font-black text-[#7f1d1d]">【スキル】</Text>
             <Text className="mt-1 text-base leading-6 text-[#1f2937]">{piece.skill}</Text>
 

@@ -5,8 +5,11 @@ export type MoveVector = {
 };
 
 export type PieceCatalogItem = {
+  pieceId?: number;
   char: string;
   name: string;
+  imageSignedUrl?: string | null;
+  quantity?: number;
   unlock: string;
   desc: string;
   skill: string;

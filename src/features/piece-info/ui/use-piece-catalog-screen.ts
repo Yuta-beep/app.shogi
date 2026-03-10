@@ -1,9 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import { createLoadPieceCatalogUseCase } from '@/infra/di/usecase-factory';
+import {
+  createLoadDeckBuilderUseCase,
+  createLoadPieceCatalogUseCase,
+} from '@/infra/di/usecase-factory';
+import { supabase } from '@/lib/supabase/supabase-client';
 import { PieceCatalogItem } from '@/domain/models/piece';
 
 export function usePieceCatalogScreen() {
+  const isApiMode = process.env.EXPO_PUBLIC_DATA_SOURCE === 'api';
   const [items, setItems] = useState<PieceCatalogItem[]>([]);
   const [index, setIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -12,11 +17,66 @@ export function usePieceCatalogScreen() {
   useEffect(() => {
     let active = true;
     setIsLoading(true);
-    loadUseCase
-      .execute()
-      .then((next) => {
+
+    async function load() {
+      const catalog = await loadUseCase.execute();
+
+      if (!isApiMode) {
         if (active) {
-          setItems(next);
+          setItems(catalog);
+        }
+        return;
+      }
+
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) {
+        if (active) {
+          setItems([]);
+        }
+        return;
+      }
+
+      const deckSnapshot = await createLoadDeckBuilderUseCase(token).execute();
+
+      const ownedByChar = new Map<
+        string,
+        { pieceId?: number; imageSignedUrl?: string | null; quantity?: number }
+      >();
+
+      for (const ownedPiece of deckSnapshot.ownedPieces) {
+        if (!ownedByChar.has(ownedPiece.char)) {
+          ownedByChar.set(ownedPiece.char, {
+            pieceId: ownedPiece.pieceId,
+            imageSignedUrl: ownedPiece.imageSignedUrl,
+            quantity: ownedPiece.quantity,
+          });
+        }
+      }
+
+      const ownedCatalog = catalog
+        .filter((piece) => ownedByChar.has(piece.char))
+        .map((piece) => {
+          const owned = ownedByChar.get(piece.char);
+          return {
+            ...piece,
+            pieceId: owned?.pieceId,
+            imageSignedUrl: owned?.imageSignedUrl ?? null,
+            quantity: owned?.quantity,
+          };
+        });
+
+      if (active) {
+        setItems(ownedCatalog);
+      }
+    }
+
+    load()
+      .catch(() => {
+        if (active) {
+          setItems([]);
         }
       })
       .finally(() => {
@@ -24,18 +84,22 @@ export function usePieceCatalogScreen() {
           setIsLoading(false);
         }
       });
+
     return () => {
       active = false;
     };
-  }, [loadUseCase]);
+  }, [isApiMode, loadUseCase]);
 
   const piece = items[index] ?? {
     char: '駒',
-    name: 'ロード中',
-    unlock: '-',
+    name: '所持駒なし',
+    unlock: '未所持',
     desc: '-',
     skill: '-',
     move: '-',
+    moveVectors: [],
+    isRepeatable: false,
+    imageSignedUrl: null,
   };
 
   function previous() {
