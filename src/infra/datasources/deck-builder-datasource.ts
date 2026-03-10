@@ -5,7 +5,7 @@ import type {
   SaveDeckResponse,
   SavedDeck,
 } from '@/domain/models/deck-builder';
-import { getJson, postJson, deleteJson } from '@/infra/http/api-client';
+import { deleteJson, getJson, putJson } from '@/infra/http/api-client';
 
 type ApiOwnedPiece = {
   pieceId: number;
@@ -22,6 +22,7 @@ type ApiDeckPlacement = {
   pieceId: number;
   char: string;
   name: string;
+  imageSignedUrl: string | null;
 };
 
 type ApiDeck = {
@@ -50,13 +51,19 @@ function mapOwnedPiece(piece: ApiOwnedPiece): OwnedPiece {
 }
 
 function mapSavedDeck(deck: ApiDeck): SavedDeck {
+  const placements = deck.placements.slice().sort((a, b) => a.rowNo - b.rowNo || a.colNo - b.colNo);
   return {
     id: String(deck.deckId),
     name: deck.name,
-    pieces: deck.placements
-      .slice()
-      .sort((a, b) => a.rowNo - b.rowNo || a.colNo - b.colNo)
-      .map((placement) => placement.char),
+    pieces: placements.map((placement) => placement.char),
+    placements: placements.map((placement) => ({
+      rowNo: placement.rowNo,
+      colNo: placement.colNo,
+      pieceId: placement.pieceId,
+      char: placement.char,
+      name: placement.name,
+      imageSignedUrl: placement.imageSignedUrl,
+    })),
     savedAt: deck.updatedAt,
   };
 }
@@ -73,7 +80,7 @@ export class DeckBuilderApiDataSource {
   }
 
   async saveDeck(payload: SaveDeckPayload): Promise<SaveDeckResponse> {
-    return postJson<SaveDeckResponse>('/api/v1/deck', payload, { token: this.token });
+    return putJson<SaveDeckResponse>('/api/v1/deck', payload, { token: this.token });
   }
 
   async deleteDeck(deckId: number): Promise<void> {

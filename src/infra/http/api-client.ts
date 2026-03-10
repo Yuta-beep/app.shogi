@@ -91,6 +91,22 @@ export async function postJson<T>(path: string, body?: unknown, opts?: RequestOp
   return parseEnvelope<T>(response);
 }
 
+export async function putJson<T>(path: string, body?: unknown, opts?: RequestOptions): Promise<T> {
+  const url = `${baseUrl()}${path}`;
+  console.log('[api-client] PUT', url);
+  const response = await fetch(url, {
+    method: 'PUT',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      ...authHeaders(opts?.token),
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+
+  return parseEnvelope<T>(response);
+}
+
 export async function deleteJson<T>(path: string, opts?: RequestOptions): Promise<T> {
   const url = `${baseUrl()}${path}`;
   console.log('[api-client] DELETE', url);

@@ -14,6 +14,64 @@ type BoardPlacement = {
   piece: OwnedPiece;
 };
 
+const BOARD_ROWS = 9;
+const DECK_ROWS = 3;
+const DECK_ROW_OFFSET = BOARD_ROWS - DECK_ROWS;
+
+function toUiRow(rowNo: number): number {
+  if (rowNo >= 0 && rowNo < DECK_ROWS) {
+    return rowNo + DECK_ROW_OFFSET;
+  }
+  return rowNo;
+}
+
+function toApiRow(row: number): number {
+  if (row >= DECK_ROW_OFFSET && row < BOARD_ROWS) {
+    return row - DECK_ROW_OFFSET;
+  }
+  return row;
+}
+
+function toOwnedPieceFromPlacement(
+  placement: NonNullable<SavedDeck['placements']>[number],
+): OwnedPiece {
+  return {
+    pieceId: placement.pieceId,
+    char: placement.char,
+    name: placement.name,
+    imageSignedUrl: placement.imageSignedUrl ?? null,
+    desc: `${placement.name}の詳細は準備中です。`,
+    skill: '準備中',
+    move: '準備中',
+  };
+}
+
+function initialBoardPlacementsFromDecks(
+  decks: SavedDeck[],
+  ownedPieces: OwnedPiece[],
+): BoardPlacement[] {
+  const targetDeck =
+    decks.find((deck) => deck.name === 'マイデッキ' && (deck.placements?.length ?? 0) > 0) ??
+    decks.find((deck) => (deck.placements?.length ?? 0) > 0);
+
+  if (!targetDeck?.placements || targetDeck.placements.length === 0) {
+    return [];
+  }
+
+  const ownedByPieceId = new Map<number, OwnedPiece>();
+  for (const piece of ownedPieces) {
+    if (typeof piece.pieceId === 'number') {
+      ownedByPieceId.set(piece.pieceId, piece);
+    }
+  }
+
+  return targetDeck.placements.map((placement) => ({
+    row: toUiRow(placement.rowNo),
+    col: placement.colNo,
+    piece: ownedByPieceId.get(placement.pieceId) ?? toOwnedPieceFromPlacement(placement),
+  }));
+}
+
 export function useDeckBuilderScreen() {
   const isApiMode = process.env.EXPO_PUBLIC_DATA_SOURCE === 'api';
   const [ownedPieces, setOwnedPieces] = useState<OwnedPiece[]>([]);
@@ -71,6 +129,9 @@ export function useDeckBuilderScreen() {
         if (active) {
           setOwnedPieces(snapshot.ownedPieces);
           setSavedDecks(snapshot.savedDecks);
+          setBoardPlacements(
+            initialBoardPlacementsFromDecks(snapshot.savedDecks, snapshot.ownedPieces),
+          );
         }
       })
       .finally(() => {
@@ -87,10 +148,11 @@ export function useDeckBuilderScreen() {
     const apiPlacements = boardPlacements
       .filter((placement) => typeof placement.piece.pieceId === 'number')
       .map((placement) => ({
-        rowNo: placement.row,
+        rowNo: toApiRow(placement.row),
         colNo: placement.col,
         pieceId: placement.piece.pieceId as number,
-      }));
+      }))
+      .filter((placement) => placement.rowNo >= 0 && placement.rowNo < DECK_ROWS);
 
     const newDeck: SavedDeck = {
       id: `deck-${Date.now()}`,

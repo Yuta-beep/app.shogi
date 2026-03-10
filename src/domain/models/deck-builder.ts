@@ -12,6 +12,14 @@ export type SavedDeck = {
   id: string;
   name: string;
   pieces: string[];
+  placements?: {
+    rowNo: number;
+    colNo: number;
+    pieceId: number;
+    char: string;
+    name: string;
+    imageSignedUrl?: string | null;
+  }[];
   savedAt: string;
 };
 
