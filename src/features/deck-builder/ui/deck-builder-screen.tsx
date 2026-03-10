@@ -155,6 +155,13 @@ export function DeckBuilderScreen() {
             )}
           </View>
         </View>
+        <Text
+          className={`mt-2 text-right text-xs font-black ${
+            vm.isDeckFull ? 'text-[#b91c1c]' : 'text-[#6b4532]'
+          }`}
+        >
+          {`デッキ枚数 ${vm.deckPieceCount} / ${vm.maxDeckPieces}`}
+        </Text>
       </View>
 
       {/* 所持駒パレット */}

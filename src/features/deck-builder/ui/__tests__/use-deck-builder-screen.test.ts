@@ -180,4 +180,79 @@ describe('useDeckBuilderScreen', () => {
     expect(result.current.boardPlacements).toHaveLength(2);
     expect(result.current.getRemainingCount(pawn)).toBe(0);
   });
+
+  it('デッキ配置は20枚を超えて配置できない', async () => {
+    const piece = {
+      pieceId: 401,
+      char: '竜',
+      name: '竜王',
+      imageSignedUrl: null,
+      quantity: 30,
+      desc: '',
+      skill: '',
+      move: '',
+    };
+
+    mockLoadExecute.mockResolvedValue({
+      ownedPieces: [piece],
+      savedDecks: [],
+    });
+
+    const { result } = renderHook(() => useDeckBuilderScreen());
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    act(() => {
+      result.current.selectPieceForPlacement(piece);
+    });
+    act(() => {
+      for (let i = 0; i < 21; i++) {
+        const row = 6 + Math.floor(i / 9);
+        const col = i % 9;
+        result.current.placeSelectedPieceAt(row, col);
+      }
+    });
+
+    expect(result.current.deckPieceCount).toBe(20);
+    expect(result.current.boardPlacements).toHaveLength(20);
+    expect(result.current.isDeckFull).toBe(true);
+    expect(
+      result.current.boardPlacements.some(
+        (placement) => placement.row === 8 && placement.col === 2,
+      ),
+    ).toBe(false);
+  });
+
+  it('読み込み時に20枚を超えるデッキ配置は20枚に制限される', async () => {
+    const placements = Array.from({ length: 21 }, (_, i) => ({
+      rowNo: Math.floor(i / 9),
+      colNo: i % 9,
+      pieceId: 501,
+      char: '歩',
+      name: '歩兵',
+    }));
+
+    mockLoadExecute.mockResolvedValue({
+      ownedPieces: [{ pieceId: 501, char: '歩', name: '歩兵', imageSignedUrl: null }],
+      savedDecks: [
+        {
+          id: 'my',
+          name: 'マイデッキ',
+          pieces: Array.from({ length: 21 }, () => '歩'),
+          placements,
+          savedAt: '2026-03-10 22:01',
+        },
+      ],
+    });
+
+    const { result } = renderHook(() => useDeckBuilderScreen());
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.deckPieceCount).toBe(20);
+    expect(result.current.boardPlacements).toHaveLength(20);
+    expect(
+      result.current.boardPlacements.some(
+        (placement) => placement.row === 8 && placement.col === 2,
+      ),
+    ).toBe(false);
+  });
 });

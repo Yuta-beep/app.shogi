@@ -17,6 +17,7 @@ type BoardPlacement = {
 const BOARD_ROWS = 9;
 const DECK_ROWS = 3;
 const DECK_ROW_OFFSET = BOARD_ROWS - DECK_ROWS;
+const MAX_DECK_PIECES = 20;
 
 function toUiRow(rowNo: number): number {
   if (rowNo >= 0 && rowNo < DECK_ROWS) {
@@ -65,15 +66,26 @@ function initialBoardPlacementsFromDecks(
     }
   }
 
-  return targetDeck.placements.map((placement) => ({
-    row: toUiRow(placement.rowNo),
-    col: placement.colNo,
-    piece: ownedByPieceId.get(placement.pieceId) ?? toOwnedPieceFromPlacement(placement),
-  }));
+  return targetDeck.placements
+    .map((placement) => ({
+      row: toUiRow(placement.rowNo),
+      col: placement.colNo,
+      piece: ownedByPieceId.get(placement.pieceId) ?? toOwnedPieceFromPlacement(placement),
+    }))
+    .filter((placement) => isDeckAreaRow(placement.row))
+    .slice(0, MAX_DECK_PIECES);
 }
 
 function pieceStock(piece: OwnedPiece): number {
   return piece.quantity ?? 1;
+}
+
+function isDeckAreaRow(row: number): boolean {
+  return row >= DECK_ROW_OFFSET && row < BOARD_ROWS;
+}
+
+function countDeckPlacements(placements: BoardPlacement[]): number {
+  return placements.filter((placement) => isDeckAreaRow(placement.row)).length;
 }
 
 export function useDeckBuilderScreen() {
@@ -158,6 +170,10 @@ export function useDeckBuilderScreen() {
       }))
       .filter((placement) => placement.rowNo >= 0 && placement.rowNo < DECK_ROWS);
 
+    if (apiPlacements.length > MAX_DECK_PIECES) {
+      return;
+    }
+
     const newDeck: SavedDeck = {
       id: `deck-${Date.now()}`,
       name: deckName.trim(),
@@ -200,6 +216,9 @@ export function useDeckBuilderScreen() {
     return Math.max(pieceStock(piece) - getPlacedCount(piece), 0);
   }
 
+  const deckPieceCount = countDeckPlacements(boardPlacements);
+  const isDeckFull = deckPieceCount >= MAX_DECK_PIECES;
+
   return {
     ownedPieces,
     selectedPieceForPlacement,
@@ -231,7 +250,11 @@ export function useDeckBuilderScreen() {
         const withoutCell = prev.filter(
           (placement) => !(placement.row === row && placement.col === col),
         );
-        return [...withoutCell, { row, col, piece: selectedPieceForPlacement }];
+        const nextPlacements = [...withoutCell, { row, col, piece: selectedPieceForPlacement }];
+        if (countDeckPlacements(nextPlacements) > MAX_DECK_PIECES) {
+          return prev;
+        }
+        return nextPlacements;
       });
     },
     openPieceDetail: (piece: OwnedPiece) => setSelectedPiece(piece),
@@ -245,6 +268,9 @@ export function useDeckBuilderScreen() {
     deckName,
     setDeckName,
     saveDeck,
+    deckPieceCount,
+    maxDeckPieces: MAX_DECK_PIECES,
+    isDeckFull,
     loadModalOpen,
     openLoadModal: () => setLoadModalOpen(true),
     closeLoadModal: () => setLoadModalOpen(false),
