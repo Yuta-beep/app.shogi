@@ -1,9 +1,13 @@
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import type { ReactNode } from 'react';
+import { Text, View } from 'react-native';
 
 import { StageShogiScreen } from '@/features/stage-shogi/ui/stage-shogi-screen';
 
 const mockPostJson = jest.fn();
 const mockExecutePieceCatalog = jest.fn();
+const MockView = View;
+const MockText = Text;
 const stageBattleSnapshot = {
   stageLabel: 'STAGE 1',
   turnLabel: 'TURN 1',
@@ -51,9 +55,7 @@ jest.mock('expo-router', () => ({
 }));
 
 jest.mock('expo-image', () => {
-  const React = require('react');
-  const { View } = require('react-native');
-  const Image = (props: Record<string, unknown>) => <View {...props} />;
+  const Image = (props: Record<string, unknown>) => <MockView {...props} />;
   Image.prefetch = jest.fn(() => Promise.resolve(true));
   return { Image };
 });
@@ -88,18 +90,14 @@ jest.mock('@/hooks/common/use-screen-bgm', () => ({
 }));
 
 jest.mock('@/components/organism/ui-screen-shell', () => {
-  const React = require('react');
-  const { View } = require('react-native');
   return {
-    UiScreenShell: ({ children }: { children: React.ReactNode }) => <View>{children}</View>,
+    UiScreenShell: ({ children }: { children: ReactNode }) => <MockView>{children}</MockView>,
   };
 });
 
 jest.mock('@/components/organism/app-loading-screen', () => {
-  const React = require('react');
-  const { Text } = require('react-native');
   return {
-    AppLoadingScreen: () => <Text>loading</Text>,
+    AppLoadingScreen: () => <MockText>loading</MockText>,
   };
 });
 

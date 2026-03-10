@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { useLocalSearchParams } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 import { AppLoadingScreen } from '@/components/organism/app-loading-screen';
@@ -272,7 +272,14 @@ export function StageShogiScreen() {
   const [pieceCatalog, setPieceCatalog] = useState<PieceCatalogItem[]>([]);
   const [winner, setWinner] = useState<Side | null>(null);
   const loadPieceCatalogUseCase = useMemo(() => createLoadPieceCatalogUseCase(), []);
+  const isMountedRef = useRef(true);
   useScreenBgm('battle');
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   const pieceDefsByChar = useMemo(
     () =>
@@ -335,7 +342,6 @@ export function StageShogiScreen() {
     if (isLoading || isCreatingGame || gameId || !userId) return;
     if (snapshot.placements.length > 0 && pieces.length === 0) return;
 
-    let active = true;
     setIsCreatingGame(true);
 
     const stageNo = Number(params.stage);
@@ -352,25 +358,31 @@ export function StageShogiScreen() {
       },
     })
       .then((res) => {
-        if (active) {
+        if (isMountedRef.current) {
           setGameId(res.gameId);
         }
       })
       .catch((error: unknown) => {
-        if (active) {
+        if (isMountedRef.current) {
           setAiError(error instanceof Error ? error.message : String(error));
         }
       })
       .finally(() => {
-        if (active) {
+        if (isMountedRef.current) {
           setIsCreatingGame(false);
         }
       });
-
-    return () => {
-      active = false;
-    };
-  }, [gameId, isLoading, moveNo, params.stage, pieces, sideToMove, snapshot, userId]);
+  }, [
+    gameId,
+    isCreatingGame,
+    isLoading,
+    moveNo,
+    params.stage,
+    pieces,
+    sideToMove,
+    snapshot,
+    userId,
+  ]);
 
   const remoteImageUrls = useMemo(
     () =>
