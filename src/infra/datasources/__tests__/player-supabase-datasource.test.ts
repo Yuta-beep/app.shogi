@@ -1,11 +1,12 @@
 import { PlayerSupabaseDataSource } from '../player-supabase-datasource';
 
+const mockMaybeSingle: jest.Mock = jest.fn();
 const mockSingle: jest.Mock = jest.fn();
-const mockUpdateEq: jest.Mock = jest.fn();
-const mockSelectEq: jest.Mock = jest.fn(() => ({ single: mockSingle }));
-const mockUpdate: jest.Mock = jest.fn(() => ({ eq: mockUpdateEq }));
+const mockUpsertSelect: jest.Mock = jest.fn(() => ({ single: mockSingle }));
+const mockUpsert: jest.Mock = jest.fn(() => ({ select: mockUpsertSelect }));
+const mockSelectEq: jest.Mock = jest.fn(() => ({ maybeSingle: mockMaybeSingle }));
 const mockSelect: jest.Mock = jest.fn(() => ({ eq: mockSelectEq }));
-const mockFrom: jest.Mock = jest.fn(() => ({ select: mockSelect, update: mockUpdate }));
+const mockFrom: jest.Mock = jest.fn(() => ({ select: mockSelect, upsert: mockUpsert }));
 
 jest.mock('@/lib/supabase/supabase-client', () => ({
   supabase: { from: (table: string) => mockFrom(table) },
@@ -17,7 +18,7 @@ describe('PlayerSupabaseDataSource', () => {
 
   describe('getDisplayName', () => {
     it('display_nameがある場合はその値を返す', async () => {
-      mockSingle.mockResolvedValueOnce({ data: { display_name: 'テストユーザー' }, error: null });
+      mockMaybeSingle.mockResolvedValueOnce({ data: { display_name: 'テストユーザー' }, error: null });
 
       const result = await ds.getDisplayName(userId);
 
@@ -28,7 +29,7 @@ describe('PlayerSupabaseDataSource', () => {
     });
 
     it('display_nameがnullの場合はnullを返す', async () => {
-      mockSingle.mockResolvedValueOnce({ data: { display_name: null }, error: null });
+      mockMaybeSingle.mockResolvedValueOnce({ data: { display_name: null }, error: null });
 
       const result = await ds.getDisplayName(userId);
 
@@ -37,28 +38,31 @@ describe('PlayerSupabaseDataSource', () => {
 
     it('Supabaseエラーが発生した場合はthrowする', async () => {
       const supabaseError = { message: 'not found', code: 'PGRST116' };
-      mockSingle.mockResolvedValueOnce({ data: null, error: supabaseError });
+      mockMaybeSingle.mockResolvedValueOnce({ data: null, error: supabaseError });
 
-      await expect(ds.getDisplayName(userId)).rejects.toEqual(supabaseError);
+      await expect(ds.getDisplayName(userId)).rejects.toThrow('not found');
     });
   });
 
   describe('updateDisplayName', () => {
     it('display_nameをupdateする', async () => {
-      mockUpdateEq.mockResolvedValueOnce({ error: null });
+      mockSingle.mockResolvedValueOnce({ error: null });
 
       await ds.updateDisplayName(userId, '新しい名前');
 
       expect(mockFrom).toHaveBeenCalledWith('players');
-      expect(mockUpdate).toHaveBeenCalledWith({ display_name: '新しい名前' });
-      expect(mockUpdateEq).toHaveBeenCalledWith('id', userId);
+      expect(mockUpsert).toHaveBeenCalledWith(
+        { id: userId, display_name: '新しい名前' },
+        { onConflict: 'id' }
+      );
+      expect(mockUpsertSelect).toHaveBeenCalledWith('id');
     });
 
     it('Supabaseエラーが発生した場合はthrowする', async () => {
       const supabaseError = { message: 'update failed', code: '42501' };
-      mockUpdateEq.mockResolvedValueOnce({ error: supabaseError });
+      mockSingle.mockResolvedValueOnce({ error: supabaseError });
 
-      await expect(ds.updateDisplayName(userId, '名前')).rejects.toEqual(supabaseError);
+      await expect(ds.updateDisplayName(userId, '名前')).rejects.toThrow('update failed');
     });
   });
 });

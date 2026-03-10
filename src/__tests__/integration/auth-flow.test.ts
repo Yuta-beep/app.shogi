@@ -12,12 +12,13 @@ import { setupUsername } from '@/usecases/player/setup-username-usecase';
 
 const mockGetSession: jest.Mock = jest.fn();
 const mockSignInAnonymously: jest.Mock = jest.fn();
+const mockMaybeSingle: jest.Mock = jest.fn();
 const mockSingle: jest.Mock = jest.fn();
-const mockEq: jest.Mock = jest.fn(() => ({ single: mockSingle }));
+const mockEq: jest.Mock = jest.fn(() => ({ maybeSingle: mockMaybeSingle }));
 const mockSelect: jest.Mock = jest.fn(() => ({ eq: mockEq }));
-const mockUpdateEq: jest.Mock = jest.fn();
-const mockUpdate: jest.Mock = jest.fn(() => ({ eq: mockUpdateEq }));
-const mockFrom: jest.Mock = jest.fn(() => ({ select: mockSelect, update: mockUpdate }));
+const mockUpsertSelect: jest.Mock = jest.fn(() => ({ single: mockSingle }));
+const mockUpsert: jest.Mock = jest.fn(() => ({ select: mockUpsertSelect }));
+const mockFrom: jest.Mock = jest.fn(() => ({ select: mockSelect, upsert: mockUpsert }));
 
 jest.mock('@/lib/supabase/supabase-client', () => ({
   supabase: {
@@ -40,7 +41,7 @@ describe('認証フロー 統合テスト', () => {
         data: { user: { id: NEW_USER_ID } },
         error: null,
       });
-      mockSingle.mockResolvedValueOnce({ data: { display_name: null }, error: null });
+      mockMaybeSingle.mockResolvedValueOnce({ data: { display_name: null }, error: null });
 
       const { result } = renderHook(() => useAuthSession());
 
@@ -57,7 +58,7 @@ describe('認証フロー 統合テスト', () => {
       mockGetSession.mockResolvedValueOnce({
         data: { session: { user: { id: EXISTING_USER_ID } } },
       });
-      mockSingle.mockResolvedValueOnce({ data: { display_name: '将棋太郎' }, error: null });
+      mockMaybeSingle.mockResolvedValueOnce({ data: { display_name: '将棋太郎' }, error: null });
 
       const { result } = renderHook(() => useAuthSession());
 
@@ -71,7 +72,7 @@ describe('認証フロー 統合テスト', () => {
       mockGetSession.mockResolvedValueOnce({
         data: { session: { user: { id: EXISTING_USER_ID } } },
       });
-      mockSingle.mockResolvedValueOnce({ data: { display_name: null }, error: null });
+      mockMaybeSingle.mockResolvedValueOnce({ data: { display_name: null }, error: null });
 
       const { result } = renderHook(() => useAuthSession());
 
@@ -84,25 +85,28 @@ describe('認証フロー 統合テスト', () => {
 
   describe('ユーザーネーム登録フロー', () => {
     it('setupUsernameがSupabaseのupdateを呼ぶ', async () => {
-      mockUpdateEq.mockResolvedValueOnce({ error: null });
+      mockSingle.mockResolvedValueOnce({ error: null });
 
       await setupUsername(NEW_USER_ID, '新プレイヤー');
 
       expect(mockFrom).toHaveBeenCalledWith('players');
-      expect(mockUpdate).toHaveBeenCalledWith({ display_name: '新プレイヤー' });
-      expect(mockUpdateEq).toHaveBeenCalledWith('id', NEW_USER_ID);
+      expect(mockUpsert).toHaveBeenCalledWith(
+        { id: NEW_USER_ID, display_name: '新プレイヤー' },
+        { onConflict: 'id' }
+      );
+      expect(mockUpsertSelect).toHaveBeenCalledWith('id');
     });
 
     it('username登録後に再起動するとneedsUsernameSetup: falseになる', async () => {
       // username登録
-      mockUpdateEq.mockResolvedValueOnce({ error: null });
+      mockSingle.mockResolvedValueOnce({ error: null });
       await setupUsername(NEW_USER_ID, '新プレイヤー');
 
       // 再起動（セッション残存、display_nameあり）
       mockGetSession.mockResolvedValueOnce({
         data: { session: { user: { id: NEW_USER_ID } } },
       });
-      mockSingle.mockResolvedValueOnce({ data: { display_name: '新プレイヤー' }, error: null });
+      mockMaybeSingle.mockResolvedValueOnce({ data: { display_name: '新プレイヤー' }, error: null });
 
       const { result } = renderHook(() => useAuthSession());
 

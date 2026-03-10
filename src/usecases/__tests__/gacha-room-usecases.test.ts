@@ -8,16 +8,19 @@ describe('gacha room usecases', () => {
     expect(snapshot.banners).toHaveLength(4);
     expect(snapshot.pawnCurrency).toBe(3000);
     expect(snapshot.goldCurrency).toBe(20);
-    expect(snapshot.history).toEqual(['UR 爆', 'SSR 宇', 'R 安']);
+    expect(snapshot.history).toEqual([]);
   });
 
-  it('returns a deterministic UI-only roll result', async () => {
+  it('returns a deterministic roll result for miss path', async () => {
+    const randomSpy = jest.spyOn(Math, 'random').mockReturnValue(0.9);
     const usecase = new MockRollGachaUseCase();
     const result = await usecase.execute({ gachaId: 'ukanmuri' });
 
     expect(result).toEqual({
-      success: true,
-      label: 'UI_ONLY ukanmuri',
+      type: 'miss',
+      currency: 'pawn',
+      amount: 5,
     });
+    randomSpy.mockRestore();
   });
 });
