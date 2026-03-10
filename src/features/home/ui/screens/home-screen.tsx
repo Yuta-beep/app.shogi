@@ -33,7 +33,8 @@ export function HomeScreen() {
               router.push('/matching');
             }}
             playerName={snapshot.playerName}
-            rating={snapshot.rating}
+            playerRank={snapshot.playerRank}
+            playerExp={snapshot.playerExp}
           />
           <HomeActionGridSection />
         </View>

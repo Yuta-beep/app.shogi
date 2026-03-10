@@ -30,6 +30,8 @@ describe('HomeSupabaseDataSource', () => {
           rating: 1600,
           pawn_currency: 100,
           gold_currency: 5,
+          player_rank: 3,
+          player_exp: 120,
         },
         error: null,
       });
@@ -37,13 +39,17 @@ describe('HomeSupabaseDataSource', () => {
       const result = await ds.getSnapshot();
 
       expect(mockFrom).toHaveBeenCalledWith('players');
-      expect(mockSelect).toHaveBeenCalledWith('display_name, rating, pawn_currency, gold_currency');
+      expect(mockSelect).toHaveBeenCalledWith(
+        'display_name, rating, pawn_currency, gold_currency, player_rank, player_exp',
+      );
       expect(mockEq).toHaveBeenCalledWith('id', 'user-uuid-123');
       expect(result).toEqual({
         playerName: 'テストプレイヤー',
         rating: 1600,
         pawnCurrency: 100,
         goldCurrency: 5,
+        playerRank: 3,
+        playerExp: 120,
       });
     });
 

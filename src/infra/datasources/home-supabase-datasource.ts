@@ -13,7 +13,7 @@ export class HomeSupabaseDataSource {
 
     const { data, error } = await supabase
       .from('players')
-      .select('display_name, rating, pawn_currency, gold_currency')
+      .select('display_name, rating, pawn_currency, gold_currency, player_rank, player_exp')
       .eq('id', session.user.id)
       .single();
 
@@ -24,6 +24,8 @@ export class HomeSupabaseDataSource {
       rating: data.rating,
       pawnCurrency: data.pawn_currency,
       goldCurrency: data.gold_currency,
+      playerRank: data.player_rank,
+      playerExp: data.player_exp,
     };
   }
 }

@@ -10,6 +10,8 @@ describe('MockLoadHomeSnapshotUseCase', () => {
       rating: homeMock.rating,
       pawnCurrency: homeMock.pawnCurrency,
       goldCurrency: homeMock.goldCurrency,
+      playerRank: homeMock.playerRank,
+      playerExp: homeMock.playerExp,
     });
   });
 });

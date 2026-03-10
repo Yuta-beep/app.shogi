@@ -6,10 +6,16 @@ import { homeAssets } from '@/constants/home-assets';
 type HomeHeaderSectionProps = {
   onPressMatching: () => void;
   playerName: string;
-  rating: number;
+  playerRank: number;
+  playerExp: number;
 };
 
-export function HomeHeaderSection({ onPressMatching, playerName, rating }: HomeHeaderSectionProps) {
+export function HomeHeaderSection({
+  onPressMatching,
+  playerName,
+  playerRank,
+  playerExp,
+}: HomeHeaderSectionProps) {
   return (
     <View className="px-4 pt-3">
       <View className="h-24 w-full overflow-hidden rounded-xl">
@@ -21,7 +27,7 @@ export function HomeHeaderSection({ onPressMatching, playerName, rating }: HomeH
         <View className="absolute inset-0 items-center justify-center">
           <Text className="text-2xl font-black text-[#2f1b14]">{playerName}</Text>
         </View>
-        <Text className="absolute bottom-2 right-3 text-sm font-black text-white">{`◆レート ${rating}`}</Text>
+        <Text className="absolute bottom-2 right-3 text-sm font-black text-white">{`◆ランク ${playerRank} / EXP ${playerExp}`}</Text>
       </View>
 
       <Pressable

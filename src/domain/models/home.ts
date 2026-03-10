@@ -3,4 +3,6 @@ export type HomeSnapshot = {
   rating: number;
   pawnCurrency: number;
   goldCurrency: number;
+  playerRank: number;
+  playerExp: number;
 };
