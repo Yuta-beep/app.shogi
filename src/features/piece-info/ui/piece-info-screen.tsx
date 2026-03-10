@@ -106,12 +106,8 @@ export function PieceInfoScreen() {
           </View>
 
           <View className="mt-4 rounded-xl border border-[#8b0000]/50 bg-white/90 p-4">
-            <Text className="text-xs font-black text-[#7f1d1d]">【駒の説明】</Text>
-            <Text className="mt-1 text-sm text-[#1f2937]">{piece.desc}</Text>
-            <Text className="mt-3 text-xs font-black text-[#7f1d1d]">【スキル】</Text>
-            <Text className="mt-1 text-sm text-[#1f2937]">{piece.skill}</Text>
-            <Text className="mt-3 text-xs font-black text-[#7f1d1d]">【移動名称】</Text>
-            <Text className="mt-1 text-sm text-[#1f2937]">{piece.move}</Text>
+            <Text className="text-sm font-black text-[#7f1d1d]">【スキル】</Text>
+            <Text className="mt-1 text-base leading-6 text-[#1f2937]">{piece.skill}</Text>
 
             {piece.moveVectors.length > 0 && (
               <MovementGrid vectors={piece.moveVectors} isRepeatable={piece.isRepeatable} />

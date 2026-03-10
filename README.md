@@ -1,140 +1,97 @@
 # Shogi Mobile App Frontend
 
-Expo + React Native + TypeScript で開発する、将棋モバイルアプリのフロントエンドです。
+将棋モバイルアプリのフロントエンド（Expo + React Native + TypeScript）です。
 
-旧 `SHOGI_GAME` の HTML/CSS を参照しながら、UI起点で段階的に移植しています。
+## 動作環境
+- Node.js 20 以上（推奨: 20/22 LTS）
+- Bun（推奨）または npm
+- Xcode / Android Studio（実機・エミュレータ利用時）
 
 ## Tech Stack
 - Expo SDK 54
 - React Native
 - TypeScript
 - Expo Router
-- NativeWind (Tailwind for React Native)
+- NativeWind
 
-## Development
-### 1. Install
+## セットアップ
 ```bash
-npm install
-# or
+# 依存関係インストール
 bun install
+# or
+npm install
 ```
 
-### 2. Start
+## 環境変数
+`.env.example` をコピーして `.env` を作成してください。
+
 ```bash
-npx expo start
-# or
+cp .env.example .env
+```
+
+主な変数:
+- `EXPO_PUBLIC_DATA_SOURCE`
+  - `mock` または `api`
+- `EXPO_PUBLIC_API_BASE_URL`
+  - API(BFF) のベースURL
+  - 実機確認時は `http://<実機のIP>:3000` を使用
+  - 例: `http://192.168.1.25:3000`
+
+実機IPの確認:
+- macOS: `ipconfig getifaddr en0`（取得できない場合: `ifconfig | grep "inet "`）
+- Windows: `ipconfig`（`IPv4 Address` / `IPv4 アドレス` を使用）
+
+## 起動
+```bash
+# 通常起動
 bun run start
-```
-
-キャッシュ起因の不整合が出る場合:
-```bash
-npx expo start --clear
 # or
-bun run start:clear
-```
+npx expo start
 
-トンネル / LAN で起動する場合:
-```bash
-bun run start:tunnel
+# キャッシュクリア
+bun run start:clear
+
+# LAN / Tunnel
 bun run start:lan
+bun run start:tunnel
+bun run start:lan:clear
 bun run start:tunnel:clear
 ```
 
-### 3. Test
+## よく使うコマンド
 ```bash
-npm run test
-```
+# iOS / Android / Web
+bun run ios
+bun run android
+bun run web
 
-### 4. Format
-```bash
+# Lint / Format / Typecheck / Test
+bun run lint
 bun run format
+bun run typecheck
+bun run test
+
+# CI相当チェック
+bun run ci
 ```
 
-## Environment Variables
-- `EXPO_PUBLIC_API_BASE_URL`
-  - BFF のベースURL（実機検証時は `http://<実機のIP>:3000` を使う）
-  - 例: `http://192.168.1.25:3000`
-  - 実機と開発PCを同じWi-Fi/LANに接続すること
-  - 実機IPの確認コマンド:
-    - macOS: `ipconfig getifaddr en0`
-      - 値が取れない場合: `ifconfig | grep \"inet \"`
-    - Windows: `ipconfig`
-      - `IPv4 Address`（または `IPv4 アドレス`）の値を使う
-- `EXPO_PUBLIC_DATA_SOURCE`
-  - `mock` または `api`
-  - `api` のとき `UseCase -> Repository -> DataSource(API)` で BFF 接続
-  - 未設定時は `mock` 扱い
+## アーキテクチャ（概要）
+依存方向:
+`UI -> UseCase -> Repository(interface) -> DataSource(API/Supabase)`
 
-## Current App Flow
-- `/` : Title screen
-  - Home用アセットを先読み
-  - `Loading...` 表示
-  - タップで `/home` に遷移
-- `/home` : Home screen（再現中）
-- その他画面: プレースホルダー導線のみ
-
-## Directory Structure
+主なディレクトリ:
 ```text
-assets/              # Images and static files
 src/
-  app/               # Expo Router routes only
-  components/
-    atom/            # 最小単位のUI部品
-    molecule/        # atomを組み合わせた中位部品
-    organism/        # 画面セクション単位の複合UI
-    module/          # 互換レイヤー（段階移行用）
-  constants/         # 定数・アセット参照・モック
-  domain/
-    models/          # ドメイン型
-    repositories/    # Repository interface
-  features/          # 機能単位（画面UI本体）
-  hooks/             # 共通hooks
-  infra/
-    di/              # UseCase factory（mock/api切替）
-    http/            # APIクライアント
-    datasources/     # HTTP DataSource
-    repositories/    # Repository実装
-  usecases/          # ユースケース（mock / api 実装）
-docs/                # 開発方針ドキュメント
+  app/          # Expo Router のルート定義
+  features/     # 画面・機能単位のUIと状態管理
+  usecases/     # ユースケース
+  domain/       # ドメインモデル・リポジトリIF
+  infra/        # DI / Repository実装 / DataSource / HTTP
+  components/   # 共通UIコンポーネント
+  hooks/        # 共通フック
+assets/         # 画像・音声などの静的アセット
 ```
 
-## Audio Policy
-- 音源は `assets/audio` 配下に配置する
-- 推奨構成:
-```text
-assets/audio/
-  bgm/
-  se/
-```
-- 再生実装は `expo-audio` を利用する（`expo-av` は新規採用しない）
-- 音源マッピングは `src/constants/audio-assets.ts` で管理する
-- 画面ごとのBGM方針（HTML移植ベース）:
-  - `title` -> `title`
-  - `home` -> `home`
-  - `stage-select` -> `dungeonSelect`
-  - `stage-shogi` -> `battle`
-  - `deck-builder` -> `deckBuilder`
-  - `piece-info` -> `catalog`
-  - `piece-shop` -> `shop`
-  - `gacha-room` -> `gacha`
-  - `matching` -> `matching`
-  - `online-battle` -> `onlineBattle`
-  - `special-dungeon` -> `specialDungeon`
-
-## Architecture Policy
-- UIファーストで開発
-- `src/app/` はルーティング定義に限定（Expo Router）
-- 実画面実装は `src/features/*` に置く
-- 共通UIは `src/components/atom|molecule|organism` に集約
-- 依存方向は `UI -> UseCase -> Repository(interface) -> DataSource(API)` を維持
-
-詳細方針:
-- `docs/ui-first-development-plan.md`
-
-## Naming Rules
-- Feature名はユーザー価値ベース
-- 例: `home`, `battle`, `stage-selection`, `deck-builder`, `piece-catalog`, `piece-shop`, `gacha`, `matching`, `player-profile`
-
-## Notes
-- Expo 54 は Node の最新メジャーで不安定になる場合があります。
-- 可能なら Node 20/22 LTS の利用を推奨します。
+## 補足
+- API モードで動かす場合、backend が `:3000` で起動している必要があります。
+- 実機と開発PCは同じネットワークに接続してください。
