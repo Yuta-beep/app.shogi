@@ -7,6 +7,7 @@
     "start:tunnel": "expo start --tunnel",
     "start:lan": "expo start --lan",
     "start:clear": "expo start --clear",
+    "start:lan:clear": "expo start --lan --clear",
     "start:tunnel:clear": "expo start --tunnel --clear",
     "reset-project": "node ./scripts/reset-project.js",
     "android": "expo start --android",
