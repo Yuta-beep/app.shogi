@@ -4,6 +4,7 @@ type StageListResponse = {
   stages: {
     stageNo: number;
     stageName: string;
+    unlockStageNo?: number | null;
     canStart: boolean;
   }[];
 };

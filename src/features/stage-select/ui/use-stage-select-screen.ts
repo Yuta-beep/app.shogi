@@ -2,7 +2,9 @@ import type { StageNodeData } from '@/domain/models/stage-select';
 import { useEffect, useMemo, useState } from 'react';
 
 import { stageRanges } from '@/constants/stage-select-data';
+import { StageProgressApiDataSource } from '@/infra/datasources/stage-progress-api-datasource';
 import { createLoadStageSelectUseCase, createSelectStageUseCase } from '@/infra/di/usecase-factory';
+import { supabase } from '@/lib/supabase/supabase-client';
 
 export type StageSelectScreenVM = {
   isLoading: boolean;
@@ -23,26 +25,56 @@ export function useStageSelectScreen(): StageSelectScreenVM {
 
   const loadStageSelectUseCase = useMemo(() => createLoadStageSelectUseCase(), []);
   const selectStageUseCase = useMemo(() => createSelectStageUseCase(), []);
+  const stageProgressDataSource = useMemo(() => new StageProgressApiDataSource(), []);
 
   useEffect(() => {
     let active = true;
-    setIsLoading(true);
-    loadStageSelectUseCase
-      .execute()
-      .then((data) => {
-        if (active) {
-          setNodes(data.nodes);
+    async function load() {
+      setIsLoading(true);
+      try {
+        const [snapshot, sessionResult] = await Promise.all([
+          loadStageSelectUseCase.execute(),
+          supabase.auth.getSession(),
+        ]);
+
+        const token = sessionResult.data.session?.access_token ?? null;
+        let clearedStageNos = new Set<number>();
+
+        if (token) {
+          try {
+            const progress = await stageProgressDataSource.getStageProgress(token);
+            clearedStageNos = new Set(progress.clearedStageNos);
+          } catch (error) {
+            console.warn('[stage-select] failed to load stage progress from API', error);
+          }
         }
-      })
-      .finally(() => {
+
+        const computedNodes = snapshot.nodes.map((node) => {
+          const unlockedByStageProgress =
+            node.unlockStageNo == null || clearedStageNos.has(node.unlockStageNo);
+          const unlockedByServer = node.canStart ?? true;
+          return {
+            ...node,
+            isCleared: clearedStageNos.has(node.id),
+            isUnlocked: unlockedByStageProgress && unlockedByServer,
+          };
+        });
+
+        if (active) {
+          setNodes(computedNodes);
+        }
+      } finally {
         if (active) {
           setIsLoading(false);
         }
-      });
+      }
+    }
+
+    void load();
     return () => {
       active = false;
     };
-  }, [loadStageSelectUseCase]);
+  }, [loadStageSelectUseCase, stageProgressDataSource]);
 
   const nodesInPage = useMemo(
     () => nodes.filter((node) => node.page === currentPage),
@@ -54,6 +86,11 @@ export function useStageSelectScreen(): StageSelectScreenVM {
   );
 
   async function selectStage(stageId: number) {
+    const stage = nodes.find((node) => node.id === stageId);
+    if (!stage || !stage.isUnlocked) {
+      return;
+    }
+
     setIsLoading(true);
     try {
       const result = await selectStageUseCase.execute({ stageId });

@@ -1,6 +1,7 @@
 export type StageSummary = {
   stageNo: number;
   stageName: string;
+  unlockStageNo?: number | null;
   canStart: boolean;
 };
 

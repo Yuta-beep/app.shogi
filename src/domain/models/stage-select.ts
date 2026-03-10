@@ -14,4 +14,8 @@ export type StageNodeData = {
   left: number;
   color: string;
   unlockPieces: string[];
+  unlockStageNo?: number | null;
+  canStart?: boolean;
+  isUnlocked?: boolean;
+  isCleared?: boolean;
 };

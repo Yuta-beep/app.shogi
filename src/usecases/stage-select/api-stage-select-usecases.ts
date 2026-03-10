@@ -30,6 +30,8 @@ export class ApiLoadStageSelectUseCase implements LoadStageSelectUseCase {
           ...fallback,
           id: stage.stageNo,
           name: stage.stageName,
+          unlockStageNo: stage.unlockStageNo ?? null,
+          canStart: stage.canStart,
         };
       })
       .filter((value): value is NonNullable<typeof value> => value !== null)

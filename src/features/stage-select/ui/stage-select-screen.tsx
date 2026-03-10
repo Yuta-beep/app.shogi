@@ -123,9 +123,13 @@ export function StageSelectScreen() {
                       {node.unlockPieces.map((piece) => (
                         <View
                           key={`${node.id}-${piece}`}
-                          className="rounded-full border border-black/10 bg-white/90 px-2 py-0.5"
+                          className={`rounded-full border border-black/10 px-2 py-0.5 ${node.isUnlocked ? 'bg-white/90' : 'bg-gray-300/90'}`}
                         >
-                          <Text className="text-[11px] font-black text-[#222]">{piece}</Text>
+                          <Text
+                            className={`text-[11px] font-black ${node.isUnlocked ? 'text-[#222]' : 'text-[#6b7280]'}`}
+                          >
+                            {piece}
+                          </Text>
                         </View>
                       ))}
                     </View>
@@ -136,11 +140,23 @@ export function StageSelectScreen() {
                       void playSe('tap');
                       void selectStage(node.id);
                     }}
-                    style={{ backgroundColor: node.color }}
-                    className={`h-14 w-14 items-center justify-center rounded-full border-2 border-white/70 shadow ${selectedStageId === node.id ? 'scale-110' : ''}`}
+                    disabled={!node.isUnlocked}
+                    style={{ backgroundColor: node.isUnlocked ? node.color : '#9ca3af' }}
+                    className={`h-14 w-14 items-center justify-center rounded-full border-2 border-white/70 shadow ${selectedStageId === node.id ? 'scale-110' : ''} ${node.isUnlocked ? '' : 'opacity-80'}`}
                   >
                     <Text className="text-lg font-black text-white">{node.id}</Text>
+                    {!node.isUnlocked ? (
+                      <View className="absolute inset-0 items-center justify-center rounded-full bg-black/30">
+                        <Text className="text-[9px] font-black text-white">LOCK</Text>
+                      </View>
+                    ) : null}
                   </Pressable>
+
+                  {node.isCleared ? (
+                    <View className="mt-1 rounded-full bg-[#16a34a] px-2 py-0.5">
+                      <Text className="text-[10px] font-black text-white">CLEAR</Text>
+                    </View>
+                  ) : null}
                 </View>
               ))}
             </View>
