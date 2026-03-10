@@ -1,4 +1,7 @@
-import { MockCancelMatchingUseCase, MockStartMatchingUseCase } from '@/usecases/matching/mock-matching-usecases';
+import {
+  MockCancelMatchingUseCase,
+  MockStartMatchingUseCase,
+} from '@/usecases/matching/mock-matching-usecases';
 
 describe('matching usecases', () => {
   it('returns initial matching snapshot', async () => {

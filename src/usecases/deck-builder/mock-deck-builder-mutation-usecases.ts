@@ -1,5 +1,12 @@
-import type { DeleteDeckInput, DeleteDeckUseCase } from '@/usecases/deck-builder/delete-deck-usecase';
-import type { SaveDeckInput, SaveDeckResult, SaveDeckUseCase } from '@/usecases/deck-builder/save-deck-usecase';
+import type {
+  DeleteDeckInput,
+  DeleteDeckUseCase,
+} from '@/usecases/deck-builder/delete-deck-usecase';
+import type {
+  SaveDeckInput,
+  SaveDeckResult,
+  SaveDeckUseCase,
+} from '@/usecases/deck-builder/save-deck-usecase';
 
 export class MockSaveDeckUseCase implements SaveDeckUseCase {
   async execute(_input: SaveDeckInput): Promise<SaveDeckResult> {

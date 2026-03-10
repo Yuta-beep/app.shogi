@@ -46,7 +46,9 @@ export function SpecialDungeonScreen() {
           >
             <Text className="text-base font-bold text-ink">{`${stage.id}  ${stage.name}`}</Text>
             <Text className="mt-1 text-sm text-[#6b4532]">{stage.rule}</Text>
-            {!stage.open ? <Text className="mt-1 text-xs font-bold text-[#9f6d00]">解放条件: EX-2クリア</Text> : null}
+            {!stage.open ? (
+              <Text className="mt-1 text-xs font-bold text-[#9f6d00]">解放条件: EX-2クリア</Text>
+            ) : null}
           </Pressable>
         ))}
       </View>

@@ -50,9 +50,7 @@ function MovementGrid({ vectors, isRepeatable }: { vectors: MoveVector[]; isRepe
                   }`}
                 >
                   {isCenter && <Text className="text-xs font-black text-white">駒</Text>}
-                  {canMove && !isCenter && (
-                    <Text className="text-xs text-[#92400e]">●</Text>
-                  )}
+                  {canMove && !isCenter && <Text className="text-xs text-[#92400e]">●</Text>}
                 </View>
               );
             })}
@@ -79,7 +77,11 @@ export function PieceInfoScreen() {
   return (
     <SafeAreaView className="flex-1 bg-[#f8f3e8]">
       <View className="absolute inset-0">
-        <Image source={pieceTemplate} contentFit="cover" style={{ width: '100%', height: '100%' }} />
+        <Image
+          source={pieceTemplate}
+          contentFit="cover"
+          style={{ width: '100%', height: '100%' }}
+        />
       </View>
 
       <View className="flex-1 px-4 pb-4">

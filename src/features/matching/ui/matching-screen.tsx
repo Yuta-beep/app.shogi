@@ -35,7 +35,10 @@ export function MatchingScreen() {
           <Text className="mt-2 text-center text-sm text-[#4b5563]">{snapshot.status}</Text>
 
           <View className="mt-3 h-1.5 overflow-hidden rounded-full bg-gray-200">
-            <View className="h-full rounded-full bg-blue-500" style={{ width: `${snapshot.progress}%` }} />
+            <View
+              className="h-full rounded-full bg-blue-500"
+              style={{ width: `${snapshot.progress}%` }}
+            />
           </View>
 
           <Pressable

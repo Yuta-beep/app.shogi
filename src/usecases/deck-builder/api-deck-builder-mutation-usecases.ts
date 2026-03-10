@@ -1,6 +1,13 @@
 import { DeckBuilderApiDataSource } from '@/infra/datasources/deck-builder-datasource';
-import type { DeleteDeckInput, DeleteDeckUseCase } from '@/usecases/deck-builder/delete-deck-usecase';
-import type { SaveDeckInput, SaveDeckResult, SaveDeckUseCase } from '@/usecases/deck-builder/save-deck-usecase';
+import type {
+  DeleteDeckInput,
+  DeleteDeckUseCase,
+} from '@/usecases/deck-builder/delete-deck-usecase';
+import type {
+  SaveDeckInput,
+  SaveDeckResult,
+  SaveDeckUseCase,
+} from '@/usecases/deck-builder/save-deck-usecase';
 
 export class ApiSaveDeckUseCase implements SaveDeckUseCase {
   private readonly dataSource: DeckBuilderApiDataSource;

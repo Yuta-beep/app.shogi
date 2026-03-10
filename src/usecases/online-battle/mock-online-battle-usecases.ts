@@ -1,4 +1,7 @@
-import { LoadOnlineBattleSessionUseCase, OnlineBattleSession } from '@/usecases/online-battle/load-online-battle-session-usecase';
+import {
+  LoadOnlineBattleSessionUseCase,
+  OnlineBattleSession,
+} from '@/usecases/online-battle/load-online-battle-session-usecase';
 
 export class MockLoadOnlineBattleSessionUseCase implements LoadOnlineBattleSessionUseCase {
   async execute(input: { opponent?: string; rating?: string }): Promise<OnlineBattleSession> {

@@ -1,6 +1,13 @@
 import { stageNodes, stageRanges } from '@/constants/stage-select-data';
-import { LoadStageSelectUseCase, StageSelectSnapshot } from '@/usecases/stage-select/load-stage-select-usecase';
-import { SelectStageInput, SelectStageResult, SelectStageUseCase } from '@/usecases/stage-select/select-stage-usecase';
+import {
+  LoadStageSelectUseCase,
+  StageSelectSnapshot,
+} from '@/usecases/stage-select/load-stage-select-usecase';
+import {
+  SelectStageInput,
+  SelectStageResult,
+  SelectStageUseCase,
+} from '@/usecases/stage-select/select-stage-usecase';
 
 export class MockLoadStageSelectUseCase implements LoadStageSelectUseCase {
   async execute(): Promise<StageSelectSnapshot> {

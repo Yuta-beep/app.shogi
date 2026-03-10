@@ -15,12 +15,12 @@ const shopAssets = {
   background: require('../../../../assets/piece-shop/shop-bg.png'),
   home: require('../../../../assets/shared/home-back.png'),
   pieces: {
-    '走': require('../../../../assets/piece-shop/piece-so.png'),
-    '種': require('../../../../assets/piece-shop/piece-tane.png'),
-    '麒': require('../../../../assets/piece-shop/piece-kirin.png'),
-    '舞': require('../../../../assets/piece-shop/piece-mai.png'),
-    'P': require('../../../../assets/piece-shop/piece-p.png'),
-    '鳴': require('../../../../assets/piece-shop/piece-naku.png'),
+    走: require('../../../../assets/piece-shop/piece-so.png'),
+    種: require('../../../../assets/piece-shop/piece-tane.png'),
+    麒: require('../../../../assets/piece-shop/piece-kirin.png'),
+    舞: require('../../../../assets/piece-shop/piece-mai.png'),
+    P: require('../../../../assets/piece-shop/piece-p.png'),
+    鳴: require('../../../../assets/piece-shop/piece-naku.png'),
   },
 } as const;
 
@@ -50,7 +50,11 @@ export function PieceShopScreen() {
   return (
     <SafeAreaView className="flex-1 bg-[#120d0a]">
       <View className="absolute inset-0">
-        <Image source={shopAssets.background} contentFit="cover" style={{ width: '100%', height: '100%' }} />
+        <Image
+          source={shopAssets.background}
+          contentFit="cover"
+          style={{ width: '100%', height: '100%' }}
+        />
         <View className="absolute inset-0 bg-black/25" />
       </View>
 
@@ -84,7 +88,11 @@ export function PieceShopScreen() {
                   }}
                   className="w-full items-center active:scale-95"
                 >
-                  <Image source={shopAssets.pieces[piece.key]} contentFit="contain" style={{ width: 86, height: 100 }} />
+                  <Image
+                    source={shopAssets.pieces[piece.key]}
+                    contentFit="contain"
+                    style={{ width: 86, height: 100 }}
+                  />
                 </Pressable>
 
                 <Pressable
@@ -92,7 +100,9 @@ export function PieceShopScreen() {
                   disabled={isOwned}
                   className={`mt-2 w-full rounded-md px-2 py-2 ${isOwned ? 'bg-gray-300' : 'bg-[#8b0000]'}`}
                 >
-                  <Text className={`text-center text-xs font-black ${isOwned ? 'text-[#555]' : 'text-[#ffd56a]'}`}>
+                  <Text
+                    className={`text-center text-xs font-black ${isOwned ? 'text-[#555]' : 'text-[#ffd56a]'}`}
+                  >
                     {isOwned ? '購入済み' : `購入 ${priceText}`}
                   </Text>
                 </Pressable>
@@ -102,7 +112,12 @@ export function PieceShopScreen() {
         </View>
       </View>
 
-      <Modal visible={!!vm.detailPiece} transparent animationType="fade" onRequestClose={vm.closeDetail}>
+      <Modal
+        visible={!!vm.detailPiece}
+        transparent
+        animationType="fade"
+        onRequestClose={vm.closeDetail}
+      >
         <View className="flex-1 items-center justify-center bg-black/45 px-6">
           <View className="w-full max-w-sm rounded-xl bg-[#fff7e6] p-4">
             <Text className="text-xl font-black text-[#7f1d1d]">{vm.detailPiece?.key}</Text>
@@ -112,7 +127,9 @@ export function PieceShopScreen() {
             <Text className="mt-1 text-sm text-[#1f2937]">{vm.detailPiece?.move}</Text>
             <Text className="mt-3 text-xs font-black text-[#7f1d1d]">【デッキコスト】</Text>
             <Text className="mt-1 text-sm text-[#1f2937]">
-              {vm.detailPiece ? `${vm.detailPiece.costType === 'pawn' ? '歩' : '金'} ${vm.detailPiece.cost}` : ''}
+              {vm.detailPiece
+                ? `${vm.detailPiece.costType === 'pawn' ? '歩' : '金'} ${vm.detailPiece.cost}`
+                : ''}
             </Text>
             <Pressable
               onPress={() => {
@@ -127,12 +144,19 @@ export function PieceShopScreen() {
         </View>
       </Modal>
 
-      <Modal visible={!!vm.confirmPiece} transparent animationType="fade" onRequestClose={vm.closeConfirm}>
+      <Modal
+        visible={!!vm.confirmPiece}
+        transparent
+        animationType="fade"
+        onRequestClose={vm.closeConfirm}
+      >
         <View className="flex-1 items-center justify-center bg-black/45 px-6">
           <View className="w-full max-w-xs rounded-xl bg-[#fff7e6] p-4">
             <Text className="text-center text-base font-black text-[#7f1d1d]">購入しますか</Text>
             <Text className="mt-2 text-center text-sm text-[#1f2937]">
-              {vm.confirmPiece ? `${vm.confirmPiece.key} (${vm.confirmPiece.costType === 'pawn' ? '歩' : '金'} ${vm.confirmPiece.cost})` : ''}
+              {vm.confirmPiece
+                ? `${vm.confirmPiece.key} (${vm.confirmPiece.costType === 'pawn' ? '歩' : '金'} ${vm.confirmPiece.cost})`
+                : ''}
             </Text>
             <View className="mt-4 flex-row gap-2">
               <Pressable

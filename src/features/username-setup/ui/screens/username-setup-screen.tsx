@@ -6,7 +6,8 @@ import { homeAssets } from '@/constants/home-assets';
 import { useUsernameSetupScreen } from '@/features/username-setup/ui/use-username-setup-screen';
 
 export function UsernameSetupScreen() {
-  const { username, setUsername, isInitializing, isSubmitting, error, handleSubmit } = useUsernameSetupScreen();
+  const { username, setUsername, isInitializing, isSubmitting, error, handleSubmit } =
+    useUsernameSetupScreen();
 
   if (isInitializing || isSubmitting) {
     return <AppLoadingScreen imageSource={homeAssets.loadingImage} />;

@@ -1,8 +1,14 @@
 import { ApiLoadDeckBuilderUseCase } from '@/usecases/deck-builder/api-deck-builder-usecases';
-import { ApiDeleteDeckUseCase, ApiSaveDeckUseCase } from '@/usecases/deck-builder/api-deck-builder-mutation-usecases';
+import {
+  ApiDeleteDeckUseCase,
+  ApiSaveDeckUseCase,
+} from '@/usecases/deck-builder/api-deck-builder-mutation-usecases';
 import { DeleteDeckUseCase } from '@/usecases/deck-builder/delete-deck-usecase';
 import { MockLoadDeckBuilderUseCase } from '@/usecases/deck-builder/mock-deck-builder-usecases';
-import { MockDeleteDeckUseCase, MockSaveDeckUseCase } from '@/usecases/deck-builder/mock-deck-builder-mutation-usecases';
+import {
+  MockDeleteDeckUseCase,
+  MockSaveDeckUseCase,
+} from '@/usecases/deck-builder/mock-deck-builder-mutation-usecases';
 import { LoadDeckBuilderUseCase } from '@/usecases/deck-builder/load-deck-builder-usecase';
 import { SaveDeckUseCase } from '@/usecases/deck-builder/save-deck-usecase';
 import { ApiLoadHomeSnapshotUseCase } from '@/usecases/home/api-home-usecases';
@@ -13,16 +19,28 @@ import { HomeSupabaseDataSource } from '@/infra/datasources/home-supabase-dataso
 import { ApiLoadPieceCatalogUseCase } from '@/usecases/piece-info/api-piece-info-usecases';
 import { MockLoadPieceCatalogUseCase } from '@/usecases/piece-info/mock-piece-info-usecases';
 import { LoadPieceCatalogUseCase } from '@/usecases/piece-info/load-piece-catalog-usecase';
-import { ApiLoadShopCatalogUseCase, ApiPurchaseShopItemUseCase } from '@/usecases/piece-shop/api-piece-shop-usecases';
-import { MockLoadShopCatalogUseCase, MockPurchaseShopItemUseCase } from '@/usecases/piece-shop/mock-piece-shop-usecases';
+import {
+  ApiLoadShopCatalogUseCase,
+  ApiPurchaseShopItemUseCase,
+} from '@/usecases/piece-shop/api-piece-shop-usecases';
+import {
+  MockLoadShopCatalogUseCase,
+  MockPurchaseShopItemUseCase,
+} from '@/usecases/piece-shop/mock-piece-shop-usecases';
 import { LoadShopCatalogUseCase } from '@/usecases/piece-shop/load-shop-catalog-usecase';
 import { PurchaseShopItemUseCase } from '@/usecases/piece-shop/purchase-shop-item-usecase';
 import { ApiPrepareStageBattleUseCase } from '@/usecases/stage-battle/api-stage-battle-usecases';
 import { MockPrepareStageBattleUseCase } from '@/usecases/stage-battle/mock-stage-battle-usecases';
 import { PrepareStageBattleUseCase } from '@/usecases/stage-battle/prepare-stage-battle-usecase';
-import { ApiLoadStageSelectUseCase, ApiSelectStageUseCase } from '@/usecases/stage-select/api-stage-select-usecases';
+import {
+  ApiLoadStageSelectUseCase,
+  ApiSelectStageUseCase,
+} from '@/usecases/stage-select/api-stage-select-usecases';
 import { LoadStageSelectUseCase } from '@/usecases/stage-select/load-stage-select-usecase';
-import { MockLoadStageSelectUseCase, MockSelectStageUseCase } from '@/usecases/stage-select/mock-stage-select-usecases';
+import {
+  MockLoadStageSelectUseCase,
+  MockSelectStageUseCase,
+} from '@/usecases/stage-select/mock-stage-select-usecases';
 import { SelectStageUseCase } from '@/usecases/stage-select/select-stage-usecase';
 
 function shouldUseApi() {
@@ -66,13 +84,9 @@ export function createLoadDeckBuilderUseCase(token?: string): LoadDeckBuilderUse
 }
 
 export function createSaveDeckUseCase(token?: string): SaveDeckUseCase {
-  return shouldUseApi() && token
-    ? new ApiSaveDeckUseCase(token)
-    : new MockSaveDeckUseCase();
+  return shouldUseApi() && token ? new ApiSaveDeckUseCase(token) : new MockSaveDeckUseCase();
 }
 
 export function createDeleteDeckUseCase(token?: string): DeleteDeckUseCase {
-  return shouldUseApi() && token
-    ? new ApiDeleteDeckUseCase(token)
-    : new MockDeleteDeckUseCase();
+  return shouldUseApi() && token ? new ApiDeleteDeckUseCase(token) : new MockDeleteDeckUseCase();
 }

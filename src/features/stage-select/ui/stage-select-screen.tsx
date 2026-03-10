@@ -22,7 +22,16 @@ const pagePaths: Record<number, string> = {
 
 export function StageSelectScreen() {
   const router = useRouter();
-  const { isLoading, currentPage, setCurrentPage, ranges, nodesInPage, selectedStageId, selectedStage, selectStage } = useStageSelectScreen();
+  const {
+    isLoading,
+    currentPage,
+    setCurrentPage,
+    ranges,
+    nodesInPage,
+    selectedStageId,
+    selectedStage,
+    selectStage,
+  } = useStageSelectScreen();
   useScreenBgm('dungeonSelect');
 
   const preloadTargets = useMemo(() => Object.values(stageSelectBackgrounds), []);
@@ -41,11 +50,19 @@ export function StageSelectScreen() {
   }
 
   return (
-    <ImageBackground source={stageSelectBackgrounds[currentPage as keyof typeof stageSelectBackgrounds]} resizeMode="cover" className="flex-1">
+    <ImageBackground
+      source={stageSelectBackgrounds[currentPage as keyof typeof stageSelectBackgrounds]}
+      resizeMode="cover"
+      className="flex-1"
+    >
       <SafeAreaView className="flex-1">
         <View className="flex-1">
           <View className="z-20 bg-[#f7f7f7]/90 px-2 py-2">
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="gap-2 px-1">
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerClassName="gap-2 px-1"
+            >
               {ranges.map((range) => {
                 const active = range.page === currentPage;
                 return (
@@ -57,7 +74,11 @@ export function StageSelectScreen() {
                     }}
                     className={`rounded-lg px-3 py-2 ${active ? 'bg-[#ffc107]' : 'bg-white/75'}`}
                   >
-                    <Text className={`text-xs font-black ${active ? 'text-white' : 'text-[#4b5563]'}`}>{range.label}</Text>
+                    <Text
+                      className={`text-xs font-black ${active ? 'text-white' : 'text-[#4b5563]'}`}
+                    >
+                      {range.label}
+                    </Text>
                   </Pressable>
                 );
               })}
@@ -66,9 +87,24 @@ export function StageSelectScreen() {
 
           <ScrollView className="flex-1" contentContainerClassName="pb-44">
             <View style={{ height: currentRange.height, position: 'relative' }}>
-              <Svg viewBox={`0 0 1000 ${currentRange.height + 150}`} style={{ position: 'absolute', width: '100%', height: '100%' }}>
-                <Path d={pagePaths[currentPage]} fill="none" stroke="rgba(0,0,0,0.22)" strokeWidth={14} strokeLinecap="round" />
-                <Path d={pagePaths[currentPage]} fill="none" stroke="#ffb300" strokeWidth={9} strokeLinecap="round" />
+              <Svg
+                viewBox={`0 0 1000 ${currentRange.height + 150}`}
+                style={{ position: 'absolute', width: '100%', height: '100%' }}
+              >
+                <Path
+                  d={pagePaths[currentPage]}
+                  fill="none"
+                  stroke="rgba(0,0,0,0.22)"
+                  strokeWidth={14}
+                  strokeLinecap="round"
+                />
+                <Path
+                  d={pagePaths[currentPage]}
+                  fill="none"
+                  stroke="#ffb300"
+                  strokeWidth={9}
+                  strokeLinecap="round"
+                />
               </Svg>
 
               {nodesInPage.map((node) => (
@@ -85,7 +121,10 @@ export function StageSelectScreen() {
                   {node.unlockPieces.length > 0 ? (
                     <View className="mb-1 max-w-40 flex-row flex-wrap justify-center gap-1">
                       {node.unlockPieces.map((piece) => (
-                        <View key={`${node.id}-${piece}`} className="rounded-full border border-black/10 bg-white/90 px-2 py-0.5">
+                        <View
+                          key={`${node.id}-${piece}`}
+                          className="rounded-full border border-black/10 bg-white/90 px-2 py-0.5"
+                        >
                           <Text className="text-[11px] font-black text-[#222]">{piece}</Text>
                         </View>
                       ))}
@@ -115,7 +154,10 @@ export function StageSelectScreen() {
                   <Pressable
                     onPress={() => {
                       void playSe('confirm');
-                      router.push({ pathname: '/stage-shogi', params: { stage: String(selectedStage.id) } });
+                      router.push({
+                        pathname: '/stage-shogi',
+                        params: { stage: String(selectedStage.id) },
+                      });
                     }}
                     className="mt-2 rounded-lg bg-[#ffc107] px-4 py-3"
                   >
@@ -123,7 +165,9 @@ export function StageSelectScreen() {
                   </Pressable>
                 </>
               ) : (
-                <Text className="text-center text-sm font-bold text-[#555]">ステージを選択してください</Text>
+                <Text className="text-center text-sm font-bold text-[#555]">
+                  ステージを選択してください
+                </Text>
               )}
 
               <Pressable

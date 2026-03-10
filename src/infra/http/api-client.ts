@@ -3,9 +3,7 @@ export type ApiError = {
   message: string;
 };
 
-type ApiEnvelope<T> =
-  | { ok: true; data: T }
-  | { ok: false; error: ApiError };
+type ApiEnvelope<T> = { ok: true; data: T } | { ok: false; error: ApiError };
 
 export class ApiClientError extends Error {
   readonly code: string;
@@ -38,7 +36,10 @@ async function parseEnvelope<T>(response: Response): Promise<T> {
     if ('ok' in json && json.ok === false) {
       throw new ApiClientError(json.error, response.status);
     }
-    throw new ApiClientError({ code: 'HTTP_ERROR', message: `HTTP ${response.status}` }, response.status);
+    throw new ApiClientError(
+      { code: 'HTTP_ERROR', message: `HTTP ${response.status}` },
+      response.status,
+    );
   }
 
   if ('ok' in json && json.ok === true) {
@@ -49,7 +50,10 @@ async function parseEnvelope<T>(response: Response): Promise<T> {
     throw new ApiClientError(json.error, response.status);
   }
 
-  throw new ApiClientError({ code: 'INVALID_RESPONSE', message: 'Unexpected API response' }, response.status);
+  throw new ApiClientError(
+    { code: 'INVALID_RESPONSE', message: 'Unexpected API response' },
+    response.status,
+  );
 }
 
 type RequestOptions = {

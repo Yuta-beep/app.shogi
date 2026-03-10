@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { GachaBanner } from '@/usecases/gacha-room/load-gacha-lobby-usecase';
-import { MockLoadGachaLobbyUseCase, MockRollGachaUseCase } from '@/usecases/gacha-room/mock-gacha-room-usecases';
+import {
+  MockLoadGachaLobbyUseCase,
+  MockRollGachaUseCase,
+} from '@/usecases/gacha-room/mock-gacha-room-usecases';
 import { RollGachaResult } from '@/usecases/gacha-room/roll-gacha-usecase';
 
 export type GachaPhase = 'idle' | 'video' | 'pieceOverlay' | 'done';

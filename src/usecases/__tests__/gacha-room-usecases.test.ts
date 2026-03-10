@@ -1,4 +1,7 @@
-import { MockLoadGachaLobbyUseCase, MockRollGachaUseCase } from '@/usecases/gacha-room/mock-gacha-room-usecases';
+import {
+  MockLoadGachaLobbyUseCase,
+  MockRollGachaUseCase,
+} from '@/usecases/gacha-room/mock-gacha-room-usecases';
 
 describe('gacha room usecases', () => {
   it('loads gacha banners, wallet, and history', async () => {

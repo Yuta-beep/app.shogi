@@ -33,8 +33,18 @@ export default function RootLayout() {
   if (error) {
     console.error('[Auth Error]', error);
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000', padding: 24 }}>
-        <Text style={{ color: '#fff', marginBottom: 12 }}>接続できませんでした。再起動してください。</Text>
+      <View
+        style={{
+          flex: 1,
+          justifyContent: 'center',
+          alignItems: 'center',
+          backgroundColor: '#000',
+          padding: 24,
+        }}
+      >
+        <Text style={{ color: '#fff', marginBottom: 12 }}>
+          接続できませんでした。再起動してください。
+        </Text>
         <Text style={{ color: '#f87171', fontSize: 11, textAlign: 'center' }}>{error.message}</Text>
       </View>
     );

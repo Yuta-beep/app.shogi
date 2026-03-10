@@ -32,7 +32,7 @@ function LoadingDots() {
             useNativeDriver: true,
           }),
           Animated.delay(260),
-        ])
+        ]),
       );
 
     const a1 = createWave(dot1, 0);
@@ -64,7 +64,10 @@ function LoadingDots() {
   );
 }
 
-export function AppLoadingScreen({ label = 'Loading', imageSource = homeAssets.loadingImage }: AppLoadingScreenProps) {
+export function AppLoadingScreen({
+  label = 'Loading',
+  imageSource = homeAssets.loadingImage,
+}: AppLoadingScreenProps) {
   const { width, height } = useWindowDimensions();
 
   return (
@@ -72,7 +75,9 @@ export function AppLoadingScreen({ label = 'Loading', imageSource = homeAssets.l
       {imageSource ? (
         <View className="absolute inset-0">
           <Image source={imageSource} contentFit="cover" style={{ width, height }} />
-          <Text className="absolute bottom-3 right-3 text-[12px] font-light tracking-widest text-white">{label}</Text>
+          <Text className="absolute bottom-3 right-3 text-[12px] font-light tracking-widest text-white">
+            {label}
+          </Text>
         </View>
       ) : (
         <View className="flex-row items-center rounded-lg bg-black/45 px-3 py-2">

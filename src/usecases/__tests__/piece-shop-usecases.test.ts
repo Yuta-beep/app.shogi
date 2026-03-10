@@ -1,4 +1,7 @@
-import { MockLoadShopCatalogUseCase, MockPurchaseShopItemUseCase } from '@/usecases/piece-shop/mock-piece-shop-usecases';
+import {
+  MockLoadShopCatalogUseCase,
+  MockPurchaseShopItemUseCase,
+} from '@/usecases/piece-shop/mock-piece-shop-usecases';
 
 describe('piece shop usecases', () => {
   it('loads shop catalog with currencies and initial owned items', async () => {

@@ -39,7 +39,10 @@ export function OnlineBattleScreen() {
         <Text className="text-sm text-[#6b4532]">{session.opponentLabel}</Text>
       </View>
 
-      <Pressable onPress={() => void playSe('cancel')} className="mt-4 rounded-lg border border-accent bg-white px-3 py-3 active:scale-95">
+      <Pressable
+        onPress={() => void playSe('cancel')}
+        className="mt-4 rounded-lg border border-accent bg-white px-3 py-3 active:scale-95"
+      >
         <Text className="text-center font-bold text-ink">待機キャンセル</Text>
       </Pressable>
     </UiScreenShell>

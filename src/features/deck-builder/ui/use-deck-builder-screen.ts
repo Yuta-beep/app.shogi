@@ -2,7 +2,11 @@ import { useEffect, useState } from 'react';
 
 import type { OwnedPiece, SavedDeck } from '@/domain/models/deck-builder';
 import { supabase } from '@/lib/supabase/supabase-client';
-import { createDeleteDeckUseCase, createLoadDeckBuilderUseCase, createSaveDeckUseCase } from '@/infra/di/usecase-factory';
+import {
+  createDeleteDeckUseCase,
+  createLoadDeckBuilderUseCase,
+  createSaveDeckUseCase,
+} from '@/infra/di/usecase-factory';
 
 type BoardPlacement = {
   row: number;
@@ -22,7 +26,9 @@ export function useDeckBuilderScreen() {
   const [deckName, setDeckName] = useState('');
   const [token, setToken] = useState<string | undefined>(undefined);
   const [isSessionResolved, setIsSessionResolved] = useState(false);
-  const [selectedPieceForPlacement, setSelectedPieceForPlacement] = useState<OwnedPiece | null>(null);
+  const [selectedPieceForPlacement, setSelectedPieceForPlacement] = useState<OwnedPiece | null>(
+    null,
+  );
   const [boardPlacements, setBoardPlacements] = useState<BoardPlacement[]>([]);
 
   useEffect(() => {
@@ -70,7 +76,9 @@ export function useDeckBuilderScreen() {
       .finally(() => {
         if (active) setIsLoading(false);
       });
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, [isApiMode, isSessionResolved, token]);
 
   function saveDeck() {
@@ -127,11 +135,15 @@ export function useDeckBuilderScreen() {
     selectPieceForPlacement: (piece: OwnedPiece) => setSelectedPieceForPlacement(piece),
     placeSelectedPieceAt: (row: number, col: number) => {
       if (!selectedPieceForPlacement) {
-        setBoardPlacements((prev) => prev.filter((placement) => !(placement.row === row && placement.col === col)));
+        setBoardPlacements((prev) =>
+          prev.filter((placement) => !(placement.row === row && placement.col === col)),
+        );
         return;
       }
       setBoardPlacements((prev) => {
-        const withoutCell = prev.filter((placement) => !(placement.row === row && placement.col === col));
+        const withoutCell = prev.filter(
+          (placement) => !(placement.row === row && placement.col === col),
+        );
         return [...withoutCell, { row, col, piece: selectedPieceForPlacement }];
       });
     },
@@ -139,7 +151,10 @@ export function useDeckBuilderScreen() {
     closePieceDetail: () => setSelectedPiece(null),
     saveModalOpen,
     openSaveModal: () => setSaveModalOpen(true),
-    closeSaveModal: () => { setSaveModalOpen(false); setDeckName(''); },
+    closeSaveModal: () => {
+      setSaveModalOpen(false);
+      setDeckName('');
+    },
     deckName,
     setDeckName,
     saveDeck,

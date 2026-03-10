@@ -42,11 +42,16 @@ const PIECE_IMAGES: Record<string, ReturnType<typeof require>> = {
 
 function rarityColor(rarity: string): string {
   switch (rarity) {
-    case 'SSR': return '#f0c040';
-    case 'UR': return '#c084fc';
-    case 'SR': return '#60a5fa';
-    case 'R': return '#34d399';
-    default: return '#94a3b8';
+    case 'SSR':
+      return '#f0c040';
+    case 'UR':
+      return '#c084fc';
+    case 'SR':
+      return '#60a5fa';
+    case 'R':
+      return '#34d399';
+    default:
+      return '#94a3b8';
   }
 }
 
@@ -107,7 +112,11 @@ function ResultCard({ vm }: { vm: GachaRoomVM }) {
           <Text className="text-lg font-black text-slate-100">{`${currencyChar}を獲得！`}</Text>
           {currencyImg != null && (
             <View className="my-3 items-center">
-              <Image source={currencyImg} contentFit="contain" style={{ width: 100, height: 100 }} />
+              <Image
+                source={currencyImg}
+                contentFit="contain"
+                style={{ width: 100, height: 100 }}
+              />
             </View>
           )}
           <Text className="text-sm text-slate-300">{`${label} の通貨が増えました。ショップで使いましょう。`}</Text>
@@ -151,7 +160,14 @@ function GachaVideoOverlay({ isHit, onEnd }: { isHit: boolean; onEnd: () => void
 
   return (
     <Pressable
-      style={{ position: 'absolute', inset: 0, zIndex: 9999, backgroundColor: 'rgba(0,0,0,0.92)', alignItems: 'center', justifyContent: 'center' }}
+      style={{
+        position: 'absolute',
+        inset: 0,
+        zIndex: 9999,
+        backgroundColor: 'rgba(0,0,0,0.92)',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
       onPress={onEnd}
     >
       <VideoView
@@ -160,7 +176,9 @@ function GachaVideoOverlay({ isHit, onEnd }: { isHit: boolean; onEnd: () => void
         contentFit="cover"
         nativeControls={false}
       />
-      <Text style={{ position: 'absolute', bottom: 24, color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>
+      <Text
+        style={{ position: 'absolute', bottom: 24, color: 'rgba(255,255,255,0.5)', fontSize: 12 }}
+      >
         タップでスキップ
       </Text>
     </Pressable>
@@ -172,7 +190,12 @@ function PieceOverlay({ char, onDismiss }: { char: string; onDismiss: () => void
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onDismiss}>
       <Pressable
-        style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', alignItems: 'center', justifyContent: 'center' }}
+        style={{
+          flex: 1,
+          backgroundColor: 'rgba(0,0,0,0.95)',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
         onPress={onDismiss}
       >
         {pieceImg ? (
@@ -209,9 +232,7 @@ export function GachaRoomScreen() {
   return (
     <SafeAreaView className="flex-1 bg-[#0f172a]" style={{ position: 'relative' }}>
       {/* 動画オーバーレイ */}
-      {vm.phase === 'video' && (
-        <GachaVideoOverlay isHit={isHit} onEnd={vm.onVideoEnd} />
-      )}
+      {vm.phase === 'video' && <GachaVideoOverlay isHit={isHit} onEnd={vm.onVideoEnd} />}
 
       {/* 駒イメージオーバーレイ */}
       {vm.phase === 'pieceOverlay' && vm.lastResult?.type === 'hit' && (
@@ -229,7 +250,11 @@ export function GachaRoomScreen() {
             }}
             className="active:scale-95"
           >
-            <Image source={gachaAssets.home} contentFit="contain" style={{ width: 128, height: 40 }} />
+            <Image
+              source={gachaAssets.home}
+              contentFit="contain"
+              style={{ width: 128, height: 40 }}
+            />
           </Pressable>
         </View>
         <View className="mt-2 flex-row gap-2">
@@ -246,7 +271,11 @@ export function GachaRoomScreen() {
         {/* バナー一覧 */}
         {vm.banners.map((banner) => {
           const active = banner.key === vm.selectedKey;
-          const drawImage = banner.usesGold ? gachaAssets.drawGold : active ? gachaAssets.draw0 : gachaAssets.draw1;
+          const drawImage = banner.usesGold
+            ? gachaAssets.drawGold
+            : active
+              ? gachaAssets.draw0
+              : gachaAssets.draw1;
 
           return (
             <View
@@ -283,7 +312,11 @@ export function GachaRoomScreen() {
                   }}
                   className="active:scale-95"
                 >
-                  <Image source={drawImage} contentFit="contain" style={{ width: 100, height: 40 }} />
+                  <Image
+                    source={drawImage}
+                    contentFit="contain"
+                    style={{ width: 100, height: 40 }}
+                  />
                 </Pressable>
               </View>
             </View>

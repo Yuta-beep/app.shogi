@@ -102,7 +102,12 @@ const CODE_TO_SFEN: Record<string, string> = {
 
 function isEnemySide(side: string) {
   const normalized = side.toLowerCase();
-  return normalized === 'enemy' || normalized === 'cpu' || normalized === 'gote' || normalized === 'computer';
+  return (
+    normalized === 'enemy' ||
+    normalized === 'cpu' ||
+    normalized === 'gote' ||
+    normalized === 'computer'
+  );
 }
 
 function isKingChar(char: string) {
@@ -144,7 +149,9 @@ function pieceCodeFromPlacement(pieceCode: string | null, char: string): string 
 }
 
 function toSfenBoard(placements: BoardPiece[]) {
-  const board = Array.from({ length: BOARD_SIZE }, () => Array<string | null>(BOARD_SIZE).fill(null));
+  const board = Array.from({ length: BOARD_SIZE }, () =>
+    Array<string | null>(BOARD_SIZE).fill(null),
+  );
   for (const p of placements) {
     if (p.row < 0 || p.row >= BOARD_SIZE || p.col < 0 || p.col >= BOARD_SIZE) continue;
     const code = p.pieceCode ?? CHAR_TO_CODE[p.char];
@@ -181,7 +188,11 @@ function buildSfen(placements: BoardPiece[], sideToMove: Side, moveNo: number) {
   return `${board} ${side} - ${Math.max(1, moveNo)}`;
 }
 
-function applyAiMove(placements: BoardPiece[], side: Side, move: AiMoveResponse['selectedMove']): BoardPiece[] {
+function applyAiMove(
+  placements: BoardPiece[],
+  side: Side,
+  move: AiMoveResponse['selectedMove'],
+): BoardPiece[] {
   const next = placements.filter((p) => !(p.row === move.toRow && p.col === move.toCol));
 
   const code = move.dropPieceCode ?? move.pieceCode;
@@ -199,7 +210,9 @@ function applyAiMove(placements: BoardPiece[], side: Side, move: AiMoveResponse[
     return next;
   }
 
-  const pieceIndex = next.findIndex((p) => p.side === side && p.row === move.fromRow && p.col === move.fromCol);
+  const pieceIndex = next.findIndex(
+    (p) => p.side === side && p.row === move.fromRow && p.col === move.fromCol,
+  );
   if (pieceIndex >= 0) {
     const moving = next[pieceIndex];
     next[pieceIndex] = {
@@ -309,7 +322,7 @@ export function StageShogiScreen() {
       pieces
         .map((placement) => getPieceImageUri(placement.imageSignedUrl))
         .filter((value): value is string => typeof value === 'string' && value.length > 0),
-    [pieces]
+    [pieces],
   );
 
   useEffect(() => {
@@ -389,7 +402,9 @@ export function StageShogiScreen() {
             void handleAiMove();
           }}
         >
-          <Text className="font-bold text-white">{isAiThinking ? 'AI思考中...' : 'AIに指させる'}</Text>
+          <Text className="font-bold text-white">
+            {isAiThinking ? 'AI思考中...' : 'AIに指させる'}
+          </Text>
         </Pressable>
       </View>
 
@@ -423,7 +438,9 @@ export function StageShogiScreen() {
               const king = isKingChar(placement.char);
               const pieceScalePercent = (king ? KING_RATIO : PIECE_RATIO) * 100;
               const placementKey = `${placement.side}-${placement.row}-${placement.col}-${index}`;
-              const imageUri = failedImageKeys[placementKey] ? null : getPieceImageUri(placement.imageSignedUrl);
+              const imageUri = failedImageKeys[placementKey]
+                ? null
+                : getPieceImageUri(placement.imageSignedUrl);
 
               return (
                 <View

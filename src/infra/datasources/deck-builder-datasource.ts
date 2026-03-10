@@ -55,7 +55,7 @@ function mapSavedDeck(deck: ApiDeck): SavedDeck {
     name: deck.name,
     pieces: deck.placements
       .slice()
-      .sort((a, b) => (a.rowNo - b.rowNo) || (a.colNo - b.colNo))
+      .sort((a, b) => a.rowNo - b.rowNo || a.colNo - b.colNo)
       .map((placement) => placement.char),
     savedAt: deck.updatedAt,
   };

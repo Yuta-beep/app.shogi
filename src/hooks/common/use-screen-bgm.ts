@@ -11,4 +11,3 @@ export function useScreenBgm(track: BgmTrack) {
     };
   }, [track]);
 }
-

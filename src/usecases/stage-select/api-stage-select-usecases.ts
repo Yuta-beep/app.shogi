@@ -1,8 +1,15 @@
 import { StageRepository } from '@/domain/repositories/stage-repository';
 import { stageNodes, stageRanges } from '@/constants/stage-select-data';
 import { ApiStageRepository } from '@/infra/repositories/stage-repository';
-import { LoadStageSelectUseCase, StageSelectSnapshot } from '@/usecases/stage-select/load-stage-select-usecase';
-import { SelectStageInput, SelectStageResult, SelectStageUseCase } from '@/usecases/stage-select/select-stage-usecase';
+import {
+  LoadStageSelectUseCase,
+  StageSelectSnapshot,
+} from '@/usecases/stage-select/load-stage-select-usecase';
+import {
+  SelectStageInput,
+  SelectStageResult,
+  SelectStageUseCase,
+} from '@/usecases/stage-select/select-stage-usecase';
 
 function nodeById(id: number) {
   return stageNodes.find((node) => node.id === id) ?? null;

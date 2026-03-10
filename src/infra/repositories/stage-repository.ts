@@ -1,4 +1,9 @@
-import { StageBattleSetup, StageRepository, StageSelectResult, StageSummary } from '@/domain/repositories/stage-repository';
+import {
+  StageBattleSetup,
+  StageRepository,
+  StageSelectResult,
+  StageSummary,
+} from '@/domain/repositories/stage-repository';
 import { StageApiDataSource } from '@/infra/datasources/stage-api-datasource';
 
 export class ApiStageRepository implements StageRepository {

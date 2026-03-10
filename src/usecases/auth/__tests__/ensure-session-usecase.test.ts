@@ -22,6 +22,16 @@ jest.mock('@/infra/datasources/player-supabase-datasource', () => ({
 describe('ensureSession', () => {
   const userId = 'user-uuid-abc';
 
+  describe('セッション取得時にエラーが発生した場合', () => {
+    it('そのままthrowし、匿名サインインしない', async () => {
+      mockGetSession.mockRejectedValueOnce(new Error('session fetch failed'));
+
+      await expect(ensureSession()).rejects.toThrow('session fetch failed');
+      expect(mockSignInAnonymously).not.toHaveBeenCalled();
+      expect(mockGetDisplayName).not.toHaveBeenCalled();
+    });
+  });
+
   describe('既存セッションがある場合', () => {
     const session = { user: { id: userId } };
 
@@ -43,6 +53,14 @@ describe('ensureSession', () => {
 
       expect(result).toEqual({ userId, isNewUser: false, needsUsernameSetup: true });
     });
+
+    it('display_name取得でエラーが起きたらthrowする', async () => {
+      mockGetSession.mockResolvedValueOnce({ data: { session } });
+      mockGetDisplayName.mockRejectedValueOnce(new Error('profile fetch failed'));
+
+      await expect(ensureSession()).rejects.toThrow('profile fetch failed');
+      expect(mockSignInAnonymously).not.toHaveBeenCalled();
+    });
   });
 
   describe('セッションがない場合（初回起動）', () => {
@@ -57,7 +75,15 @@ describe('ensureSession', () => {
       const result = await ensureSession();
 
       expect(mockSignInAnonymously).toHaveBeenCalledTimes(1);
+      expect(mockGetDisplayName).toHaveBeenCalledWith(userId);
       expect(result).toEqual({ userId, isNewUser: true, needsUsernameSetup: true });
+    });
+
+    it('signInAnonymouslyがrejectした場合はthrowする', async () => {
+      mockSignInAnonymously.mockRejectedValueOnce(new Error('network timeout'));
+
+      await expect(ensureSession()).rejects.toThrow('network timeout');
+      expect(mockGetDisplayName).not.toHaveBeenCalled();
     });
 
     it('signInAnonymouslyがエラーを返した場合はthrowする', async () => {

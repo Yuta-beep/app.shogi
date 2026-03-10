@@ -45,6 +45,11 @@ bun run start:tunnel:clear
 npm run test
 ```
 
+### 4. Format
+```bash
+bun run format
+```
+
 ## Environment Variables
 - `EXPO_PUBLIC_API_BASE_URL`
   - BFF のベースURL（例: `http://localhost:3000`）

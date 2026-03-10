@@ -1,4 +1,7 @@
-import { PrepareStageBattleUseCase, StageBattleSnapshot } from '@/usecases/stage-battle/prepare-stage-battle-usecase';
+import {
+  PrepareStageBattleUseCase,
+  StageBattleSnapshot,
+} from '@/usecases/stage-battle/prepare-stage-battle-usecase';
 
 export class MockPrepareStageBattleUseCase implements PrepareStageBattleUseCase {
   async execute(input: { stageId?: string }): Promise<StageBattleSnapshot> {

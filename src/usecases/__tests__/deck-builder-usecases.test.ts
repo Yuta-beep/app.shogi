@@ -6,7 +6,17 @@ describe('MockLoadDeckBuilderUseCase', () => {
     const snapshot = await usecase.execute();
 
     expect(snapshot.ownedPieces.map((piece) => piece.char)).toEqual([
-      '忍', '影', '砲', '竜', '鳳', '炎', '火', '水', '波', '木', '葉',
+      '忍',
+      '影',
+      '砲',
+      '竜',
+      '鳳',
+      '炎',
+      '火',
+      '水',
+      '波',
+      '木',
+      '葉',
     ]);
   });
 });

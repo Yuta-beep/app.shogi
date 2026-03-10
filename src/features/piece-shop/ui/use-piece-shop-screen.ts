@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { useModalState } from '@/hooks/common/use-modal-state';
-import { createLoadShopCatalogUseCase, createPurchaseShopItemUseCase } from '@/infra/di/usecase-factory';
+import {
+  createLoadShopCatalogUseCase,
+  createPurchaseShopItemUseCase,
+} from '@/infra/di/usecase-factory';
 import { ShopItem } from '@/domain/models/shop';
 
 export type PieceShopVM = {
@@ -63,7 +66,9 @@ export function usePieceShopScreen(): PieceShopVM {
     try {
       const result = await purchaseUseCase.execute({ item: confirm.payload });
       if (result.success || result.reason === 'UI_ONLY') {
-        setOwned((prev) => (prev.includes(confirm.payload!.key) ? prev : [...prev, confirm.payload!.key]));
+        setOwned((prev) =>
+          prev.includes(confirm.payload!.key) ? prev : [...prev, confirm.payload!.key],
+        );
       }
     } finally {
       setIsLoading(false);

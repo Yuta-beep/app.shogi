@@ -44,8 +44,14 @@ export function useStageSelectScreen(): StageSelectScreenVM {
     };
   }, [loadStageSelectUseCase]);
 
-  const nodesInPage = useMemo(() => nodes.filter((node) => node.page === currentPage), [currentPage, nodes]);
-  const selectedStage = useMemo(() => nodes.find((node) => node.id === selectedStageId) ?? null, [nodes, selectedStageId]);
+  const nodesInPage = useMemo(
+    () => nodes.filter((node) => node.page === currentPage),
+    [currentPage, nodes],
+  );
+  const selectedStage = useMemo(
+    () => nodes.find((node) => node.id === selectedStageId) ?? null,
+    [nodes, selectedStageId],
+  );
 
   async function selectStage(stageId: number) {
     setIsLoading(true);

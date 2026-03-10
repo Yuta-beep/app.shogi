@@ -53,7 +53,7 @@ describe('PlayerSupabaseDataSource', () => {
       expect(mockFrom).toHaveBeenCalledWith('players');
       expect(mockUpsert).toHaveBeenCalledWith(
         { id: userId, display_name: '新しい名前' },
-        { onConflict: 'id' }
+        { onConflict: 'id' },
       );
       expect(mockUpsertSelect).toHaveBeenCalledWith('id');
     });

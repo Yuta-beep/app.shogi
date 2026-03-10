@@ -17,7 +17,9 @@ export function TitleScreen() {
   const transitionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const preloadTargets = useMemo(() => {
-    const optionalTargets = Array.isArray(homeAssets.preloadTargets) ? homeAssets.preloadTargets : [];
+    const optionalTargets = Array.isArray(homeAssets.preloadTargets)
+      ? homeAssets.preloadTargets
+      : [];
     return [homeAssets.titleBackground, ...optionalTargets].filter(Boolean);
   }, []);
 

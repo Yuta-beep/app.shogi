@@ -92,7 +92,7 @@ describe('認証フロー 統合テスト', () => {
       expect(mockFrom).toHaveBeenCalledWith('players');
       expect(mockUpsert).toHaveBeenCalledWith(
         { id: NEW_USER_ID, display_name: '新プレイヤー' },
-        { onConflict: 'id' }
+        { onConflict: 'id' },
       );
       expect(mockUpsertSelect).toHaveBeenCalledWith('id');
     });

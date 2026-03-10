@@ -1,6 +1,9 @@
 import { StageRepository } from '@/domain/repositories/stage-repository';
 import { ApiStageRepository } from '@/infra/repositories/stage-repository';
-import { PrepareStageBattleUseCase, StageBattleSnapshot } from '@/usecases/stage-battle/prepare-stage-battle-usecase';
+import {
+  PrepareStageBattleUseCase,
+  StageBattleSnapshot,
+} from '@/usecases/stage-battle/prepare-stage-battle-usecase';
 
 export class ApiPrepareStageBattleUseCase implements PrepareStageBattleUseCase {
   constructor(private readonly repository: StageRepository = new ApiStageRepository()) {}

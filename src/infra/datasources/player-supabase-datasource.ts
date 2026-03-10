@@ -34,7 +34,7 @@ export class PlayerSupabaseDataSource {
           id: userId,
           display_name: displayName,
         },
-        { onConflict: 'id' }
+        { onConflict: 'id' },
       )
       .select('id')
       .single();

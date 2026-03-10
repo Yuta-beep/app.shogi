@@ -1,5 +1,8 @@
 import { stageNodes, stageRanges } from '@/constants/stage-select-data';
-import { MockLoadStageSelectUseCase, MockSelectStageUseCase } from '@/usecases/stage-select/mock-stage-select-usecases';
+import {
+  MockLoadStageSelectUseCase,
+  MockSelectStageUseCase,
+} from '@/usecases/stage-select/mock-stage-select-usecases';
 
 describe('stage select usecases', () => {
   it('loads all ranges and nodes from constants', async () => {

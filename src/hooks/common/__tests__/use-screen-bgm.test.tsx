@@ -21,4 +21,3 @@ describe('useScreenBgm', () => {
     expect(stopBgm).toHaveBeenCalledWith('home');
   });
 });
-

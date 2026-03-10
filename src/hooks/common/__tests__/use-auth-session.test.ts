@@ -72,4 +72,20 @@ describe('useAuthSession', () => {
     expect(result.current.error).toBeInstanceOf(Error);
     expect(result.current.error?.message).toBe('string error');
   });
+
+  it('Supabase風のオブジェクトエラーは詳細付きメッセージに正規化される', async () => {
+    mockEnsureSession.mockRejectedValueOnce({
+      message: 'Auth failed',
+      code: '401',
+      details: 'Token expired',
+      hint: 'Sign in again',
+    });
+
+    const { result } = renderHook(() => useAuthSession());
+
+    await waitFor(() => expect(result.current.isReady).toBe(true));
+
+    expect(result.current.error).toBeInstanceOf(Error);
+    expect(result.current.error?.message).toBe('Auth failed (401 | Token expired | Sign in again)');
+  });
 });
