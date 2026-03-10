@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 
 import type { OwnedPiece, SavedDeck } from '@/domain/models/deck-builder';
 import { supabase } from '@/lib/supabase/supabase-client';
+import { isApiDataSource } from '@/lib/config/data-source';
 import {
   createDeleteDeckUseCase,
   createLoadDeckBuilderUseCase,
@@ -89,7 +90,7 @@ function countDeckPlacements(placements: BoardPlacement[]): number {
 }
 
 export function useDeckBuilderScreen() {
-  const isApiMode = process.env.EXPO_PUBLIC_DATA_SOURCE === 'api';
+  const isApiMode = isApiDataSource();
   const [ownedPieces, setOwnedPieces] = useState<OwnedPiece[]>([]);
   const [savedDecks, setSavedDecks] = useState<SavedDeck[]>([]);
   const [isLoading, setIsLoading] = useState(true);

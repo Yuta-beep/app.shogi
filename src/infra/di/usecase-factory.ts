@@ -42,9 +42,10 @@ import {
   MockSelectStageUseCase,
 } from '@/usecases/stage-select/mock-stage-select-usecases';
 import { SelectStageUseCase } from '@/usecases/stage-select/select-stage-usecase';
+import { isApiDataSource } from '@/lib/config/data-source';
 
 function shouldUseApi() {
-  return process.env.EXPO_PUBLIC_DATA_SOURCE === 'api';
+  return isApiDataSource();
 }
 
 export function createLoadHomeSnapshotUseCase(): LoadHomeSnapshotUseCase {

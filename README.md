@@ -31,7 +31,8 @@ cp .env.example .env
 
 主な変数:
 - `EXPO_PUBLIC_DATA_SOURCE`
-  - `mock` または `api`
+  - `local` または `api`
+  - `local`: ローカル固定データ（旧 `mock` も互換で同等動作）
 - `EXPO_PUBLIC_API_BASE_URL`
   - API(BFF) のベースURL
   - 実機確認時は `http://<実機のIP>:3000` を使用

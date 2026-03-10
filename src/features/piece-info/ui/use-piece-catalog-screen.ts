@@ -4,11 +4,12 @@ import {
   createLoadDeckBuilderUseCase,
   createLoadPieceCatalogUseCase,
 } from '@/infra/di/usecase-factory';
+import { isApiDataSource } from '@/lib/config/data-source';
 import { supabase } from '@/lib/supabase/supabase-client';
 import { PieceCatalogItem } from '@/domain/models/piece';
 
 export function usePieceCatalogScreen() {
-  const isApiMode = process.env.EXPO_PUBLIC_DATA_SOURCE === 'api';
+  const isApiMode = isApiDataSource();
   const [items, setItems] = useState<PieceCatalogItem[]>([]);
   const [index, setIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
