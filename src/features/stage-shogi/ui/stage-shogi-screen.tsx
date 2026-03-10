@@ -393,26 +393,36 @@ export function StageShogiScreen() {
   );
 
   useEffect(() => {
-    setFailedImageKeys({});
     if (remoteImageUrls.length === 0) {
-      setArePieceImagesReady(true);
+      if (Object.keys(failedImageKeys).length > 0) {
+        setFailedImageKeys({});
+      }
+      if (!arePieceImagesReady) {
+        setArePieceImagesReady(true);
+      }
       return;
     }
 
+    if (Object.keys(failedImageKeys).length > 0) {
+      setFailedImageKeys({});
+    }
+
     let active = true;
-    setArePieceImagesReady(false);
+    if (arePieceImagesReady) {
+      setArePieceImagesReady(false);
+    }
     Image.prefetch(remoteImageUrls)
       .catch(() => undefined)
       .finally(() => {
         if (active) {
-          setArePieceImagesReady(true);
+          setArePieceImagesReady((prev) => (prev ? prev : true));
         }
       });
 
     return () => {
       active = false;
     };
-  }, [remoteImageUrls]);
+  }, [arePieceImagesReady, failedImageKeys, remoteImageUrls]);
 
   const handleAiMove = async (
     nextPieces: BoardPiece[],
