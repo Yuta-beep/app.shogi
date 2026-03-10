@@ -12,6 +12,7 @@ type ApiOwnedPiece = {
   char: string;
   name: string;
   imageSignedUrl: string | null;
+  quantity: number;
   acquiredAt: string;
   source: string;
 };
@@ -44,6 +45,7 @@ function mapOwnedPiece(piece: ApiOwnedPiece): OwnedPiece {
     char: piece.char,
     name: piece.name,
     imageSignedUrl: piece.imageSignedUrl,
+    quantity: piece.quantity,
     desc: `${piece.name}の詳細は準備中です。`,
     skill: '準備中',
     move: '準備中',

@@ -72,6 +72,10 @@ function initialBoardPlacementsFromDecks(
   }));
 }
 
+function pieceStock(piece: OwnedPiece): number {
+  return piece.quantity ?? 1;
+}
+
 export function useDeckBuilderScreen() {
   const isApiMode = process.env.EXPO_PUBLIC_DATA_SOURCE === 'api';
   const [ownedPieces, setOwnedPieces] = useState<OwnedPiece[]>([]);
@@ -187,6 +191,15 @@ export function useDeckBuilderScreen() {
     }
   }
 
+  function getPlacedCount(piece: OwnedPiece): number {
+    if (typeof piece.pieceId !== 'number') return 0;
+    return boardPlacements.filter((placement) => placement.piece.pieceId === piece.pieceId).length;
+  }
+
+  function getRemainingCount(piece: OwnedPiece): number {
+    return Math.max(pieceStock(piece) - getPlacedCount(piece), 0);
+  }
+
   return {
     ownedPieces,
     selectedPieceForPlacement,
@@ -195,6 +208,7 @@ export function useDeckBuilderScreen() {
     isLoading,
     selectedPiece,
     selectPieceForPlacement: (piece: OwnedPiece) => setSelectedPieceForPlacement(piece),
+    getRemainingCount,
     placeSelectedPieceAt: (row: number, col: number) => {
       if (!selectedPieceForPlacement) {
         setBoardPlacements((prev) =>
@@ -203,6 +217,17 @@ export function useDeckBuilderScreen() {
         return;
       }
       setBoardPlacements((prev) => {
+        const existing =
+          prev.find((placement) => placement.row === row && placement.col === col) ?? null;
+        const alreadyPlaced = prev.filter(
+          (placement) => placement.piece.pieceId === selectedPieceForPlacement.pieceId,
+        ).length;
+        const isReplacingSamePiece =
+          existing?.piece.pieceId === selectedPieceForPlacement.pieceId && existing !== null;
+        const allowedCount = pieceStock(selectedPieceForPlacement);
+        if (!isReplacingSamePiece && alreadyPlaced >= allowedCount) {
+          return prev;
+        }
         const withoutCell = prev.filter(
           (placement) => !(placement.row === row && placement.col === col),
         );

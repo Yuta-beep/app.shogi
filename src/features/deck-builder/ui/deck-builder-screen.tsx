@@ -163,33 +163,40 @@ export function DeckBuilderScreen() {
           所持駒（駒を選択して盤面マスをタップで配置・未選択ならマスの駒を削除）
         </Text>
         <View className="mt-2 flex-row flex-wrap gap-2">
-          {vm.ownedPieces.map((piece) => (
-            <Pressable
-              key={piece.char}
-              onPress={() => {
-                void playSe('tap');
-                vm.selectPieceForPlacement(piece);
-              }}
-              onLongPress={() => {
-                vm.openPieceDetail(piece);
-              }}
-              className={`h-16 w-16 items-center justify-center active:scale-95 ${
-                vm.selectedPieceForPlacement?.pieceId === piece.pieceId
-                  ? 'rounded-md border border-[#8b0000]/50 bg-[#fff7e6]'
-                  : ''
-              }`}
-            >
-              {piece.imageSignedUrl ? (
-                <Image
-                  source={{ uri: piece.imageSignedUrl }}
-                  contentFit="contain"
-                  style={{ width: 60, height: 60 }}
-                />
-              ) : (
-                <Text className="text-lg font-black text-[#2f1b14]">{piece.char}</Text>
-              )}
-            </Pressable>
-          ))}
+          {vm.ownedPieces.map((piece) => {
+            const remaining = vm.getRemainingCount(piece);
+            const outOfStock = remaining <= 0;
+            return (
+              <Pressable
+                key={piece.char}
+                onPress={() => {
+                  void playSe('tap');
+                  vm.selectPieceForPlacement(piece);
+                }}
+                onLongPress={() => {
+                  vm.openPieceDetail(piece);
+                }}
+                className={`relative h-16 w-16 items-center justify-center active:scale-95 ${
+                  vm.selectedPieceForPlacement?.pieceId === piece.pieceId
+                    ? 'rounded-md border border-[#8b0000]/50 bg-[#fff7e6]'
+                    : ''
+                } ${outOfStock ? 'opacity-45' : ''}`}
+              >
+                {piece.imageSignedUrl ? (
+                  <Image
+                    source={{ uri: piece.imageSignedUrl }}
+                    contentFit="contain"
+                    style={{ width: 60, height: 60 }}
+                  />
+                ) : (
+                  <Text className="text-lg font-black text-[#2f1b14]">{piece.char}</Text>
+                )}
+                <View className="absolute -right-1 -top-1 rounded-full bg-black/75 px-1.5 py-0.5">
+                  <Text className="text-[10px] font-black text-white">{`×${remaining}`}</Text>
+                </View>
+              </Pressable>
+            );
+          })}
         </View>
       </View>
 

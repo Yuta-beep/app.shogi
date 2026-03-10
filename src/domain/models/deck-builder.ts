@@ -3,6 +3,7 @@ export type OwnedPiece = {
   char: string;
   name: string;
   imageSignedUrl?: string | null;
+  quantity?: number;
   desc: string;
   skill: string;
   move: string;
