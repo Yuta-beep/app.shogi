@@ -333,6 +333,7 @@ export function StageShogiScreen() {
 
   useEffect(() => {
     if (isLoading || isCreatingGame || gameId || !userId) return;
+    if (snapshot.placements.length > 0 && pieces.length === 0) return;
 
     let active = true;
     setIsCreatingGame(true);
@@ -369,7 +370,7 @@ export function StageShogiScreen() {
     return () => {
       active = false;
     };
-  }, [gameId, isCreatingGame, isLoading, moveNo, params.stage, pieces, sideToMove, userId]);
+  }, [gameId, isLoading, moveNo, params.stage, pieces, sideToMove, snapshot, userId]);
 
   const remoteImageUrls = useMemo(
     () =>

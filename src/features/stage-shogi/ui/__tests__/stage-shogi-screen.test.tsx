@@ -4,6 +4,47 @@ import { StageShogiScreen } from '@/features/stage-shogi/ui/stage-shogi-screen';
 
 const mockPostJson = jest.fn();
 const mockExecutePieceCatalog = jest.fn();
+const stageBattleSnapshot = {
+  stageLabel: 'STAGE 1',
+  turnLabel: 'TURN 1',
+  handLabel: '持ち駒',
+  boardSize: 9,
+  placements: [
+    {
+      side: 'player',
+      row: 6,
+      col: 4,
+      pieceId: 1,
+      pieceCode: 'FU',
+      char: '歩',
+      imageBucket: null,
+      imageKey: null,
+      imageSignedUrl: null,
+    },
+    {
+      side: 'player',
+      row: 8,
+      col: 4,
+      pieceId: 2,
+      pieceCode: 'OU',
+      char: '王',
+      imageBucket: null,
+      imageKey: null,
+      imageSignedUrl: null,
+    },
+    {
+      side: 'enemy',
+      row: 0,
+      col: 4,
+      pieceId: 3,
+      pieceCode: 'OU',
+      char: '玉',
+      imageBucket: null,
+      imageKey: null,
+      imageSignedUrl: null,
+    },
+  ],
+};
 
 jest.mock('expo-router', () => ({
   useLocalSearchParams: () => ({ stage: '1' }),
@@ -30,47 +71,7 @@ jest.mock('@/infra/di/usecase-factory', () => ({
 jest.mock('@/features/stage-shogi/ui/use-stage-battle-screen', () => ({
   useStageBattleScreen: () => ({
     isLoading: false,
-    snapshot: {
-      stageLabel: 'STAGE 1',
-      turnLabel: 'TURN 1',
-      handLabel: '持ち駒',
-      boardSize: 9,
-      placements: [
-        {
-          side: 'player',
-          row: 6,
-          col: 4,
-          pieceId: 1,
-          pieceCode: 'FU',
-          char: '歩',
-          imageBucket: null,
-          imageKey: null,
-          imageSignedUrl: null,
-        },
-        {
-          side: 'player',
-          row: 8,
-          col: 4,
-          pieceId: 2,
-          pieceCode: 'OU',
-          char: '王',
-          imageBucket: null,
-          imageKey: null,
-          imageSignedUrl: null,
-        },
-        {
-          side: 'enemy',
-          row: 0,
-          col: 4,
-          pieceId: 3,
-          pieceCode: 'OU',
-          char: '玉',
-          imageBucket: null,
-          imageKey: null,
-          imageSignedUrl: null,
-        },
-      ],
-    },
+    snapshot: stageBattleSnapshot,
   }),
 }));
 
@@ -174,10 +175,17 @@ describe('StageShogiScreen ai call', () => {
   });
 
   it('calls /api/v1/ai/move after player makes a legal move', async () => {
-    const { getByTestId } = render(<StageShogiScreen />);
+    const { getByTestId, getByText } = render(<StageShogiScreen />);
 
     await waitFor(() => {
       expect(mockPostJson).toHaveBeenCalledWith('/api/v1/games', expect.any(Object));
+    });
+
+    await waitFor(() => {
+      expect(getByText('歩')).toBeTruthy();
+    });
+    await waitFor(() => {
+      expect(getByText('gameId: game-1')).toBeTruthy();
     });
 
     fireEvent.press(getByTestId('board-cell-6-4'));
