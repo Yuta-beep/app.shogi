@@ -1,8 +1,9 @@
 import { Image } from 'expo-image';
 import { useLocalSearchParams } from 'expo-router';
+import { Crown, Shield } from 'lucide-react-native';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import Svg, { Line, Rect } from 'react-native-svg';
+import Svg, { Line, Polygon, Rect } from 'react-native-svg';
 
 import { AppLoadingScreen } from '@/components/organism/app-loading-screen';
 import { homeAssets } from '@/constants/home-assets';
@@ -178,15 +179,25 @@ function normalizeCellIndex(value: number) {
   return null;
 }
 
-function sideBadgeClass(side: string) {
-  if (isEnemySide(side)) {
-    return 'bg-[#7f1d1d] text-white';
-  }
-  return 'bg-[#14532d] text-white';
-}
-
 function normalizeSide(side: string): Side {
   return isEnemySide(side) ? 'enemy' : 'player';
+}
+
+function fallbackPiecePalette(side: string) {
+  if (isEnemySide(side)) {
+    return {
+      fill: '#fee2e2',
+      stroke: '#991b1b',
+      icon: '#7f1d1d',
+      text: '#7f1d1d',
+    };
+  }
+  return {
+    fill: '#dcfce7',
+    stroke: '#166534',
+    icon: '#14532d',
+    text: '#14532d',
+  };
 }
 
 function pieceCodeFromPlacement(pieceCode: string | null, char: string): string | null {
@@ -370,8 +381,12 @@ function applyDropWithHands(
   side: Side,
   to: BoardCell,
   pieceCode: string,
+  visuals?: {
+    char?: string;
+    imageSignedUrl?: string | null;
+  },
 ) {
-  const char = CODE_TO_CHAR[pieceCode] ?? '?';
+  const char = visuals?.char ?? CODE_TO_CHAR[pieceCode] ?? '?';
   const nextHands = addHandPiece(hands, side, pieceCode, -1);
   const next: BoardPiece[] = [...placements];
   next.push({
@@ -381,9 +396,25 @@ function applyDropWithHands(
     pieceCode,
     char,
     promoted: false,
-    imageSignedUrl: null,
+    imageSignedUrl: visuals?.imageSignedUrl ?? null,
   });
   return { pieces: next, hands: nextHands };
+}
+
+function resolveDropPieceVisual(
+  pieceCode: string,
+  pieceDefsByCode: Partial<Record<string, PieceCatalogItem>>,
+  placements: BoardPiece[],
+) {
+  const fromCatalog = pieceDefsByCode[pieceCode];
+  const char = fromCatalog?.char ?? CODE_TO_CHAR[pieceCode] ?? '?';
+  if (fromCatalog?.imageSignedUrl) {
+    return { char, imageSignedUrl: fromCatalog.imageSignedUrl };
+  }
+  const fromBoard = placements.find(
+    (piece) => piece.pieceCode === pieceCode && piece.imageSignedUrl,
+  );
+  return { char, imageSignedUrl: fromBoard?.imageSignedUrl ?? null };
 }
 
 function buildLegalMoves(
@@ -477,16 +508,23 @@ function buildLegalMoves(
   return moves;
 }
 
-function applyAiMove(placements: BoardPiece[], hands: HandsState, move: AiSelectedMove) {
+function applyAiMove(
+  placements: BoardPiece[],
+  hands: HandsState,
+  move: AiSelectedMove,
+  pieceDefsByCode: Partial<Record<string, PieceCatalogItem>>,
+) {
   if (move.fromRow === null || move.fromCol === null) {
     const pieceCode = move.dropPieceCode ?? move.pieceCode;
     if (!pieceCode) return { pieces: placements, hands };
+    const visuals = resolveDropPieceVisual(pieceCode, pieceDefsByCode, placements);
     return applyDropWithHands(
       placements,
       hands,
       'enemy',
       { row: move.toRow, col: move.toCol },
       pieceCode,
+      visuals,
     );
   }
   return applyMoveWithHands(
@@ -737,6 +775,7 @@ export function StageShogiScreen() {
         nextPieces,
         nextHands,
         response.selectedMove,
+        pieceDefsByCode,
       );
       setPieces(afterAiPieces);
       setHands(afterAiHands);
@@ -799,12 +838,14 @@ export function StageShogiScreen() {
 
   function commitPlayerDrop(pieceCode: string, to: BoardCell) {
     if (!canDropPiece(pieces, hands, 'player', pieceCode, to, BOARD_SIZE)) return;
+    const visuals = resolveDropPieceVisual(pieceCode, pieceDefsByCode, pieces);
     const { pieces: droppedPieces, hands: droppedHands } = applyDropWithHands(
       pieces,
       hands,
       'player',
       to,
       pieceCode,
+      visuals,
     );
     setPieces(droppedPieces);
     setHands(droppedHands);
@@ -1104,11 +1145,10 @@ export function StageShogiScreen() {
                     }}
                   >
                     <View
-                      className={`items-center justify-center ${imageUri ? '' : sideBadgeClass(placement.side)}`}
+                      className="items-center justify-center"
                       style={{
                         width: `${pieceScalePercent}%`,
                         height: `${pieceScalePercent}%`,
-                        borderRadius: imageUri ? 0 : 999,
                         overflow: 'hidden',
                         transform: [{ rotate: enemy ? '180deg' : '0deg' }],
                       }}
@@ -1123,7 +1163,37 @@ export function StageShogiScreen() {
                           }}
                         />
                       ) : (
-                        <Text className="text-sm font-black">{getDisplayChar(placement)}</Text>
+                        <View style={{ width: '100%', height: '100%' }}>
+                          <Svg width="100%" height="100%" viewBox="0 0 100 120">
+                            <Polygon
+                              points="50,3 97,30 83,117 17,117 3,30"
+                              fill={fallbackPiecePalette(placement.side).fill}
+                              stroke={fallbackPiecePalette(placement.side).stroke}
+                              strokeWidth={5}
+                            />
+                          </Svg>
+                          <View
+                            style={{
+                              position: 'absolute',
+                              inset: 0,
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: 2,
+                            }}
+                          >
+                            {king ? (
+                              <Crown size={16} color={fallbackPiecePalette(placement.side).icon} />
+                            ) : (
+                              <Shield size={16} color={fallbackPiecePalette(placement.side).icon} />
+                            )}
+                            <Text
+                              className="text-sm font-black"
+                              style={{ color: fallbackPiecePalette(placement.side).text }}
+                            >
+                              {getDisplayChar(placement)}
+                            </Text>
+                          </View>
+                        </View>
                       )}
                     </View>
                   </View>
