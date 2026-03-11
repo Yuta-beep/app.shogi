@@ -1,5 +1,4 @@
 import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
 import { ScrollView, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -11,8 +10,8 @@ import { useScreenBgm } from '@/hooks/common/use-screen-bgm';
 import { playSe } from '@/lib/audio/audio-manager';
 import { MoveVector } from '@/domain/models/piece';
 
-const pieceTemplate = require('../../../../assets/piece-info/piece-template.png');
-const homeBack = require('../../../../assets/shared/home-back.png');
+const pieceInfoBackground = require('../../../../assets/piece-info/piece-info-bg.png');
+const boardHeader = require('../../../../assets/piece-info/board.png');
 const pieceImages: Record<string, number> = {
   香: require('../../../../assets/piece-info/pieces/香.png'),
   桂: require('../../../../assets/piece-info/pieces/桂.png'),
@@ -41,7 +40,7 @@ function MovementGrid({ vectors, isRepeatable }: { vectors: MoveVector[]; isRepe
   }
 
   return (
-    <View className="mt-3 items-center">
+    <View className="items-center">
       <Text className="text-xs font-black text-[#7f1d1d]">【移動範囲】</Text>
       <View className="mt-2 border border-[#8b0000]/30">
         {grid.map((row, rowIdx) => (
@@ -72,14 +71,13 @@ function MovementGrid({ vectors, isRepeatable }: { vectors: MoveVector[]; isRepe
 }
 
 export function PieceInfoScreen() {
-  const router = useRouter();
   const { piece, index, total, previous, next, isLoading } = usePieceCatalogScreen();
   const currentPieceImage = piece.imageSignedUrl
     ? { uri: piece.imageSignedUrl }
     : (pieceImages[piece.char] ?? null);
   const { isReady: areAssetsReady } = useAssetPreload([
-    pieceTemplate,
-    homeBack,
+    pieceInfoBackground,
+    boardHeader,
     ...Object.values(pieceImages),
   ]);
   useScreenBgm('catalog');
@@ -89,96 +87,105 @@ export function PieceInfoScreen() {
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-[#f8f3e8]">
+    <View className="flex-1">
       <View className="absolute inset-0">
         <Image
-          source={pieceTemplate}
-          contentFit="cover"
-          style={{ width: '100%', height: '100%' }}
+          source={pieceInfoBackground}
+          contentFit="fill"
+          style={{ width: '100%', height: '108%', transform: [{ translateY: -24 }] }}
         />
       </View>
 
-      <View className="flex-1 px-4 pb-4">
-        <View className="mt-2 flex-row items-center justify-between">
-          <Pressable
-            onPress={() => {
-              void playSe('tap');
-              router.replace('/home');
-            }}
-            className="h-[35px] w-[112px] overflow-hidden active:scale-95"
+      <SafeAreaView className="flex-1" edges={['left', 'right', 'bottom']}>
+        <View className="flex-1 px-4 pb-4">
+          <View className="flex-row items-center justify-end">
+            <Text className="text-lg font-black text-[#2f1b14]">駒情報</Text>
+          </View>
+
+          <View
+            className="-mt-1 h-24 w-full overflow-hidden rounded-xl"
+            style={{ transform: [{ translateY: 3 }] }}
           >
             <Image
-              source={homeBack}
-              contentFit="contain"
+              source={boardHeader}
+              contentFit="cover"
               style={{ width: '100%', height: '100%' }}
             />
-          </Pressable>
-          <Text className="text-lg font-black text-[#2f1b14]">駒情報</Text>
-        </View>
-
-        <ScrollView
-          className="flex-1 mt-2"
-          showsVerticalScrollIndicator={false}
-          scrollEnabled={false}
-        >
-          <View className="items-center">
-            {currentPieceImage ? (
-              <Image
-                source={currentPieceImage}
-                contentFit="contain"
-                style={{ width: 220, height: 220 }}
-              />
-            ) : (
-              <Text className="text-6xl font-black text-[#2f1b14]">{piece.char}</Text>
-            )}
-            <Text className="mt-2 text-base font-black text-[#2f1b14]">{piece.name}</Text>
-            <Text className="text-xs font-bold text-[#6b4532]">{`解放: ${piece.unlock}`}</Text>
-          </View>
-
-          <View className="h-2" />
-
-          <View className="rounded-xl border border-[#8b0000]/50 bg-white/90 p-4">
-            <Text className="text-sm font-black text-[#7f1d1d]">【スキル】</Text>
-            <Text className="mt-1 text-base leading-6 text-[#1f2937]">{piece.skill}</Text>
-
-            <Text className="mt-3 text-sm font-black text-[#7f1d1d]">【移動】</Text>
-            <Text className="mt-1 text-base leading-6 text-[#1f2937]">{piece.move}</Text>
-            {piece.canJump && (
-              <Text className="mt-1 text-xs font-bold text-[#92400e]">
-                障害物を飛び越えて移動可能
+            <View className="absolute inset-x-0 bottom-3 items-center justify-center">
+              <Text
+                className="text-[32px] text-[#2f1b14]"
+                style={{
+                  fontFamily: 'ShipporiMincho_700Bold',
+                  textShadowColor: 'rgba(47, 27, 20, 0.22)',
+                  textShadowOffset: { width: 0.6, height: 0.6 },
+                  textShadowRadius: 0.4,
+                }}
+              >
+                駒図鑑
               </Text>
-            )}
-
-            {piece.moveVectors.length > 0 && (
-              <MovementGrid vectors={piece.moveVectors} isRepeatable={piece.isRepeatable} />
-            )}
+            </View>
           </View>
 
-          <View className="h-6" />
-        </ScrollView>
+          <ScrollView
+            className="mt-1 flex-1"
+            showsVerticalScrollIndicator={false}
+            scrollEnabled={false}
+          >
+            <View className="items-center">
+              {currentPieceImage ? (
+                <Image
+                  source={currentPieceImage}
+                  contentFit="contain"
+                  style={{ width: 260, height: 260 }}
+                />
+              ) : (
+                <Text className="text-6xl font-black text-[#2f1b14]">{piece.char}</Text>
+              )}
+            </View>
 
-        <View className="flex-row items-center justify-center gap-3 pt-3">
-          <Pressable
-            onPress={() => {
-              void playSe('tap');
-              previous();
-            }}
-            className="h-12 w-12 items-center justify-center rounded-full border border-[#8b0000] bg-white active:scale-95"
-          >
-            <Text className="text-xl font-black text-[#8b0000]">←</Text>
-          </Pressable>
-          <Text className="text-sm font-bold text-[#6b4532]">{`${index + 1} / ${total}`}</Text>
-          <Pressable
-            onPress={() => {
-              void playSe('tap');
-              next();
-            }}
-            className="h-12 w-12 items-center justify-center rounded-full border border-[#8b0000] bg-white active:scale-95"
-          >
-            <Text className="text-xl font-black text-[#8b0000]">→</Text>
-          </Pressable>
+            <View className="rounded-xl border border-[#8b0000]/50 bg-white/90 p-4">
+              {piece.moveVectors.length > 0 && (
+                <MovementGrid vectors={piece.moveVectors} isRepeatable={piece.isRepeatable} />
+              )}
+
+              <Text className="mt-3 text-sm font-black text-[#7f1d1d]">【スキル】</Text>
+              <Text className="mt-1 text-base leading-6 text-[#1f2937]">{piece.skill}</Text>
+
+              <Text className="mt-3 text-sm font-black text-[#7f1d1d]">【移動】</Text>
+              <Text className="mt-1 text-base leading-6 text-[#1f2937]">{piece.move}</Text>
+              {piece.canJump && (
+                <Text className="mt-1 text-xs font-bold text-[#92400e]">
+                  障害物を飛び越えて移動可能
+                </Text>
+              )}
+            </View>
+
+            <View className="h-6" />
+          </ScrollView>
+
+          <View className="flex-row items-center justify-center gap-3 pt-3">
+            <Pressable
+              onPress={() => {
+                void playSe('tap');
+                previous();
+              }}
+              className="h-12 w-12 items-center justify-center rounded-full border border-[#8b0000] bg-white active:scale-95"
+            >
+              <Text className="text-xl font-black text-[#8b0000]">←</Text>
+            </Pressable>
+            <Text className="text-sm font-bold text-[#6b4532]">{`${index + 1} / ${total}`}</Text>
+            <Pressable
+              onPress={() => {
+                void playSe('tap');
+                next();
+              }}
+              className="h-12 w-12 items-center justify-center rounded-full border border-[#8b0000] bg-white active:scale-95"
+            >
+              <Text className="text-xl font-black text-[#8b0000]">→</Text>
+            </Pressable>
+          </View>
         </View>
-      </View>
-    </SafeAreaView>
+      </SafeAreaView>
+    </View>
   );
 }
