@@ -19,6 +19,20 @@ export type StageSelectScreenVM = {
   selectStage: (stageId: number) => Promise<void>;
 };
 
+function resolveInitialFocusStage(nodes: StageNodeData[]): StageNodeData | null {
+  if (nodes.length === 0) return null;
+
+  const nextChallenge = nodes.find((node) => node.isUnlocked && !node.isCleared);
+  if (nextChallenge) return nextChallenge;
+
+  const unlockedStages = nodes.filter((node) => node.isUnlocked);
+  if (unlockedStages.length > 0) {
+    return unlockedStages[unlockedStages.length - 1] ?? null;
+  }
+
+  return nodes[0] ?? null;
+}
+
 export function useStageSelectScreen(): StageSelectScreenVM {
   const [isLoading, setIsLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
@@ -40,6 +54,14 @@ export function useStageSelectScreen(): StageSelectScreenVM {
         const computedNodes = await loadStageSelectWithProgressUseCase.execute();
         if (active) {
           setNodes(computedNodes);
+          const focusedNode = resolveInitialFocusStage(computedNodes);
+          if (focusedNode) {
+            setCurrentPage(focusedNode.page);
+            setSelectedStageId(focusedNode.id);
+          } else {
+            setCurrentPage(1);
+            setSelectedStageId(null);
+          }
         }
       } finally {
         if (active) {
