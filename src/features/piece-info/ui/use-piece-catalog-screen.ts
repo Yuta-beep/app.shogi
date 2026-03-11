@@ -1,12 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import {
-  createLoadDeckBuilderUseCase,
-  createLoadPieceCatalogUseCase,
-} from '@/infra/di/usecase-factory';
-import { isApiDataSource } from '@/lib/config/data-source';
-import { supabase } from '@/lib/supabase/supabase-client';
 import { PieceCatalogItem } from '@/domain/models/piece';
+import { createLoadPieceCatalogUseCase } from '@/usecases/piece-info/create-piece-info-usecases';
+import { createLoadDeckBuilderUseCase } from '@/usecases/deck-builder/create-deck-builder-usecases';
+import { supabase } from '@/lib/supabase/supabase-client';
+import { isApiDataSource } from '@/lib/config/data-source';
 
 export function usePieceCatalogScreen() {
   const isApiMode = isApiDataSource();

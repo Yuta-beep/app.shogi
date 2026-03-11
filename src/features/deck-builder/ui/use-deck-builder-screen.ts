@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react';
 
 import type { OwnedPiece, SavedDeck } from '@/domain/models/deck-builder';
-import { supabase } from '@/lib/supabase/supabase-client';
-import { isApiDataSource } from '@/lib/config/data-source';
 import {
   createDeleteDeckUseCase,
   createLoadDeckBuilderUseCase,
   createSaveDeckUseCase,
-} from '@/infra/di/usecase-factory';
+} from '@/usecases/deck-builder/create-deck-builder-usecases';
+import { isApiDataSource } from '@/lib/config/data-source';
+import { supabase } from '@/lib/supabase/supabase-client';
 
 type BoardPlacement = {
   row: number;

@@ -2,9 +2,11 @@ import type { StageNodeData } from '@/domain/models/stage-select';
 import { useEffect, useMemo, useState } from 'react';
 
 import { stageRanges } from '@/constants/stage-select-data';
-import { StageProgressApiDataSource } from '@/infra/datasources/stage-progress-api-datasource';
-import { createLoadStageSelectUseCase, createSelectStageUseCase } from '@/infra/di/usecase-factory';
-import { supabase } from '@/lib/supabase/supabase-client';
+import {
+  createLoadStageSelectUseCase,
+  createSelectStageUseCase,
+} from '@/usecases/stage-select/create-stage-select-usecases';
+import { LoadStageSelectWithProgressUseCase } from '@/usecases/stage-select/load-stage-select-with-progress-usecase';
 
 export type StageSelectScreenVM = {
   isLoading: boolean;
@@ -24,42 +26,18 @@ export function useStageSelectScreen(): StageSelectScreenVM {
   const [nodes, setNodes] = useState<StageNodeData[]>([]);
 
   const loadStageSelectUseCase = useMemo(() => createLoadStageSelectUseCase(), []);
+  const loadStageSelectWithProgressUseCase = useMemo(
+    () => new LoadStageSelectWithProgressUseCase(loadStageSelectUseCase),
+    [loadStageSelectUseCase],
+  );
   const selectStageUseCase = useMemo(() => createSelectStageUseCase(), []);
-  const stageProgressDataSource = useMemo(() => new StageProgressApiDataSource(), []);
 
   useEffect(() => {
     let active = true;
     async function load() {
       setIsLoading(true);
       try {
-        const [snapshot, sessionResult] = await Promise.all([
-          loadStageSelectUseCase.execute(),
-          supabase.auth.getSession(),
-        ]);
-
-        const token = sessionResult.data.session?.access_token ?? null;
-        let clearedStageNos = new Set<number>();
-
-        if (token) {
-          try {
-            const progress = await stageProgressDataSource.getStageProgress(token);
-            clearedStageNos = new Set(progress.clearedStageNos);
-          } catch (error) {
-            console.warn('[stage-select] failed to load stage progress from API', error);
-          }
-        }
-
-        const computedNodes = snapshot.nodes.map((node) => {
-          const unlockedByStageProgress =
-            node.unlockStageNo == null || clearedStageNos.has(node.unlockStageNo);
-          const unlockedByServer = node.canStart ?? true;
-          return {
-            ...node,
-            isCleared: clearedStageNos.has(node.id),
-            isUnlocked: unlockedByStageProgress && unlockedByServer,
-          };
-        });
-
+        const computedNodes = await loadStageSelectWithProgressUseCase.execute();
         if (active) {
           setNodes(computedNodes);
         }
@@ -74,7 +52,7 @@ export function useStageSelectScreen(): StageSelectScreenVM {
     return () => {
       active = false;
     };
-  }, [loadStageSelectUseCase, stageProgressDataSource]);
+  }, [loadStageSelectWithProgressUseCase]);
 
   const nodesInPage = useMemo(
     () => nodes.filter((node) => node.page === currentPage),

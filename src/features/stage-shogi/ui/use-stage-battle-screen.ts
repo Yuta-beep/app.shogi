@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import { createPrepareStageBattleUseCase } from '@/infra/di/usecase-factory';
+import { createPrepareStageBattleUseCase } from '@/usecases/stage-battle/create-stage-battle-usecases';
 import { StageBattleSnapshot } from '@/usecases/stage-battle/prepare-stage-battle-usecase';
 
 const emptySnapshot: StageBattleSnapshot = {

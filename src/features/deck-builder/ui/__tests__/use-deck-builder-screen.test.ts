@@ -8,7 +8,7 @@ const mockDeleteExecute = jest.fn();
 const mockGetSession = jest.fn();
 const mockOnAuthStateChange = jest.fn();
 
-jest.mock('@/infra/di/usecase-factory', () => ({
+jest.mock('@/usecases/deck-builder/create-deck-builder-usecases', () => ({
   createLoadDeckBuilderUseCase: () => ({
     execute: (...args: unknown[]) => mockLoadExecute(...args),
   }),

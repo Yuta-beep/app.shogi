@@ -23,12 +23,16 @@ import {
   Side,
   HandsState,
 } from '@/features/stage-shogi/domain/game-rules';
-import { createLoadPieceCatalogUseCase } from '@/infra/di/usecase-factory';
 import { useStageBattleScreen } from '@/features/stage-shogi/ui/use-stage-battle-screen';
 import { useAssetPreload } from '@/hooks/common/use-asset-preload';
 import { useAuthSession } from '@/hooks/common/use-auth-session';
 import { useScreenBgm } from '@/hooks/common/use-screen-bgm';
-import { postJson } from '@/infra/http/api-client';
+import { createLoadPieceCatalogUseCase } from '@/usecases/piece-info/create-piece-info-usecases';
+import { CreateGameUseCase } from '@/usecases/stage-battle/create-game-usecase';
+import {
+  AiSelectedMove,
+  RequestAiMoveUseCase,
+} from '@/usecases/stage-battle/request-ai-move-usecase';
 import { MoveVector, PieceCatalogItem } from '@/usecases/piece-info/load-piece-catalog-usecase';
 
 const BOARD_SIZE = 9;
@@ -49,108 +53,6 @@ type PendingPromotion = {
   from: BoardCell;
   to: BoardCell;
 };
-
-type CreateGameResponse = {
-  gameId: string;
-  status: string;
-  startedAt: string;
-};
-
-type AiMoveResponse = {
-  selectedMove: {
-    fromRow: number | null;
-    fromCol: number | null;
-    toRow: number;
-    toCol: number;
-    pieceCode: string;
-    promote: boolean;
-    dropPieceCode: string | null;
-    capturedPieceCode: string | null;
-    notation: string | null;
-  };
-  meta: {
-    engineVersion: string;
-    thinkMs: number;
-    searchedNodes: number;
-    searchDepth: number;
-    evalCp: number;
-    candidateCount: number;
-    configApplied: Record<string, unknown>;
-  };
-};
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== 'object') return null;
-  return value as Record<string, unknown>;
-}
-
-function asString(value: unknown): string | null {
-  return typeof value === 'string' && value.length > 0 ? value : null;
-}
-
-function parseCreateGameResponse(raw: unknown): CreateGameResponse {
-  const obj = asRecord(raw);
-  if (!obj) {
-    throw new Error('create game response is not an object');
-  }
-  const gameId = asString(obj.gameId) ?? asString(obj.game_id) ?? asString(obj.id);
-  const status = asString(obj.status);
-  const startedAt = asString(obj.startedAt) ?? asString(obj.started_at);
-  if (!gameId || !status || !startedAt) {
-    const keys = Object.keys(obj).join(', ');
-    throw new Error(`invalid create game response keys: [${keys}]`);
-  }
-  return { gameId, status, startedAt };
-}
-
-function parseAiMoveResponse(raw: unknown): AiMoveResponse {
-  const obj = asRecord(raw);
-  if (!obj) {
-    throw new Error('ai move response is not an object');
-  }
-  const moveObj = asRecord(obj.selectedMove) ?? asRecord(obj.selected_move);
-  if (!moveObj) {
-    const keys = Object.keys(obj).join(', ');
-    throw new Error(`invalid ai move response keys: [${keys}]`);
-  }
-  const fromRow = moveObj.fromRow ?? moveObj.from_row ?? null;
-  const fromCol = moveObj.fromCol ?? moveObj.from_col ?? null;
-  const toRow = moveObj.toRow ?? moveObj.to_row;
-  const toCol = moveObj.toCol ?? moveObj.to_col;
-  const pieceCode = asString(moveObj.pieceCode ?? moveObj.piece_code);
-  const promote = moveObj.promote ?? false;
-  const dropPieceCode = (moveObj.dropPieceCode ?? moveObj.drop_piece_code ?? null) as string | null;
-  const capturedPieceCode = (moveObj.capturedPieceCode ?? moveObj.captured_piece_code ?? null) as
-    | string
-    | null;
-  const notation = (moveObj.notation ?? null) as string | null;
-
-  if (
-    typeof toRow !== 'number' ||
-    typeof toCol !== 'number' ||
-    !pieceCode ||
-    (fromRow !== null && typeof fromRow !== 'number') ||
-    (fromCol !== null && typeof fromCol !== 'number')
-  ) {
-    const keys = Object.keys(moveObj).join(', ');
-    throw new Error(`invalid ai selected move keys: [${keys}]`);
-  }
-
-  return {
-    selectedMove: {
-      fromRow: fromRow as number | null,
-      fromCol: fromCol as number | null,
-      toRow,
-      toCol,
-      pieceCode,
-      promote: Boolean(promote),
-      dropPieceCode,
-      capturedPieceCode,
-      notation,
-    },
-    meta: (asRecord(obj.meta) ?? {}) as AiMoveResponse['meta'],
-  };
-}
 
 const CODE_TO_CHAR: Record<string, string> = {
   FU: '歩',
@@ -524,11 +426,7 @@ function buildLegalMoves(
   return moves;
 }
 
-function applyAiMove(
-  placements: BoardPiece[],
-  hands: HandsState,
-  move: AiMoveResponse['selectedMove'],
-) {
+function applyAiMove(placements: BoardPiece[], hands: HandsState, move: AiSelectedMove) {
   if (move.fromRow === null || move.fromCol === null) {
     const pieceCode = move.dropPieceCode ?? move.pieceCode;
     if (!pieceCode) return { pieces: placements, hands };
@@ -572,6 +470,8 @@ export function StageShogiScreen() {
   const [pieceCatalog, setPieceCatalog] = useState<PieceCatalogItem[]>([]);
   const [winner, setWinner] = useState<Side | null>(null);
   const loadPieceCatalogUseCase = useMemo(() => createLoadPieceCatalogUseCase(), []);
+  const createGameUseCase = useMemo(() => new CreateGameUseCase(), []);
+  const requestAiMoveUseCase = useMemo(() => new RequestAiMoveUseCase(), []);
   const isMountedRef = useRef(true);
   const prevStageRef = useRef<string | undefined>(undefined);
   const aiThinkingRef = useRef(false);
@@ -670,21 +570,21 @@ export function StageShogiScreen() {
     setIsCreatingGame(true);
 
     const stageNo = Number(stageParam);
-    void postJson<unknown>('/api/v1/games', {
-      playerId: userId,
-      stageNo: Number.isInteger(stageNo) && stageNo > 0 ? stageNo : undefined,
-      initialPosition: {
-        sideToMove,
-        turnNumber: moveNo,
-        moveCount: moveNo - 1,
-        sfen: buildSfen(pieces, hands, sideToMove, moveNo),
-        boardState: {},
-        hands,
-      },
-    })
-      .then((raw) => {
+    void createGameUseCase
+      .execute({
+        playerId: userId,
+        stageNo: Number.isInteger(stageNo) && stageNo > 0 ? stageNo : undefined,
+        initialPosition: {
+          sideToMove,
+          turnNumber: moveNo,
+          moveCount: moveNo - 1,
+          sfen: buildSfen(pieces, hands, sideToMove, moveNo),
+          boardState: {},
+          hands,
+        },
+      })
+      .then((res) => {
         if (isMountedRef.current) {
-          const res = parseCreateGameResponse(raw);
           setGameId(res.gameId);
         }
       })
@@ -709,6 +609,7 @@ export function StageShogiScreen() {
     sideToMove,
     snapshot,
     userId,
+    createGameUseCase,
   ]);
 
   const remoteImageUrls = useMemo(
@@ -720,13 +621,16 @@ export function StageShogiScreen() {
   );
 
   useEffect(() => {
-    if (remoteImageUrls.length === 0) {
-      setFailedImageKeys((prev) => (Object.keys(prev).length > 0 ? {} : prev));
+    if (Object.keys(failedImageKeys).length === 0) {
       return;
     }
+    setFailedImageKeys({});
+  }, [failedImageKeys, remoteImageUrls]);
 
-    setFailedImageKeys((prev) => (Object.keys(prev).length > 0 ? {} : prev));
-
+  useEffect(() => {
+    if (remoteImageUrls.length === 0) {
+      return;
+    }
     Image.prefetch(remoteImageUrls)
       .catch(() => undefined)
       .finally(() => undefined);
@@ -766,8 +670,7 @@ export function StageShogiScreen() {
         engineConfig: {},
       };
 
-      const rawResponse = await postJson<unknown>('/api/v1/ai/move', payload);
-      const response = parseAiMoveResponse(rawResponse);
+      const response = await requestAiMoveUseCase.execute(payload);
 
       const { pieces: afterAiPieces, hands: afterAiHands } = applyAiMove(
         nextPieces,
