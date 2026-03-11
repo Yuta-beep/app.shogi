@@ -1,7 +1,9 @@
 import { ensureSession } from '../ensure-session-usecase';
+import { ApiClientError } from '@/infra/http/api-client';
 
 const mockGetSession = jest.fn();
 const mockSignInAnonymously = jest.fn();
+const mockSignOut = jest.fn();
 const mockGetDisplayName = jest.fn();
 
 jest.mock('@/lib/supabase/supabase-client', () => ({
@@ -9,6 +11,7 @@ jest.mock('@/lib/supabase/supabase-client', () => ({
     auth: {
       getSession: (...args: unknown[]) => mockGetSession(...args),
       signInAnonymously: (...args: unknown[]) => mockSignInAnonymously(...args),
+      signOut: (...args: unknown[]) => mockSignOut(...args),
     },
   },
 }));
@@ -21,6 +24,10 @@ jest.mock('@/infra/datasources/player-api-datasource', () => ({
 
 describe('ensureSession', () => {
   const userId = 'user-uuid-abc';
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
 
   describe('セッション取得時にエラーが発生した場合', () => {
     it('そのままthrowし、匿名サインインしない', async () => {
@@ -61,6 +68,31 @@ describe('ensureSession', () => {
 
       await expect(ensureSession()).rejects.toThrow('profile fetch failed');
       expect(mockSignInAnonymously).not.toHaveBeenCalled();
+    });
+
+    it('display_name取得で401なら匿名セッションを再作成して再試行する', async () => {
+      mockGetSession.mockResolvedValueOnce({ data: { session } });
+      mockGetDisplayName
+        .mockRejectedValueOnce(
+          new ApiClientError({ code: 'UNAUTHORIZED', message: 'Authentication required' }, 401),
+        )
+        .mockResolvedValueOnce(null);
+      mockSignInAnonymously.mockResolvedValueOnce({
+        data: { user: { id: 'reauthed-user' }, session: { access_token: 'token-reauthed' } },
+        error: null,
+      });
+
+      const result = await ensureSession();
+
+      expect(mockSignOut).toHaveBeenCalledWith({ scope: 'local' });
+      expect(mockSignInAnonymously).toHaveBeenCalledTimes(1);
+      expect(mockGetDisplayName).toHaveBeenNthCalledWith(1, 'token-123');
+      expect(mockGetDisplayName).toHaveBeenNthCalledWith(2, 'token-reauthed');
+      expect(result).toEqual({
+        userId: 'reauthed-user',
+        isNewUser: true,
+        needsUsernameSetup: true,
+      });
     });
   });
 

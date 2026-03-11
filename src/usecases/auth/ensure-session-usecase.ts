@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase/supabase-client';
 import { PlayerApiDataSource } from '@/infra/datasources/player-api-datasource';
+import { ApiClientError } from '@/infra/http/api-client';
 
 export type EnsureSessionResult = {
   userId: string;
@@ -8,6 +9,18 @@ export type EnsureSessionResult = {
 };
 
 const playerDataSource = new PlayerApiDataSource();
+
+function isUnauthorized(error: unknown): boolean {
+  return error instanceof ApiClientError && (error.code === 'UNAUTHORIZED' || error.status === 401);
+}
+
+async function signInAnonymousOrThrow() {
+  const { data, error } = await supabase.auth.signInAnonymously();
+  if (error || !data.user || !data.session?.access_token) {
+    throw new Error(error?.message ?? 'Anonymous sign-in failed');
+  }
+  return data;
+}
 
 export async function ensureSession(): Promise<EnsureSessionResult> {
   const { data: sessionData } = await supabase.auth.getSession();
@@ -23,15 +36,25 @@ export async function ensureSession(): Promise<EnsureSessionResult> {
     token = currentSession.access_token;
     isNewUser = false;
   } else {
-    const { data, error } = await supabase.auth.signInAnonymously();
-    if (error || !data.user || !data.session?.access_token) {
-      throw new Error(error?.message ?? 'Anonymous sign-in failed');
-    }
+    const data = await signInAnonymousOrThrow();
     userId = data.user.id;
     token = data.session.access_token;
     isNewUser = true;
   }
 
-  const displayName = await playerDataSource.getDisplayName(token);
+  let displayName: string | null;
+  try {
+    displayName = await playerDataSource.getDisplayName(token);
+  } catch (error) {
+    if (!isUnauthorized(error)) throw error;
+
+    await supabase.auth.signOut({ scope: 'local' });
+    const data = await signInAnonymousOrThrow();
+    userId = data.user.id;
+    token = data.session.access_token;
+    isNewUser = true;
+    displayName = await playerDataSource.getDisplayName(token);
+  }
+
   return { userId, isNewUser, needsUsernameSetup: displayName === null };
 }
