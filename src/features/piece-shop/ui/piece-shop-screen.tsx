@@ -3,6 +3,7 @@ import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppLoadingScreen } from '@/components/organism/app-loading-screen';
+import { GlobalHomeHud } from '@/components/organism/global-home-hud';
 import { homeAssets } from '@/constants/home-assets';
 import { usePieceShopScreen } from '@/features/piece-shop/ui/use-piece-shop-screen';
 import { useAssetPreload } from '@/hooks/common/use-asset-preload';
@@ -56,68 +57,69 @@ export function PieceShopScreen() {
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-[#140b06]">
-      <View className="absolute inset-0">
-        <Image
-          source={shopAssets.background}
-          contentFit="cover"
-          style={{ width: '100%', height: '100%' }}
-        />
-      </View>
+    <SafeAreaView className="flex-1 bg-[#140b06]" edges={['left', 'right', 'bottom']}>
+      <GlobalHomeHud />
 
-      <View className="flex-1 px-4 pb-4">
-        <ScrollView className="mt-4 flex-1" contentContainerClassName="pb-6">
-          <View className="mb-4 flex-row items-center justify-between rounded-lg bg-[#1a0f09]/65 px-3 py-2">
-            <Text className="text-sm font-black text-[#f7d58f]">{`歩 x${vm.pawnCurrency}`}</Text>
-            <Text className="text-sm font-black text-[#f7d58f]">{`金 x${vm.goldCurrency}`}</Text>
-          </View>
-          <View className="mt-[-28px] flex-row flex-wrap justify-between">
-            {vm.items.map((piece, index) => {
-              const isOwned = vm.owned.includes(piece.key);
-              const priceText = piece.costType === 'pawn' ? `歩 ${piece.cost}` : `金 ${piece.cost}`;
-              const isTopRow = index < 3;
-              const placement = piecePlacementByKey[piece.key];
+      <View className="flex-1">
+        <View className="absolute inset-0">
+          <Image
+            source={shopAssets.background}
+            contentFit="cover"
+            style={{ width: '100%', height: '100%' }}
+          />
+        </View>
 
-              return (
-                <View key={piece.key} className={`w-[31%] ${isTopRow ? 'mt-10' : 'mt-8'}`}>
-                  <Pressable
-                    onPress={() => {
-                      void playSe('tap');
-                      vm.openDetail(piece);
-                    }}
-                    className="h-[290px] items-center active:scale-95"
-                  >
-                    <Image
-                      source={shopAssets.pieces[piece.key]}
-                      contentFit="contain"
-                      style={{
-                        width: placement.width,
-                        height: placement.height,
-                        marginTop: placement.marginTop,
-                        transform: [
-                          { translateX: placement.offsetX ?? 0 },
-                          { translateY: placement.offsetY ?? 0 },
-                        ],
+        <View className="flex-1 px-4 pb-4">
+          <ScrollView className="mt-4 flex-1" contentContainerClassName="pb-6">
+            <View className="flex-row flex-wrap justify-between">
+              {vm.items.map((piece, index) => {
+                const isOwned = vm.owned.includes(piece.key);
+                const priceText =
+                  piece.costType === 'pawn' ? `歩 ${piece.cost}` : `金 ${piece.cost}`;
+                const isTopRow = index < 3;
+                const placement = piecePlacementByKey[piece.key];
+
+                return (
+                  <View key={piece.key} className={`w-[31%] ${isTopRow ? 'mt-10' : 'mt-8'}`}>
+                    <Pressable
+                      onPress={() => {
+                        void playSe('tap');
+                        vm.openDetail(piece);
                       }}
-                    />
-                  </Pressable>
-
-                  <Pressable
-                    onPress={() => openPurchase(piece)}
-                    disabled={isOwned}
-                    className={`${isTopRow ? 'mt-[-12px]' : 'mt-[-30px]'} rounded-md border border-[#8B0000] px-2 py-2 ${isOwned ? 'bg-[#4b3a2f]' : 'bg-[#8f2a1a]'}`}
-                  >
-                    <Text
-                      className={`text-center text-xs font-black ${isOwned ? 'text-[#d9c8b3]' : 'text-[#ffe1a3]'}`}
+                      className="h-[290px] items-center active:scale-95"
                     >
-                      {isOwned ? '購入済み' : `購入 ${priceText}`}
-                    </Text>
-                  </Pressable>
-                </View>
-              );
-            })}
-          </View>
-        </ScrollView>
+                      <Image
+                        source={shopAssets.pieces[piece.key]}
+                        contentFit="contain"
+                        style={{
+                          width: placement.width,
+                          height: placement.height,
+                          marginTop: placement.marginTop,
+                          transform: [
+                            { translateX: placement.offsetX ?? 0 },
+                            { translateY: placement.offsetY ?? 0 },
+                          ],
+                        }}
+                      />
+                    </Pressable>
+
+                    <Pressable
+                      onPress={() => openPurchase(piece)}
+                      disabled={isOwned}
+                      className={`${isTopRow ? 'mt-[-12px]' : 'mt-[-30px]'} rounded-md border border-[#8B0000] px-2 py-2 ${isOwned ? 'bg-[#4b3a2f]' : 'bg-[#8f2a1a]'}`}
+                    >
+                      <Text
+                        className={`text-center text-xs font-black ${isOwned ? 'text-[#d9c8b3]' : 'text-[#ffe1a3]'}`}
+                      >
+                        {isOwned ? '購入済み' : `購入 ${priceText}`}
+                      </Text>
+                    </Pressable>
+                  </View>
+                );
+              })}
+            </View>
+          </ScrollView>
+        </View>
       </View>
 
       <Modal
