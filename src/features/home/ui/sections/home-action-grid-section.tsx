@@ -7,6 +7,9 @@ import { playSe } from '@/lib/audio/audio-manager';
 
 export function HomeActionGridSection() {
   const router = useRouter();
+  const buttonFrameClassName = 'h-[60px]';
+  const buttonImageHeight = 70;
+
   const onPressRoute = (path: Parameters<typeof router.push>[0]) => {
     void playSe('tap');
     router.push(path);
@@ -18,42 +21,40 @@ export function HomeActionGridSection() {
         <View className="flex-row gap-2">
           <HomeImageButton
             source={homeAssets.buttons.normalDungeon}
-            frameClassName="h-[60px]"
-            imageHeight={70}
+            frameClassName={buttonFrameClassName}
+            imageHeight={buttonImageHeight}
             onPress={() => onPressRoute('/stage-select')}
           />
           <HomeImageButton
             source={homeAssets.buttons.specialDungeon}
-            frameClassName="h-[60px]"
-            imageHeight={70}
+            frameClassName={buttonFrameClassName}
+            imageHeight={buttonImageHeight}
             onPress={() => onPressRoute('/special-dungeon')}
           />
           <HomeImageButton
             source={homeAssets.buttons.deckBuilder}
-            frameClassName="h-[60px]"
-            imageWidth={320}
-            imageHeight={180}
-            overflowVisible
+            frameClassName={buttonFrameClassName}
+            imageHeight={buttonImageHeight}
             onPress={() => onPressRoute('/deck-builder')}
           />
         </View>
         <View className="mt-2 flex-row gap-2">
           <HomeImageButton
             source={homeAssets.buttons.pieceCatalog}
-            frameClassName="h-[60px]"
-            imageHeight={70}
+            frameClassName={buttonFrameClassName}
+            imageHeight={buttonImageHeight}
             onPress={() => onPressRoute('/piece-info')}
           />
           <HomeImageButton
             source={homeAssets.buttons.gacha}
-            frameClassName="h-[60px]"
-            imageHeight={70}
+            frameClassName={buttonFrameClassName}
+            imageHeight={buttonImageHeight}
             onPress={() => onPressRoute('/gacha-room')}
           />
           <HomeImageButton
             source={homeAssets.buttons.pieceShop}
-            frameClassName="h-[60px]"
-            imageHeight={70}
+            frameClassName={buttonFrameClassName}
+            imageHeight={buttonImageHeight}
             onPress={() => onPressRoute('/piece-shop')}
           />
         </View>
