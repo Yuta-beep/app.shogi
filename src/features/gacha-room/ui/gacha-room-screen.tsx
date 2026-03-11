@@ -243,6 +243,12 @@ export function GachaRoomScreen() {
       </View>
 
       <ScrollView className="flex-1" contentContainerClassName="gap-4 p-4 pb-8">
+        {vm.noticeMessage ? (
+          <View className="rounded-xl border border-amber-300/40 bg-amber-500/10 px-3 py-2">
+            <Text className="text-sm font-bold text-amber-200">{vm.noticeMessage}</Text>
+          </View>
+        ) : null}
+
         {/* バナー一覧 */}
         {vm.banners.map((banner) => {
           const active = banner.key === vm.selectedKey;
