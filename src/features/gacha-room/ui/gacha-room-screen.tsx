@@ -18,28 +18,11 @@ const gachaAssets = {
   draw1: require('../../../../assets/gacha/draw-1.png'),
   draw0: require('../../../../assets/gacha/draw-0.png'),
   drawGold: require('../../../../assets/gacha/draw-gold.png'),
-  banners: {
-    ukanmuri: require('../../../../assets/gacha/ukanmuri.png'),
-    hihen: require('../../../../assets/gacha/hihen.png'),
-    shinnyo: require('../../../../assets/gacha/shinnyo.png'),
-    kanken1: require('../../../../assets/gacha/kanken1.png'),
-  },
   videos: {
     miss: require('../../../../assets/gacha/gacha-miss.mp4'),
     hit: require('../../../../assets/gacha/gacha-hit.mp4'),
   },
 } as const;
-
-// 駒画像マップ（存在する駒のみ）
-const PIECE_IMAGES: Record<string, ReturnType<typeof require>> = {
-  爆: require('../../../../assets/gacha/pieces/爆.png'),
-  煽: require('../../../../assets/gacha/pieces/煽.png'),
-  定: require('../../../../assets/gacha/pieces/定.png'),
-  安: require('../../../../assets/gacha/pieces/安.png'),
-  宋: require('../../../../assets/gacha/pieces/宋.png'),
-  歩: require('../../../../assets/gacha/pieces/歩.png'),
-  金: require('../../../../assets/gacha/pieces/金.png'),
-};
 
 function rarityColor(rarity: string): string {
   switch (rarity) {
@@ -70,7 +53,7 @@ function ResultCard({ vm }: { vm: GachaRoomVM }) {
   if (vm.phase === 'done' && vm.lastResult) {
     const result = vm.lastResult;
     if (result.type === 'hit') {
-      const pieceImg = PIECE_IMAGES[result.piece.char];
+      const pieceSource = result.piece.imageSignedUrl ? { uri: result.piece.imageSignedUrl } : null;
       return (
         <View className="rounded-2xl border border-amber-300/50 bg-white/10 p-4">
           <Text style={{ color: rarityColor(result.piece.rarity) }} className="text-lg font-black">
@@ -78,10 +61,16 @@ function ResultCard({ vm }: { vm: GachaRoomVM }) {
               ? `${result.piece.name}（${result.piece.rarity}）は既に所持！`
               : `${result.piece.name}（${result.piece.rarity}）を獲得！`}
           </Text>
-          {pieceImg != null && (
+          {pieceSource ? (
             <View className="my-3 items-center">
-              <Image source={pieceImg} contentFit="contain" style={{ width: 120, height: 120 }} />
+              <Image
+                source={pieceSource}
+                contentFit="contain"
+                style={{ width: 120, height: 120 }}
+              />
             </View>
+          ) : (
+            <Text className="my-3 text-center text-5xl text-white">{result.piece.char}</Text>
           )}
           <Text className="text-sm text-slate-200">{result.piece.description}</Text>
           <Text className="mt-4 text-sm text-slate-300">
@@ -92,19 +81,10 @@ function ResultCard({ vm }: { vm: GachaRoomVM }) {
     } else {
       const label = result.currency === 'gold' ? `金 x${result.amount}` : `歩 x${result.amount}`;
       const currencyChar = result.currency === 'gold' ? '金' : '歩';
-      const currencyImg = PIECE_IMAGES[currencyChar];
       return (
         <View className="rounded-2xl border border-white/20 bg-white/10 p-4">
           <Text className="text-lg font-black text-slate-100">{`${currencyChar}を獲得！`}</Text>
-          {currencyImg != null && (
-            <View className="my-3 items-center">
-              <Image
-                source={currencyImg}
-                contentFit="contain"
-                style={{ width: 100, height: 100 }}
-              />
-            </View>
-          )}
+          <Text className="my-3 text-center text-5xl text-white">{currencyChar}</Text>
           <Text className="text-sm text-slate-300">{`${label} の通貨が増えました。ショップで使いましょう。`}</Text>
           <Text className="mt-4 text-sm text-slate-300">
             続けて引く場合は、上の各ガチャのボタンを押してください。
@@ -164,8 +144,16 @@ function GachaVideoOverlay({ isHit, onEnd }: { isHit: boolean; onEnd: () => void
   );
 }
 
-function PieceOverlay({ char, onDismiss }: { char: string; onDismiss: () => void }) {
-  const pieceImg = PIECE_IMAGES[char];
+function PieceOverlay({
+  char,
+  imageSignedUrl,
+  onDismiss,
+}: {
+  char: string;
+  imageSignedUrl?: string | null;
+  onDismiss: () => void;
+}) {
+  const source = imageSignedUrl ? { uri: imageSignedUrl } : null;
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onDismiss}>
       <Pressable
@@ -177,8 +165,8 @@ function PieceOverlay({ char, onDismiss }: { char: string; onDismiss: () => void
         }}
         onPress={onDismiss}
       >
-        {pieceImg ? (
-          <Image source={pieceImg} contentFit="contain" style={{ width: '80%', height: '70%' }} />
+        {source ? (
+          <Image source={source} contentFit="contain" style={{ width: '80%', height: '70%' }} />
         ) : (
           <Text style={{ fontSize: 120, color: 'white' }}>{char}</Text>
         )}
@@ -197,7 +185,6 @@ export function GachaRoomScreen() {
     gachaAssets.draw1,
     gachaAssets.draw0,
     gachaAssets.drawGold,
-    ...Object.values(gachaAssets.banners),
   ]);
   useScreenBgm('gacha');
 
@@ -219,7 +206,11 @@ export function GachaRoomScreen() {
 
       {/* 駒イメージオーバーレイ */}
       {vm.phase === 'pieceOverlay' && vm.lastResult?.type === 'hit' && (
-        <PieceOverlay char={vm.lastResult.piece.char} onDismiss={vm.onPieceOverlayDismiss} />
+        <PieceOverlay
+          char={vm.lastResult.piece.char}
+          imageSignedUrl={vm.lastResult.piece.imageSignedUrl}
+          onDismiss={vm.onPieceOverlayDismiss}
+        />
       )}
 
       {/* ヘッダー */}
@@ -258,7 +249,9 @@ export function GachaRoomScreen() {
                 className="active:scale-[0.99]"
               >
                 <Image
-                  source={gachaAssets.banners[banner.key]}
+                  source={
+                    banner.imageSignedUrl ? { uri: banner.imageSignedUrl } : gachaAssets.draw1
+                  }
                   contentFit="cover"
                   style={{ width: '100%', height: 120 }}
                 />
@@ -268,6 +261,9 @@ export function GachaRoomScreen() {
                 <View>
                   <Text className="text-base font-black text-white">{banner.name}</Text>
                   <Text className="text-xs text-slate-300">{banner.rareRateText}</Text>
+                  <Text className="text-xs text-slate-400">
+                    {`消費: 歩 x${banner.pawnCost} / 金 x${banner.goldCost}`}
+                  </Text>
                 </View>
                 <Pressable
                   onPress={() => {

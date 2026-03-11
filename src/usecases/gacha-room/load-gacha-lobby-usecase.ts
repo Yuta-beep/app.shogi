@@ -1,8 +1,11 @@
 export type GachaBanner = {
-  key: 'ukanmuri' | 'hihen' | 'shinnyo' | 'kanken1';
+  key: string;
   name: string;
   rareRateText: string;
   usesGold?: boolean;
+  pawnCost: number;
+  goldCost: number;
+  imageSignedUrl?: string | null;
 };
 
 export type GachaLobbySnapshot = {
