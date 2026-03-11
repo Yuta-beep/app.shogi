@@ -6,6 +6,7 @@ import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppLoadingScreen } from '@/components/organism/app-loading-screen';
+import { GlobalHomeHud } from '@/components/organism/global-home-hud';
 import { homeAssets } from '@/constants/home-assets';
 import { GachaRoomVM, useGachaRoomScreen } from '@/features/gacha-room/ui/use-gacha-room-screen';
 import { useAssetPreload } from '@/hooks/common/use-asset-preload';
@@ -230,7 +231,12 @@ export function GachaRoomScreen() {
   const isHit = vm.lastResult?.type === 'hit';
 
   return (
-    <SafeAreaView className="flex-1 bg-[#0f172a]" style={{ position: 'relative' }}>
+    <SafeAreaView
+      className="flex-1 bg-[#0f172a]"
+      edges={['left', 'right', 'bottom']}
+      style={{ position: 'relative' }}
+    >
+      <GlobalHomeHud />
       {/* 動画オーバーレイ */}
       {vm.phase === 'video' && <GachaVideoOverlay isHit={isHit} onEnd={vm.onVideoEnd} />}
 

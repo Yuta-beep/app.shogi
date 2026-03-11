@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 
 import { AppLoadingScreen } from '@/components/organism/app-loading-screen';
+import { GlobalHomeHud } from '@/components/organism/global-home-hud';
 import { homeAssets } from '@/constants/home-assets';
 import { stageSelectBackgrounds } from '@/constants/stage-select-data';
 import { useAssetPreload } from '@/hooks/common/use-asset-preload';
@@ -62,21 +63,23 @@ export function StageSelectScreen() {
 
   if (!isReady || isLoading) {
     return (
-      <ImageBackground source={stageSelectBackgrounds[1]} resizeMode="cover" className="flex-1">
-        <SafeAreaView className="flex-1 bg-black/20">
+      <SafeAreaView className="flex-1 bg-black/20" edges={['left', 'right', 'bottom']}>
+        <GlobalHomeHud />
+        <ImageBackground source={stageSelectBackgrounds[1]} resizeMode="cover" className="flex-1">
           <AppLoadingScreen imageSource={homeAssets.loadingImage} />
-        </SafeAreaView>
-      </ImageBackground>
+        </ImageBackground>
+      </SafeAreaView>
     );
   }
 
   return (
-    <ImageBackground
-      source={stageSelectBackgrounds[currentPage as keyof typeof stageSelectBackgrounds]}
-      resizeMode="cover"
-      className="flex-1"
-    >
-      <SafeAreaView className="flex-1">
+    <SafeAreaView className="flex-1" edges={['left', 'right', 'bottom']}>
+      <GlobalHomeHud />
+      <ImageBackground
+        source={stageSelectBackgrounds[currentPage as keyof typeof stageSelectBackgrounds]}
+        resizeMode="cover"
+        className="flex-1"
+      >
         <View className="flex-1">
           <View className="z-20 bg-[#f7f7f7]/90 px-2 py-2">
             <ScrollView
@@ -219,7 +222,7 @@ export function StageSelectScreen() {
             </View>
           </View>
         </View>
-      </SafeAreaView>
-    </ImageBackground>
+      </ImageBackground>
+    </SafeAreaView>
   );
 }

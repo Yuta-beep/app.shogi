@@ -23,22 +23,27 @@ export function HomeScreen() {
   }
 
   return (
-    <ImageBackground source={homeAssets.background} resizeMode="stretch" className="flex-1">
-      <SafeAreaView className="flex-1 bg-black/10">
-        <View className="flex-1">
-          <HomeBackgroundSection />
-          <HomeHeaderSection
-            onPressMatching={() => {
-              void playSe('tap');
-              router.push('/matching');
-            }}
-            playerName={snapshot.playerName}
-            playerRank={snapshot.playerRank}
-            playerExp={snapshot.playerExp}
-          />
-          <HomeActionGridSection />
-        </View>
-      </SafeAreaView>
-    </ImageBackground>
+    <View className="flex-1 bg-black">
+      <SafeAreaView edges={['top']} className="bg-black" />
+      <HomeHeaderSection
+        onPressMatching={() => {
+          void playSe('tap');
+          router.push('/matching');
+        }}
+        playerName={snapshot.playerName}
+        playerRank={snapshot.playerRank}
+        playerExp={snapshot.playerExp}
+        pawnCurrency={snapshot.pawnCurrency}
+        goldCurrency={snapshot.goldCurrency}
+      />
+      <ImageBackground source={homeAssets.background} resizeMode="stretch" className="flex-1">
+        <SafeAreaView edges={['left', 'right', 'bottom']} className="flex-1 bg-black/10">
+          <View className="flex-1">
+            <HomeBackgroundSection />
+            <HomeActionGridSection />
+          </View>
+        </SafeAreaView>
+      </ImageBackground>
+    </View>
   );
 }
