@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { ImageBackground, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
@@ -22,6 +22,8 @@ const pagePaths: Record<number, string> = {
 
 export function StageSelectScreen() {
   const router = useRouter();
+  const mapScrollRef = useRef<ScrollView | null>(null);
+  const hasAutoScrolledRef = useRef(false);
   const {
     isLoading,
     currentPage,
@@ -38,6 +40,25 @@ export function StageSelectScreen() {
   const { isReady } = useAssetPreload(preloadTargets);
 
   const currentRange = ranges.find((range) => range.page === currentPage) ?? ranges[0];
+
+  useEffect(() => {
+    hasAutoScrolledRef.current = false;
+  }, [currentPage]);
+
+  useEffect(() => {
+    if (!isReady || isLoading) return;
+    if (hasAutoScrolledRef.current) return;
+    if (!selectedStage || selectedStage.page !== currentPage) return;
+
+    const maxScrollY = Math.max(0, currentRange.height - 1);
+    const targetY = Math.min(maxScrollY, Math.max(0, selectedStage.top - 320));
+    const timer = setTimeout(() => {
+      mapScrollRef.current?.scrollTo({ y: targetY, animated: false });
+      hasAutoScrolledRef.current = true;
+    }, 0);
+
+    return () => clearTimeout(timer);
+  }, [currentPage, currentRange.height, isLoading, isReady, selectedStage]);
 
   if (!isReady || isLoading) {
     return (
@@ -85,7 +106,7 @@ export function StageSelectScreen() {
             </ScrollView>
           </View>
 
-          <ScrollView className="flex-1" contentContainerClassName="pb-44">
+          <ScrollView ref={mapScrollRef} className="flex-1" contentContainerClassName="pb-44">
             <View style={{ height: currentRange.height, position: 'relative' }}>
               <Svg
                 viewBox={`0 0 1000 ${currentRange.height + 150}`}
