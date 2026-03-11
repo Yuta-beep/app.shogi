@@ -78,10 +78,19 @@ export function PieceInfoScreen() {
   const router = useRouter();
   const { piece, items, index, total, selectIndex, isLoading } = usePieceCatalogScreen();
   const carouselItems = useMemo(() => (items.length > 0 ? items : [piece]), [items, piece]);
-  const { isReady: areAssetsReady } = useAssetPreload([
-    pieceInfoBackground,
-    ...Object.values(pieceImages),
-  ]);
+  const remotePieceUrls = useMemo(
+    () =>
+      items
+        .map((item) => item.imageSignedUrl)
+        .filter((url): url is string => typeof url === 'string' && url.length > 0),
+    [items],
+  );
+  const { isReady: areAssetsReady } = useAssetPreload(
+    [pieceInfoBackground, ...Object.values(pieceImages), ...remotePieceUrls],
+    {
+      enabled: !isLoading,
+    },
+  );
   useScreenBgm('catalog');
 
   if (isLoading || !areAssetsReady) {

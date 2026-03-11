@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Modal, Pressable, Text, TextInput, View, ScrollView } from 'react-native';
 import Svg, { Line, Rect } from 'react-native-svg';
 
@@ -30,7 +30,16 @@ export function DeckBuilderScreen() {
   const router = useRouter();
   const vm = useDeckBuilderScreen();
   const [activeCell, setActiveCell] = useState<{ row: number; col: number } | null>(null);
-  const { isReady: areAssetsReady } = useAssetPreload([deckAssets.bg]);
+  const remotePieceUrls = useMemo(
+    () =>
+      vm.ownedPieces
+        .map((piece) => piece.imageSignedUrl)
+        .filter((url): url is string => typeof url === 'string' && url.length > 0),
+    [vm.ownedPieces],
+  );
+  const { isReady: areAssetsReady } = useAssetPreload([deckAssets.bg, ...remotePieceUrls], {
+    enabled: !vm.isLoading,
+  });
   useScreenBgm('deckBuilder');
 
   if (vm.isLoading || !areAssetsReady) {
