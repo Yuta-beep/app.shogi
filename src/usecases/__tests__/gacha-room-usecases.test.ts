@@ -23,6 +23,8 @@ describe('gacha room usecases', () => {
       type: 'miss',
       currency: 'pawn',
       amount: 5,
+      pawnCurrency: 3005,
+      goldCurrency: 20,
     });
     randomSpy.mockRestore();
   });
