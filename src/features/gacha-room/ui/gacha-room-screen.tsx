@@ -293,7 +293,7 @@ export function GachaRoomScreen() {
                     vm.setSelectedKey(banner.key);
                     if (vm.phase === 'idle' || vm.phase === 'done') {
                       void playSe('confirm');
-                      void vm.roll();
+                      void vm.roll(banner.key);
                     }
                   }}
                   className="active:scale-95"
