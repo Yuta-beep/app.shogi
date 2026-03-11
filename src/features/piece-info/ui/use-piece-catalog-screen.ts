@@ -89,6 +89,16 @@ export function usePieceCatalogScreen() {
     };
   }, [isApiMode, loadUseCase]);
 
+  useEffect(() => {
+    if (items.length === 0) {
+      if (index !== 0) setIndex(0);
+      return;
+    }
+    if (index >= items.length) {
+      setIndex(items.length - 1);
+    }
+  }, [index, items.length]);
+
   const piece = items[index] ?? {
     char: '駒',
     name: '所持駒なし',
@@ -117,9 +127,15 @@ export function usePieceCatalogScreen() {
   return {
     isLoading,
     piece,
+    items,
     index,
     total: items.length === 0 ? 1 : items.length,
     previous,
     next,
+    selectIndex: (nextIndex: number) => {
+      if (items.length === 0) return;
+      if (nextIndex < 0 || nextIndex >= items.length) return;
+      setIndex(nextIndex);
+    },
   };
 }
