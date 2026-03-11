@@ -1,10 +1,12 @@
 import { Image } from 'expo-image';
+import { useRouter } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { useEffect } from 'react';
 import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppLoadingScreen } from '@/components/organism/app-loading-screen';
+import { BackButton } from '@/components/atom/back-button';
 import { GlobalHomeHud } from '@/components/organism/global-home-hud';
 import { homeAssets } from '@/constants/home-assets';
 import { GachaRoomVM, useGachaRoomScreen } from '@/features/gacha-room/ui/use-gacha-room-screen';
@@ -189,6 +191,7 @@ function PieceOverlay({ char, onDismiss }: { char: string; onDismiss: () => void
 }
 
 export function GachaRoomScreen() {
+  const router = useRouter();
   const vm = useGachaRoomScreen();
   const { isReady: areAssetsReady } = useAssetPreload([
     gachaAssets.draw1,
@@ -221,7 +224,15 @@ export function GachaRoomScreen() {
 
       {/* ヘッダー */}
       <View className="border-b border-[#f4c86a]/30 bg-[#3a152d] px-4 py-3">
-        <Text className="text-lg font-black text-[#ffd56a]">ガチャルーム</Text>
+        <View className="flex-row items-center justify-between">
+          <Text className="text-lg font-black text-[#ffd56a]">ガチャルーム</Text>
+          <BackButton
+            onPress={() => {
+              void playSe('tap');
+              router.back();
+            }}
+          />
+        </View>
       </View>
 
       <ScrollView className="flex-1" contentContainerClassName="gap-4 p-4 pb-8">

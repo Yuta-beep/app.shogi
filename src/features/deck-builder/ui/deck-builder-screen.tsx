@@ -1,9 +1,11 @@
 import { Image } from 'expo-image';
+import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Modal, Pressable, Text, TextInput, View, ScrollView } from 'react-native';
 import Svg, { Line, Rect } from 'react-native-svg';
 
 import { AppLoadingScreen } from '@/components/organism/app-loading-screen';
+import { BackButton } from '@/components/atom/back-button';
 import { homeAssets } from '@/constants/home-assets';
 import { UiScreenShell } from '@/components/organism/ui-screen-shell';
 import { useDeckBuilderScreen } from '@/features/deck-builder/ui/use-deck-builder-screen';
@@ -25,6 +27,7 @@ const PLACED_PIECE_OFFSET_X = 0;
 const PLACED_PIECE_OFFSET_Y = -2;
 
 export function DeckBuilderScreen() {
+  const router = useRouter();
   const vm = useDeckBuilderScreen();
   const [activeCell, setActiveCell] = useState<{ row: number; col: number } | null>(null);
   const { isReady: areAssetsReady } = useAssetPreload([deckAssets.bg]);
@@ -35,7 +38,19 @@ export function DeckBuilderScreen() {
   }
 
   return (
-    <UiScreenShell title="マイデッキ作成" subtitle="将棋盤に駒を配置して保存" hideBackButton>
+    <UiScreenShell
+      title="マイデッキ作成"
+      subtitle="将棋盤に駒を配置して保存"
+      hideBackButton
+      rightAction={
+        <BackButton
+          onPress={() => {
+            void playSe('tap');
+            router.back();
+          }}
+        />
+      }
+    >
       <View className="overflow-hidden rounded-2xl border border-[#8b0000]/50">
         <Image source={deckAssets.bg} contentFit="cover" style={{ width: '100%', height: 180 }} />
       </View>

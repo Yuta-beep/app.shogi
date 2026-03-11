@@ -1,7 +1,9 @@
 import { Image } from 'expo-image';
+import { useRouter } from 'expo-router';
 import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { BackButton } from '@/components/atom/back-button';
 import { AppLoadingScreen } from '@/components/organism/app-loading-screen';
 import { GlobalHomeHud } from '@/components/organism/global-home-hud';
 import { homeAssets } from '@/constants/home-assets';
@@ -36,6 +38,7 @@ const piecePlacementByKey: Record<
 };
 
 export function PieceShopScreen() {
+  const router = useRouter();
   const vm = usePieceShopScreen();
   const { isReady: areAssetsReady } = useAssetPreload([
     shopAssets.background,
@@ -70,6 +73,14 @@ export function PieceShopScreen() {
         </View>
 
         <View className="flex-1 px-4 pb-4">
+          <View className="mt-2 flex-row justify-end">
+            <BackButton
+              onPress={() => {
+                void playSe('tap');
+                router.back();
+              }}
+            />
+          </View>
           <ScrollView className="mt-4 flex-1" contentContainerClassName="pb-6">
             <View className="flex-row flex-wrap justify-between">
               {vm.items.map((piece, index) => {
