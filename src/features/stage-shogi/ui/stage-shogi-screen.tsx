@@ -547,6 +547,7 @@ export function StageShogiScreen() {
     isAuthReady ? (userId ?? 'guest') : 'auth-pending',
   );
   const { isReady: areAssetsReady } = useAssetPreload([]);
+  const [areBoardImagesReady, setAreBoardImagesReady] = useState(false);
   const [failedImageKeys, setFailedImageKeys] = useState<Record<string, true>>({});
   const [pieces, setPieces] = useState<BoardPiece[]>([]);
   const [sideToMove, setSideToMove] = useState<Side>('player');
@@ -625,6 +626,7 @@ export function StageShogiScreen() {
       return;
     }
 
+    setAreBoardImagesReady(false);
     setPieces(next);
     setSideToMove('player');
     setMoveNo(1);
@@ -727,14 +729,26 @@ export function StageShogiScreen() {
   }, [failedImageKeys, remoteImageUrls]);
 
   useEffect(() => {
+    let active = true;
+
     if (remoteImageUrls.length === 0) {
-      return;
+      setAreBoardImagesReady(true);
+      return () => {
+        active = false;
+      };
     }
+
     Image.prefetch(remoteImageUrls)
       .catch(() => undefined)
-      .finally(() => undefined);
+      .finally(() => {
+        if (active) {
+          setAreBoardImagesReady(true);
+        }
+      });
 
-    return () => undefined;
+    return () => {
+      active = false;
+    };
   }, [remoteImageUrls]);
 
   const handleAiMove = async (
@@ -1005,9 +1019,14 @@ export function StageShogiScreen() {
   }
 
   const isWaitingForGameId =
-    !isLoading && areAssetsReady && !gameId && isCreatingGame && aiError === null;
+    !isLoading &&
+    areAssetsReady &&
+    areBoardImagesReady &&
+    !gameId &&
+    isCreatingGame &&
+    aiError === null;
 
-  if (isLoading || !areAssetsReady || isWaitingForGameId) {
+  if (isLoading || !areAssetsReady || !areBoardImagesReady || isWaitingForGameId) {
     return <AppLoadingScreen imageSource={homeAssets.loadingImage} />;
   }
 

@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video';
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -181,12 +181,28 @@ function PieceOverlay({
 export function GachaRoomScreen() {
   const router = useRouter();
   const vm = useGachaRoomScreen();
-  const { isReady: areAssetsReady } = useAssetPreload([
-    gachaAssets.draw1,
-    gachaAssets.draw0,
-    gachaAssets.drawGold,
-  ]);
+  const remoteBannerUrls = useMemo(
+    () =>
+      vm.banners
+        .map((banner) => banner.imageSignedUrl)
+        .filter((url): url is string => typeof url === 'string' && url.length > 0),
+    [vm.banners],
+  );
+  const { isReady: areAssetsReady } = useAssetPreload(
+    [gachaAssets.draw1, gachaAssets.draw0, gachaAssets.drawGold, ...remoteBannerUrls],
+    {
+      enabled: !vm.isLoading,
+    },
+  );
   useScreenBgm('gacha');
+
+  useEffect(() => {
+    if (vm.lastResult?.type !== 'hit') return;
+    if (!vm.lastResult.piece.imageSignedUrl) return;
+    Image.prefetch(vm.lastResult.piece.imageSignedUrl)
+      .catch(() => undefined)
+      .finally(() => undefined);
+  }, [vm.lastResult]);
 
   if (vm.isLoading || !areAssetsReady) {
     return <AppLoadingScreen imageSource={homeAssets.loadingImage} />;
