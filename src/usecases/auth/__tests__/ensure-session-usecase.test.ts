@@ -13,8 +13,8 @@ jest.mock('@/lib/supabase/supabase-client', () => ({
   },
 }));
 
-jest.mock('@/infra/datasources/player-supabase-datasource', () => ({
-  PlayerSupabaseDataSource: jest.fn().mockImplementation(() => ({
+jest.mock('@/infra/datasources/player-api-datasource', () => ({
+  PlayerApiDataSource: jest.fn().mockImplementation(() => ({
     getDisplayName: (...args: unknown[]) => mockGetDisplayName(...args),
   })),
 }));
@@ -33,7 +33,7 @@ describe('ensureSession', () => {
   });
 
   describe('既存セッションがある場合', () => {
-    const session = { user: { id: userId } };
+    const session = { user: { id: userId }, access_token: 'token-123' };
 
     it('display_nameがあれば needsUsernameSetup: false を返す', async () => {
       mockGetSession.mockResolvedValueOnce({ data: { session } });
@@ -43,6 +43,7 @@ describe('ensureSession', () => {
 
       expect(result).toEqual({ userId, isNewUser: false, needsUsernameSetup: false });
       expect(mockSignInAnonymously).not.toHaveBeenCalled();
+      expect(mockGetDisplayName).toHaveBeenCalledWith('token-123');
     });
 
     it('display_nameがnullなら needsUsernameSetup: true を返す', async () => {
@@ -69,18 +70,24 @@ describe('ensureSession', () => {
     });
 
     it('匿名サインインし isNewUser: true, needsUsernameSetup: true を返す', async () => {
-      mockSignInAnonymously.mockResolvedValueOnce({ data: { user: { id: userId } }, error: null });
+      mockSignInAnonymously.mockResolvedValueOnce({
+        data: { user: { id: userId }, session: { access_token: 'token-abc' } },
+        error: null,
+      });
       mockGetDisplayName.mockResolvedValueOnce(null);
 
       const result = await ensureSession();
 
       expect(mockSignInAnonymously).toHaveBeenCalledTimes(1);
-      expect(mockGetDisplayName).toHaveBeenCalledWith(userId);
+      expect(mockGetDisplayName).toHaveBeenCalledWith('token-abc');
       expect(result).toEqual({ userId, isNewUser: true, needsUsernameSetup: true });
     });
 
     it('getSession -> signInAnonymously -> getDisplayName の順で呼ばれる', async () => {
-      mockSignInAnonymously.mockResolvedValueOnce({ data: { user: { id: userId } }, error: null });
+      mockSignInAnonymously.mockResolvedValueOnce({
+        data: { user: { id: userId }, session: { access_token: 'token-abc' } },
+        error: null,
+      });
       mockGetDisplayName.mockResolvedValueOnce('プレイヤー名');
 
       await ensureSession();
@@ -102,7 +109,7 @@ describe('ensureSession', () => {
 
     it('signInAnonymouslyがエラーを返した場合はthrowする', async () => {
       mockSignInAnonymously.mockResolvedValueOnce({
-        data: { user: null },
+        data: { user: null, session: null },
         error: { message: 'sign-in failed' },
       });
 
@@ -110,7 +117,10 @@ describe('ensureSession', () => {
     });
 
     it('signInAnonymouslyがuserなしを返した場合はthrowする', async () => {
-      mockSignInAnonymously.mockResolvedValueOnce({ data: { user: null }, error: null });
+      mockSignInAnonymously.mockResolvedValueOnce({
+        data: { user: null, session: null },
+        error: null,
+      });
 
       await expect(ensureSession()).rejects.toThrow('Anonymous sign-in failed');
     });

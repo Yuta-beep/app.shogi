@@ -29,21 +29,21 @@ jest.mock('@/usecases/player/setup-username-usecase', () => ({
 }));
 
 describe('useUsernameSetupScreen', () => {
-  const currentUserId = 'user-current';
-  const refreshedUserId = 'user-refreshed';
+  const currentToken = 'token-current';
+  const refreshedToken = 'token-refreshed';
 
   beforeEach(() => {
     mockGetSession.mockResolvedValue({
-      data: { session: { user: { id: currentUserId } } },
+      data: { session: { user: { id: 'user-current' }, access_token: currentToken } },
     });
     mockSignOut.mockResolvedValue({ error: null });
     mockSignInAnonymously.mockResolvedValue({
-      data: { user: { id: refreshedUserId } },
+      data: { user: { id: 'user-refreshed' }, session: { access_token: refreshedToken } },
       error: null,
     });
   });
 
-  it('初期化で session.user.id を読み取り、成功時はトップへ遷移する', async () => {
+  it('初期化で session.access_token を読み取り、成功時はトップへ遷移する', async () => {
     mockSetupUsername.mockResolvedValueOnce(undefined);
 
     const { result } = renderHook(() => useUsernameSetupScreen());
@@ -58,12 +58,12 @@ describe('useUsernameSetupScreen', () => {
       await result.current.handleSubmit();
     });
 
-    expect(mockSetupUsername).toHaveBeenCalledWith(currentUserId, '将棋太郎');
+    expect(mockSetupUsername).toHaveBeenCalledWith(currentToken, '将棋太郎');
     expect(mockReplace).toHaveBeenCalledWith('/');
     expect(result.current.error).toBeNull();
   });
 
-  it('userId が取得できない場合は送信しても何もしない', async () => {
+  it('token が取得できない場合は送信しても何もしない', async () => {
     mockGetSession.mockResolvedValueOnce({ data: { session: null } });
 
     const { result } = renderHook(() => useUsernameSetupScreen());
@@ -100,9 +100,9 @@ describe('useUsernameSetupScreen', () => {
     expect(mockReplace).not.toHaveBeenCalled();
   });
 
-  it('players FKエラー時は匿名セッション再作成後に再試行して遷移する', async () => {
+  it('UNAUTHORIZED時は匿名セッション再作成後に再試行して遷移する', async () => {
     mockSetupUsername
-      .mockRejectedValueOnce(new Error('violates foreign key constraint players_id_fkey'))
+      .mockRejectedValueOnce(new Error('UNAUTHORIZED'))
       .mockResolvedValueOnce(undefined);
 
     const { result } = renderHook(() => useUsernameSetupScreen());
@@ -118,14 +118,14 @@ describe('useUsernameSetupScreen', () => {
 
     expect(mockSignOut).toHaveBeenCalledWith({ scope: 'local' });
     expect(mockSignInAnonymously).toHaveBeenCalledTimes(1);
-    expect(mockSetupUsername).toHaveBeenNthCalledWith(1, currentUserId, '再試行ユーザー');
-    expect(mockSetupUsername).toHaveBeenNthCalledWith(2, refreshedUserId, '再試行ユーザー');
+    expect(mockSetupUsername).toHaveBeenNthCalledWith(1, currentToken, '再試行ユーザー');
+    expect(mockSetupUsername).toHaveBeenNthCalledWith(2, refreshedToken, '再試行ユーザー');
     expect(mockReplace).toHaveBeenCalledWith('/');
   });
 
   it('再試行も失敗した場合はエラー表示し遷移しない', async () => {
     mockSetupUsername
-      .mockRejectedValueOnce(new Error('violates foreign key constraint'))
+      .mockRejectedValueOnce(new Error('UNAUTHORIZED'))
       .mockRejectedValueOnce(new Error('再試行失敗'));
 
     const { result } = renderHook(() => useUsernameSetupScreen());

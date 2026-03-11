@@ -1,8 +1,8 @@
 /**
  * 統合テスト: 認証フロー
  *
- * Supabaseクライアントのみモックし、
- * ensureSession → PlayerSupabaseDataSource → useAuthSession の
+ * Supabase auth + API client をモックし、
+ * ensureSession → PlayerApiDataSource → useAuthSession の
  * 複数レイヤーを通したフローを検証する。
  */
 
@@ -12,13 +12,8 @@ import { setupUsername } from '@/usecases/player/setup-username-usecase';
 
 const mockGetSession: jest.Mock = jest.fn();
 const mockSignInAnonymously: jest.Mock = jest.fn();
-const mockMaybeSingle: jest.Mock = jest.fn();
-const mockSingle: jest.Mock = jest.fn();
-const mockEq: jest.Mock = jest.fn(() => ({ maybeSingle: mockMaybeSingle }));
-const mockSelect: jest.Mock = jest.fn(() => ({ eq: mockEq }));
-const mockUpsertSelect: jest.Mock = jest.fn(() => ({ single: mockSingle }));
-const mockUpsert: jest.Mock = jest.fn(() => ({ select: mockUpsertSelect }));
-const mockFrom: jest.Mock = jest.fn(() => ({ select: mockSelect, upsert: mockUpsert }));
+const mockGetJson: jest.Mock = jest.fn();
+const mockPutJson: jest.Mock = jest.fn();
 
 jest.mock('@/lib/supabase/supabase-client', () => ({
   supabase: {
@@ -26,8 +21,14 @@ jest.mock('@/lib/supabase/supabase-client', () => ({
       getSession: () => mockGetSession(),
       signInAnonymously: () => mockSignInAnonymously(),
     },
-    from: (table: string) => mockFrom(table),
   },
+}));
+
+jest.mock('@/infra/http/api-client', () => ({
+  getJson: (...args: unknown[]) => mockGetJson(...args),
+  putJson: (...args: unknown[]) => mockPutJson(...args),
+  postJson: jest.fn(),
+  deleteJson: jest.fn(),
 }));
 
 const NEW_USER_ID = 'new-user-uuid';
@@ -38,10 +39,10 @@ describe('認証フロー 統合テスト', () => {
     it('匿名サインインし needsUsernameSetup: true になる', async () => {
       mockGetSession.mockResolvedValueOnce({ data: { session: null } });
       mockSignInAnonymously.mockResolvedValueOnce({
-        data: { user: { id: NEW_USER_ID } },
+        data: { user: { id: NEW_USER_ID }, session: { access_token: 'new-token' } },
         error: null,
       });
-      mockMaybeSingle.mockResolvedValueOnce({ data: { display_name: null }, error: null });
+      mockGetJson.mockResolvedValueOnce({ displayName: null });
 
       const { result } = renderHook(() => useAuthSession());
 
@@ -56,9 +57,9 @@ describe('認証フロー 統合テスト', () => {
   describe('2回目以降の起動（セッションあり）', () => {
     it('username設定済みなら needsUsernameSetup: false になる', async () => {
       mockGetSession.mockResolvedValueOnce({
-        data: { session: { user: { id: EXISTING_USER_ID } } },
+        data: { session: { user: { id: EXISTING_USER_ID }, access_token: 'existing-token' } },
       });
-      mockMaybeSingle.mockResolvedValueOnce({ data: { display_name: '将棋太郎' }, error: null });
+      mockGetJson.mockResolvedValueOnce({ displayName: '将棋太郎' });
 
       const { result } = renderHook(() => useAuthSession());
 
@@ -70,9 +71,9 @@ describe('認証フロー 統合テスト', () => {
 
     it('username未設定なら needsUsernameSetup: true になる', async () => {
       mockGetSession.mockResolvedValueOnce({
-        data: { session: { user: { id: EXISTING_USER_ID } } },
+        data: { session: { user: { id: EXISTING_USER_ID }, access_token: 'existing-token' } },
       });
-      mockMaybeSingle.mockResolvedValueOnce({ data: { display_name: null }, error: null });
+      mockGetJson.mockResolvedValueOnce({ displayName: null });
 
       const { result } = renderHook(() => useAuthSession());
 
@@ -84,32 +85,28 @@ describe('認証フロー 統合テスト', () => {
   });
 
   describe('ユーザーネーム登録フロー', () => {
-    it('setupUsernameがSupabaseのupdateを呼ぶ', async () => {
-      mockSingle.mockResolvedValueOnce({ error: null });
+    it('setupUsernameがAPIのupdateを呼ぶ', async () => {
+      mockPutJson.mockResolvedValueOnce({ displayName: '新プレイヤー' });
 
-      await setupUsername(NEW_USER_ID, '新プレイヤー');
+      await setupUsername('token-new-user', '新プレイヤー');
 
-      expect(mockFrom).toHaveBeenCalledWith('players');
-      expect(mockUpsert).toHaveBeenCalledWith(
-        { id: NEW_USER_ID, display_name: '新プレイヤー' },
-        { onConflict: 'id' },
+      expect(mockPutJson).toHaveBeenCalledWith(
+        '/api/v1/me/display-name',
+        { displayName: '新プレイヤー' },
+        { token: 'token-new-user' },
       );
-      expect(mockUpsertSelect).toHaveBeenCalledWith('id');
     });
 
     it('username登録後に再起動するとneedsUsernameSetup: falseになる', async () => {
       // username登録
-      mockSingle.mockResolvedValueOnce({ error: null });
-      await setupUsername(NEW_USER_ID, '新プレイヤー');
+      mockPutJson.mockResolvedValueOnce({ displayName: '新プレイヤー' });
+      await setupUsername('token-new-user', '新プレイヤー');
 
       // 再起動（セッション残存、display_nameあり）
       mockGetSession.mockResolvedValueOnce({
-        data: { session: { user: { id: NEW_USER_ID } } },
+        data: { session: { user: { id: NEW_USER_ID }, access_token: 'token-new-user' } },
       });
-      mockMaybeSingle.mockResolvedValueOnce({
-        data: { display_name: '新プレイヤー' },
-        error: null,
-      });
+      mockGetJson.mockResolvedValueOnce({ displayName: '新プレイヤー' });
 
       const { result } = renderHook(() => useAuthSession());
 
@@ -135,7 +132,7 @@ describe('認証フロー 統合テスト', () => {
     it('匿名サインイン失敗時は error にセットされる', async () => {
       mockGetSession.mockResolvedValueOnce({ data: { session: null } });
       mockSignInAnonymously.mockResolvedValueOnce({
-        data: { user: null },
+        data: { user: null, session: null },
         error: { message: 'Anonymous sign-in failed' },
       });
 

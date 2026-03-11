@@ -14,29 +14,26 @@ function errorMessage(error: unknown): string {
   return '登録に失敗しました';
 }
 
-function isPlayersUserFkError(error: unknown): boolean {
+function shouldRetryWithFreshSession(error: unknown): boolean {
   const message = errorMessage(error).toLowerCase();
-  return (
-    message.includes('players_id_fkey') ||
-    message.includes('not present in table "users"') ||
-    message.includes('violates foreign key constraint')
-  );
+  return message.includes('unauthorized');
 }
 
 async function refreshAnonymousSession(): Promise<string> {
   await supabase.auth.signOut({ scope: 'local' });
 
   const { data, error } = await supabase.auth.signInAnonymously();
-  if (error || !data.user) {
+  const token = data.session?.access_token;
+  if (error || !data.user || !token) {
     throw new Error(error?.message ?? '匿名ログインの再作成に失敗しました');
   }
 
-  return data.user.id;
+  return token;
 }
 
 export function useUsernameSetupScreen() {
   const router = useRouter();
-  const [userId, setUserId] = useState<string | null>(null);
+  const [token, setToken] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
   const [username, setUsername] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -46,7 +43,7 @@ export function useUsernameSetupScreen() {
     supabase.auth
       .getSession()
       .then(({ data }) => {
-        setUserId(data.session?.user.id ?? null);
+        setToken(data.session?.access_token ?? null);
       })
       .finally(() => {
         setIsInitializing(false);
@@ -54,20 +51,20 @@ export function useUsernameSetupScreen() {
   }, []);
 
   const handleSubmit = async () => {
-    if (!userId) return;
+    if (!token) return;
     setIsSubmitting(true);
     setError(null);
 
     try {
-      await setupUsername(userId, username);
+      await setupUsername(token, username);
       router.replace('/');
       return;
     } catch (e) {
-      if (isPlayersUserFkError(e)) {
+      if (shouldRetryWithFreshSession(e)) {
         try {
-          const refreshedUserId = await refreshAnonymousSession();
-          setUserId(refreshedUserId);
-          await setupUsername(refreshedUserId, username);
+          const refreshedToken = await refreshAnonymousSession();
+          setToken(refreshedToken);
+          await setupUsername(refreshedToken, username);
           router.replace('/');
           return;
         } catch (retryError) {
