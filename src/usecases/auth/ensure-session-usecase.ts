@@ -16,10 +16,12 @@ function isUnauthorized(error: unknown): boolean {
 
 async function signInAnonymousOrThrow() {
   const { data, error } = await supabase.auth.signInAnonymously();
-  if (error || !data.user || !data.session?.access_token) {
+  const user = data.user;
+  const accessToken = data.session?.access_token;
+  if (error || !user || !accessToken) {
     throw new Error(error?.message ?? 'Anonymous sign-in failed');
   }
-  return data;
+  return { userId: user.id, accessToken };
 }
 
 export async function ensureSession(): Promise<EnsureSessionResult> {
@@ -37,8 +39,8 @@ export async function ensureSession(): Promise<EnsureSessionResult> {
     isNewUser = false;
   } else {
     const data = await signInAnonymousOrThrow();
-    userId = data.user.id;
-    token = data.session.access_token;
+    userId = data.userId;
+    token = data.accessToken;
     isNewUser = true;
   }
 
@@ -50,8 +52,8 @@ export async function ensureSession(): Promise<EnsureSessionResult> {
 
     await supabase.auth.signOut({ scope: 'local' });
     const data = await signInAnonymousOrThrow();
-    userId = data.user.id;
-    token = data.session.access_token;
+    userId = data.userId;
+    token = data.accessToken;
     isNewUser = true;
     displayName = await playerDataSource.getDisplayName(token);
   }
