@@ -1,5 +1,4 @@
 import { getJson, postJson } from '@/infra/http/api-client';
-import { supabase } from '@/lib/supabase/supabase-client';
 
 type StageListResponse = {
   stages: {
@@ -40,8 +39,29 @@ type StageBattleSetupResponse = {
   };
 };
 
+type StageClearRewardResponse = {
+  stageNo: number;
+  firstClear: boolean;
+  clearCount: number;
+  granted: {
+    pawn: number;
+    gold: number;
+    pieces: {
+      pieceId: number;
+      char: string;
+      name: string;
+      quantity: number;
+    }[];
+  };
+  wallet: {
+    pawnCurrency: number;
+    goldCurrency: number;
+  };
+};
+
 export class StageApiDataSource {
   private async getAccessToken(): Promise<string | undefined> {
+    const { supabase } = await import('@/lib/supabase/supabase-client');
     const {
       data: { session },
     } = await supabase.auth.getSession();
@@ -59,5 +79,12 @@ export class StageApiDataSource {
   async getBattleSetup(stageNo: number): Promise<StageBattleSetupResponse> {
     const token = await this.getAccessToken();
     return getJson<StageBattleSetupResponse>(`/api/v1/stages/${stageNo}/battle-setup`, { token });
+  }
+
+  async postClearStage(stageNo: number): Promise<StageClearRewardResponse> {
+    const token = await this.getAccessToken();
+    return postJson<StageClearRewardResponse>(`/api/v1/stages/${stageNo}/clear`, undefined, {
+      token,
+    });
   }
 }
