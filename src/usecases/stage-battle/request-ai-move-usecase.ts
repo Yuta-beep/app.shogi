@@ -26,7 +26,7 @@ export type RequestAiMoveInput = {
       player: Partial<Record<string, number>>;
       enemy: Partial<Record<string, number>>;
     };
-    legalMoves: Array<{
+    legalMoves: {
       fromRow: number | null;
       fromCol: number | null;
       toRow: number;
@@ -34,7 +34,7 @@ export type RequestAiMoveInput = {
       pieceCode: string;
       promote: boolean;
       dropPieceCode: string | null;
-    }>;
+    }[];
   };
   engineConfig: Record<string, unknown>;
 };

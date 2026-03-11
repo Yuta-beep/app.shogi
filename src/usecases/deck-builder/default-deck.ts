@@ -50,7 +50,7 @@ function findPieceForAliases(
 
 export function createStandardDeckPlacements(
   ownedPieces: OwnedPiece[],
-): Array<{ rowNo: number; colNo: number; piece: OwnedPiece }> {
+): { rowNo: number; colNo: number; piece: OwnedPiece }[] {
   return STANDARD_SHOGI_CELLS.filter((cell) => isCellInDeckBoard(cell.rowNo, cell.colNo))
     .map((cell) => {
       const piece = findPieceForAliases(ownedPieces, cell.aliases);

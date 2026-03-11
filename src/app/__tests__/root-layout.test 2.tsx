@@ -1,5 +1,4 @@
 import { render, waitFor } from '@testing-library/react-native';
-
 import RootLayout from '@/app/_layout';
 
 jest.mock('../../../global.css', () => ({}));
@@ -9,11 +8,11 @@ const mockReleaseAudioPlayers = jest.fn();
 const mockUseAuthSession = jest.fn();
 
 jest.mock('expo-router', () => {
-  const React = require('react');
-  const { Text } = require('react-native');
-
   return {
-    Stack: () => <Text testID="stack">stack</Text>,
+    Stack: () => {
+      const { Text } = jest.requireActual('react-native');
+      return <Text testID="stack">stack</Text>;
+    },
     useRouter: () => ({
       replace: (...args: unknown[]) => mockReplace(...args),
     }),
@@ -25,10 +24,11 @@ jest.mock('expo-status-bar', () => ({
 }));
 
 jest.mock('@/components/organism/app-loading-screen', () => {
-  const React = require('react');
-  const { Text } = require('react-native');
   return {
-    AppLoadingScreen: () => <Text>loading-screen</Text>,
+    AppLoadingScreen: () => {
+      const { Text } = jest.requireActual('react-native');
+      return <Text>loading-screen</Text>;
+    },
   };
 });
 
