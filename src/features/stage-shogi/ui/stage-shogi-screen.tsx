@@ -285,6 +285,50 @@ function resolveMoveVectors(
   return baseVectors;
 }
 
+function isImmobilePiece(def: PieceCatalogItem | undefined) {
+  return (def?.moveRules ?? []).some((rule) => rule.ruleType === 'immobile');
+}
+
+function resolveStepOverrides(
+  def: PieceCatalogItem | undefined,
+  moveNo: number,
+): { minStepByVectorKey: Record<string, number>; maxStepByVectorKey: Record<string, number> } {
+  const out = {
+    minStepByVectorKey: {} as Record<string, number>,
+    maxStepByVectorKey: {} as Record<string, number>,
+  };
+
+  const parityRule = (def?.moveRules ?? []).find(
+    (rule) => rule.ruleType === 'turn_parity_override',
+  );
+  if (!parityRule || !parityRule.params) return out;
+
+  const side = moveNo % 2 === 1 ? 'odd' : 'even';
+  const scoped = (parityRule.params as Record<string, unknown>)[side];
+  if (!scoped || typeof scoped !== 'object') return out;
+
+  const rule = scoped as Record<string, unknown>;
+  if (rule.type !== 'step_limit' || rule.rays !== 'queen') return out;
+
+  const minStep = Number(rule.min_step ?? 1);
+  const maxStep = Number(rule.max_step ?? Number.MAX_SAFE_INTEGER);
+  const normalizedMin = Number.isFinite(minStep) ? Math.max(1, minStep) : 1;
+  const normalizedMax = Number.isFinite(maxStep)
+    ? Math.max(normalizedMin, maxStep)
+    : Number.MAX_SAFE_INTEGER;
+
+  for (let dy = -1; dy <= 1; dy += 1) {
+    for (let dx = -1; dx <= 1; dx += 1) {
+      if (dx === 0 && dy === 0) continue;
+      const key = `${dx}:${dy}`;
+      out.minStepByVectorKey[key] = normalizedMin;
+      out.maxStepByVectorKey[key] = normalizedMax;
+    }
+  }
+
+  return out;
+}
+
 function applyMoveWithHands(
   placements: BoardPiece[],
   hands: HandsState,
@@ -347,6 +391,7 @@ function buildLegalMoves(
   hands: HandsState,
   sideToMove: Side,
   pieceDefsByCode: Partial<Record<string, PieceCatalogItem>>,
+  moveNo: number,
 ) {
   const moves: {
     fromRow: number | null;
@@ -360,9 +405,15 @@ function buildLegalMoves(
 
   for (const piece of placements) {
     if (piece.side !== sideToMove || !piece.pieceCode) continue;
+    const pieceDef = pieceDefsByCode[piece.pieceCode];
+    if (isImmobilePiece(pieceDef)) continue;
     const vectors = resolveMoveVectors(piece, pieceDefsByCode);
     if (vectors.length === 0) continue;
-    const targets = getLegalTargetsFromVectors(placements, piece, vectors, BOARD_SIZE);
+    const stepOverrides = resolveStepOverrides(pieceDef, moveNo);
+    const targets = getLegalTargetsFromVectors(placements, piece, vectors, BOARD_SIZE, {
+      canJump: pieceDef?.canJump ?? false,
+      ...stepOverrides,
+    });
     for (const to of targets) {
       const from = { row: piece.row, col: piece.col };
       const optionalPromotion = canPromoteByMove(piece, from, to, BOARD_SIZE);
@@ -451,8 +502,11 @@ function applyAiMove(placements: BoardPiece[], hands: HandsState, move: AiSelect
 export function StageShogiScreen() {
   const params = useLocalSearchParams<{ stage?: string }>();
   const stageParam = Array.isArray(params.stage) ? params.stage[0] : params.stage;
-  const { snapshot, isLoading } = useStageBattleScreen(stageParam);
-  const { userId } = useAuthSession();
+  const { isReady: isAuthReady, userId } = useAuthSession();
+  const { snapshot, isLoading } = useStageBattleScreen(
+    stageParam,
+    isAuthReady ? (userId ?? 'guest') : 'auth-pending',
+  );
   const { isReady: areAssetsReady } = useAssetPreload([]);
   const [failedImageKeys, setFailedImageKeys] = useState<Record<string, true>>({});
   const [pieces, setPieces] = useState<BoardPiece[]>([]);
@@ -508,11 +562,12 @@ export function StageShogiScreen() {
   useEffect(() => {
     const next = snapshot.placements
       .map((placement) => {
-        const row = normalizeCellIndex(placement.row);
+        let row = normalizeCellIndex(placement.row);
         const col = normalizeCellIndex(placement.col);
         if (row === null || col === null) return null;
+        const side = normalizeSide(placement.side);
         return {
-          side: normalizeSide(placement.side),
+          side,
           row,
           col,
           pieceCode: pieceCodeFromPlacement(placement.pieceCode, placement.char),
@@ -665,7 +720,13 @@ export function StageShogiScreen() {
           stateHash: null,
           boardState: {},
           hands: nextHands,
-          legalMoves: buildLegalMoves(nextPieces, nextHands, nextSideToMove, pieceDefsByCode),
+          legalMoves: buildLegalMoves(
+            nextPieces,
+            nextHands,
+            nextSideToMove,
+            pieceDefsByCode,
+            nextMoveNo,
+          ),
         },
         engineConfig: {},
       };
@@ -700,9 +761,15 @@ export function StageShogiScreen() {
   function legalTargetsForCell(row: number, col: number, board: BoardPiece[] = pieces) {
     const piece = findPieceAt(board, row, col);
     if (!piece || piece.side !== 'player') return [];
+    const pieceDef = piece.pieceCode ? pieceDefsByCode[piece.pieceCode] : undefined;
+    if (isImmobilePiece(pieceDef)) return [];
     const vectors = resolveMoveVectors(piece, pieceDefsByCode);
     if (vectors.length === 0) return [];
-    return getLegalTargetsFromVectors(board, piece, vectors, BOARD_SIZE);
+    const stepOverrides = resolveStepOverrides(pieceDef, moveNo);
+    return getLegalTargetsFromVectors(board, piece, vectors, BOARD_SIZE, {
+      canJump: pieceDef?.canJump ?? false,
+      ...stepOverrides,
+    });
   }
 
   function commitPlayerMove(from: BoardCell, to: BoardCell, promote: boolean) {

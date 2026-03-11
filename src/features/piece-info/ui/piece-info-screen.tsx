@@ -116,7 +116,11 @@ export function PieceInfoScreen() {
           <Text className="text-lg font-black text-[#2f1b14]">駒情報</Text>
         </View>
 
-        <ScrollView className="flex-1 mt-4" showsVerticalScrollIndicator={false}>
+        <ScrollView
+          className="flex-1 mt-2"
+          showsVerticalScrollIndicator={false}
+          scrollEnabled={false}
+        >
           <View className="items-center">
             {currentPieceImage ? (
               <Image
@@ -131,11 +135,19 @@ export function PieceInfoScreen() {
             <Text className="text-xs font-bold text-[#6b4532]">{`解放: ${piece.unlock}`}</Text>
           </View>
 
-          <View className="h-20" />
+          <View className="h-2" />
 
           <View className="rounded-xl border border-[#8b0000]/50 bg-white/90 p-4">
             <Text className="text-sm font-black text-[#7f1d1d]">【スキル】</Text>
             <Text className="mt-1 text-base leading-6 text-[#1f2937]">{piece.skill}</Text>
+
+            <Text className="mt-3 text-sm font-black text-[#7f1d1d]">【移動】</Text>
+            <Text className="mt-1 text-base leading-6 text-[#1f2937]">{piece.move}</Text>
+            {piece.canJump && (
+              <Text className="mt-1 text-xs font-bold text-[#92400e]">
+                障害物を飛び越えて移動可能
+              </Text>
+            )}
 
             {piece.moveVectors.length > 0 && (
               <MovementGrid vectors={piece.moveVectors} isRepeatable={piece.isRepeatable} />

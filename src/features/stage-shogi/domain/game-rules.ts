@@ -200,23 +200,45 @@ export function getLegalTargetsFromVectors<T extends BoardPiece>(
   piece: T,
   vectors: MoveVector[],
   boardSize = 9,
+  options?: {
+    canJump?: boolean;
+    minStepByVectorKey?: Record<string, number>;
+    maxStepByVectorKey?: Record<string, number>;
+  },
 ) {
   const results: BoardCell[] = [];
   const seen = new Set<string>();
   const orient = piece.side === 'player' ? 1 : -1;
+  const canJump = options?.canJump === true;
+  const minStepByVectorKey = options?.minStepByVectorKey ?? {};
+  const maxStepByVectorKey = options?.maxStepByVectorKey ?? {};
 
   for (const vector of vectors) {
+    const vectorKey = `${vector.dx}:${vector.dy}`;
     const maxStep = Math.max(1, vector.maxStep);
+    const minStep = Math.max(1, minStepByVectorKey[vectorKey] ?? 1);
+    const cappedMaxStep = Math.max(
+      minStep,
+      Math.min(maxStep, maxStepByVectorKey[vectorKey] ?? maxStep),
+    );
     const dx = vector.dx * orient;
     const dy = vector.dy * orient;
 
-    for (let step = 1; step <= maxStep; step += 1) {
+    for (let step = 1; step <= cappedMaxStep; step += 1) {
       const targetRow = piece.row + dy * step;
       const targetCol = piece.col + dx * step;
       if (!isInsideBoard(targetRow, targetCol, boardSize)) break;
 
       const occupied = findPieceAt(placements, targetRow, targetCol);
-      if (occupied && occupied.side === piece.side) break;
+      if (occupied && occupied.side === piece.side) {
+        if (canJump) continue;
+        break;
+      }
+
+      if (step < minStep) {
+        if (occupied && !canJump) break;
+        continue;
+      }
 
       const key = cellKey(targetRow, targetCol);
       if (!seen.has(key)) {
@@ -224,7 +246,7 @@ export function getLegalTargetsFromVectors<T extends BoardPiece>(
         results.push({ row: targetRow, col: targetCol });
       }
 
-      if (occupied) break;
+      if (occupied && !canJump) break;
     }
   }
 

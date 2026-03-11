@@ -11,7 +11,7 @@ const emptySnapshot: StageBattleSnapshot = {
   placements: [],
 };
 
-export function useStageBattleScreen(stageId?: string) {
+export function useStageBattleScreen(stageId?: string, reloadKey?: string) {
   const useCase = useMemo(() => createPrepareStageBattleUseCase(), []);
   const [snapshot, setSnapshot] = useState<StageBattleSnapshot>(emptySnapshot);
   const [isLoading, setIsLoading] = useState(true);
@@ -34,7 +34,7 @@ export function useStageBattleScreen(stageId?: string) {
     return () => {
       active = false;
     };
-  }, [stageId, useCase]);
+  }, [stageId, reloadKey, useCase]);
 
   return { snapshot, isLoading };
 }

@@ -98,6 +98,9 @@ export function usePieceCatalogScreen() {
     move: '-',
     moveVectors: [],
     isRepeatable: false,
+    canJump: false,
+    moveConstraints: null,
+    moveRules: [],
     imageSignedUrl: null,
   };
 

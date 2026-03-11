@@ -1,4 +1,5 @@
 import { getJson, postJson } from '@/infra/http/api-client';
+import { supabase } from '@/lib/supabase/supabase-client';
 
 type StageListResponse = {
   stages: {
@@ -40,6 +41,13 @@ type StageBattleSetupResponse = {
 };
 
 export class StageApiDataSource {
+  private async getAccessToken(): Promise<string | undefined> {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    return session?.access_token;
+  }
+
   async getStageList(): Promise<StageListResponse> {
     return getJson<StageListResponse>('/api/v1/stages');
   }
@@ -49,6 +57,7 @@ export class StageApiDataSource {
   }
 
   async getBattleSetup(stageNo: number): Promise<StageBattleSetupResponse> {
-    return getJson<StageBattleSetupResponse>(`/api/v1/stages/${stageNo}/battle-setup`);
+    const token = await this.getAccessToken();
+    return getJson<StageBattleSetupResponse>(`/api/v1/stages/${stageNo}/battle-setup`, { token });
   }
 }
