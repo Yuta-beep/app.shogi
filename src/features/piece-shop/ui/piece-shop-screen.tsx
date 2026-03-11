@@ -1,6 +1,5 @@
 import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
-import { Modal, Pressable, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppLoadingScreen } from '@/components/organism/app-loading-screen';
@@ -12,8 +11,7 @@ import { playSe } from '@/lib/audio/audio-manager';
 import { ShopItem } from '@/domain/models/shop';
 
 const shopAssets = {
-  background: require('../../../../assets/piece-shop/shop-bg.png'),
-  home: require('../../../../assets/shared/home-back.png'),
+  background: require('../../../../assets/piece-shop/pieceShop.png'),
   pieces: {
     走: require('../../../../assets/piece-shop/piece-so.png'),
     種: require('../../../../assets/piece-shop/piece-tane.png'),
@@ -24,12 +22,22 @@ const shopAssets = {
   },
 } as const;
 
+const piecePlacementByKey: Record<
+  ShopItem['key'],
+  { width: number; height: number; marginTop: number; offsetX?: number; offsetY?: number }
+> = {
+  走: { width: 170, height: 194, marginTop: 70, offsetX: 0, offsetY: 0 },
+  種: { width: 168, height: 190, marginTop: 52, offsetX: 3, offsetY: 0 },
+  麒: { width: 172, height: 194, marginTop: 60, offsetX: -10, offsetY: -5 },
+  舞: { width: 186, height: 210, marginTop: 32, offsetX: 6, offsetY: -40 },
+  P: { width: 186, height: 210, marginTop: 32, offsetX: 0, offsetY: -44 },
+  鳴: { width: 186, height: 210, marginTop: 32, offsetX: -6, offsetY: -34 },
+};
+
 export function PieceShopScreen() {
-  const router = useRouter();
   const vm = usePieceShopScreen();
   const { isReady: areAssetsReady } = useAssetPreload([
     shopAssets.background,
-    shopAssets.home,
     ...Object.values(shopAssets.pieces),
   ]);
   useScreenBgm('shop');
@@ -48,68 +56,68 @@ export function PieceShopScreen() {
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-[#120d0a]">
+    <SafeAreaView className="flex-1 bg-[#140b06]">
       <View className="absolute inset-0">
         <Image
           source={shopAssets.background}
           contentFit="cover"
           style={{ width: '100%', height: '100%' }}
         />
-        <View className="absolute inset-0 bg-black/25" />
       </View>
 
       <View className="flex-1 px-4 pb-4">
-        <View className="mt-2 flex-row items-center justify-between rounded-xl bg-[#2f1b14]/75 px-3 py-2">
-          <Text className="text-sm font-black text-[#ffe6a5]">{`歩 x${vm.pawnCurrency}`}</Text>
-          <Text className="text-sm font-black text-[#ffe6a5]">{`金 x${vm.goldCurrency}`}</Text>
-        </View>
+        <ScrollView className="mt-4 flex-1" contentContainerClassName="pb-6">
+          <View className="mb-4 flex-row items-center justify-between rounded-lg bg-[#1a0f09]/65 px-3 py-2">
+            <Text className="text-sm font-black text-[#f7d58f]">{`歩 x${vm.pawnCurrency}`}</Text>
+            <Text className="text-sm font-black text-[#f7d58f]">{`金 x${vm.goldCurrency}`}</Text>
+          </View>
+          <View className="mt-[-28px] flex-row flex-wrap justify-between">
+            {vm.items.map((piece, index) => {
+              const isOwned = vm.owned.includes(piece.key);
+              const priceText = piece.costType === 'pawn' ? `歩 ${piece.cost}` : `金 ${piece.cost}`;
+              const isTopRow = index < 3;
+              const placement = piecePlacementByKey[piece.key];
 
-        <Pressable
-          onPress={() => {
-            void playSe('tap');
-            router.replace('/home');
-          }}
-          className="mt-3 self-start active:scale-95"
-        >
-          <Image source={shopAssets.home} contentFit="contain" style={{ width: 140, height: 44 }} />
-        </Pressable>
-
-        <View className="mt-4 flex-row flex-wrap justify-between gap-y-4">
-          {vm.items.map((piece) => {
-            const isOwned = vm.owned.includes(piece.key);
-            const priceText = piece.costType === 'pawn' ? `歩 ${piece.cost}` : `金 ${piece.cost}`;
-
-            return (
-              <View key={piece.key} className="w-[31%] items-center rounded-xl bg-[#fff8e6]/95 p-2">
-                <Pressable
-                  onPress={() => {
-                    void playSe('tap');
-                    vm.openDetail(piece);
-                  }}
-                  className="w-full items-center active:scale-95"
-                >
-                  <Image
-                    source={shopAssets.pieces[piece.key]}
-                    contentFit="contain"
-                    style={{ width: 86, height: 100 }}
-                  />
-                </Pressable>
-
-                <Pressable
-                  onPress={() => openPurchase(piece)}
-                  disabled={isOwned}
-                  className={`mt-2 w-full rounded-md px-2 py-2 ${isOwned ? 'bg-gray-300' : 'bg-[#8b0000]'}`}
-                >
-                  <Text
-                    className={`text-center text-xs font-black ${isOwned ? 'text-[#555]' : 'text-[#ffd56a]'}`}
+              return (
+                <View key={piece.key} className={`w-[31%] ${isTopRow ? 'mt-10' : 'mt-8'}`}>
+                  <Pressable
+                    onPress={() => {
+                      void playSe('tap');
+                      vm.openDetail(piece);
+                    }}
+                    className="h-[290px] items-center active:scale-95"
                   >
-                    {isOwned ? '購入済み' : `購入 ${priceText}`}
-                  </Text>
-                </Pressable>
-              </View>
-            );
-          })}
-        </View>
+                    <Image
+                      source={shopAssets.pieces[piece.key]}
+                      contentFit="contain"
+                      style={{
+                        width: placement.width,
+                        height: placement.height,
+                        marginTop: placement.marginTop,
+                        transform: [
+                          { translateX: placement.offsetX ?? 0 },
+                          { translateY: placement.offsetY ?? 0 },
+                        ],
+                      }}
+                    />
+                  </Pressable>
+
+                  <Pressable
+                    onPress={() => openPurchase(piece)}
+                    disabled={isOwned}
+                    className={`${isTopRow ? 'mt-[-12px]' : 'mt-[-30px]'} rounded-md border border-[#8B0000] px-2 py-2 ${isOwned ? 'bg-[#4b3a2f]' : 'bg-[#8f2a1a]'}`}
+                  >
+                    <Text
+                      className={`text-center text-xs font-black ${isOwned ? 'text-[#d9c8b3]' : 'text-[#ffe1a3]'}`}
+                    >
+                      {isOwned ? '購入済み' : `購入 ${priceText}`}
+                    </Text>
+                  </Pressable>
+                </View>
+              );
+            })}
+          </View>
+        </ScrollView>
       </View>
 
       <Modal
@@ -119,14 +127,14 @@ export function PieceShopScreen() {
         onRequestClose={vm.closeDetail}
       >
         <View className="flex-1 items-center justify-center bg-black/45 px-6">
-          <View className="w-full max-w-sm rounded-xl bg-[#fff7e6] p-4">
-            <Text className="text-xl font-black text-[#7f1d1d]">{vm.detailPiece?.key}</Text>
-            <Text className="mt-3 text-xs font-black text-[#7f1d1d]">【スキルの説明】</Text>
-            <Text className="mt-1 text-sm text-[#1f2937]">{vm.detailPiece?.desc}</Text>
-            <Text className="mt-3 text-xs font-black text-[#7f1d1d]">【移動範囲】</Text>
-            <Text className="mt-1 text-sm text-[#1f2937]">{vm.detailPiece?.move}</Text>
-            <Text className="mt-3 text-xs font-black text-[#7f1d1d]">【デッキコスト】</Text>
-            <Text className="mt-1 text-sm text-[#1f2937]">
+          <View className="w-full max-w-sm rounded-xl border border-[#f0c98a]/45 bg-[#2a170d]/95 p-4">
+            <Text className="text-xl font-black text-[#ffe2af]">{vm.detailPiece?.key}</Text>
+            <Text className="mt-3 text-xs font-black text-[#f2c98b]">【スキルの説明】</Text>
+            <Text className="mt-1 text-sm text-[#f4e8d6]">{vm.detailPiece?.desc}</Text>
+            <Text className="mt-3 text-xs font-black text-[#f2c98b]">【移動範囲】</Text>
+            <Text className="mt-1 text-sm text-[#f4e8d6]">{vm.detailPiece?.move}</Text>
+            <Text className="mt-3 text-xs font-black text-[#f2c98b]">【デッキコスト】</Text>
+            <Text className="mt-1 text-sm text-[#f4e8d6]">
               {vm.detailPiece
                 ? `${vm.detailPiece.costType === 'pawn' ? '歩' : '金'} ${vm.detailPiece.cost}`
                 : ''}
@@ -136,9 +144,9 @@ export function PieceShopScreen() {
                 void playSe('cancel');
                 vm.closeDetail();
               }}
-              className="mt-4 rounded-md bg-[#8b0000] px-3 py-2"
+              className="mt-4 rounded-md bg-[#8f2a1a] px-3 py-2"
             >
-              <Text className="text-center font-black text-[#ffd56a]">閉じる</Text>
+              <Text className="text-center font-black text-[#ffe2ac]">閉じる</Text>
             </Pressable>
           </View>
         </View>
@@ -151,9 +159,9 @@ export function PieceShopScreen() {
         onRequestClose={vm.closeConfirm}
       >
         <View className="flex-1 items-center justify-center bg-black/45 px-6">
-          <View className="w-full max-w-xs rounded-xl bg-[#fff7e6] p-4">
-            <Text className="text-center text-base font-black text-[#7f1d1d]">購入しますか</Text>
-            <Text className="mt-2 text-center text-sm text-[#1f2937]">
+          <View className="w-full max-w-xs rounded-xl border border-[#f0c98a]/45 bg-[#2a170d]/95 p-4">
+            <Text className="text-center text-base font-black text-[#ffe2af]">購入しますか</Text>
+            <Text className="mt-2 text-center text-sm text-[#f4e8d6]">
               {vm.confirmPiece
                 ? `${vm.confirmPiece.key} (${vm.confirmPiece.costType === 'pawn' ? '歩' : '金'} ${vm.confirmPiece.cost})`
                 : ''}
@@ -164,18 +172,18 @@ export function PieceShopScreen() {
                   void playSe('confirm');
                   void vm.purchase();
                 }}
-                className="flex-1 rounded-md bg-[#8b0000] px-3 py-2"
+                className="flex-1 rounded-md bg-[#8f2a1a] px-3 py-2"
               >
-                <Text className="text-center font-black text-[#ffd56a]">はい</Text>
+                <Text className="text-center font-black text-[#ffe2ac]">はい</Text>
               </Pressable>
               <Pressable
                 onPress={() => {
                   void playSe('cancel');
                   vm.closeConfirm();
                 }}
-                className="flex-1 rounded-md border border-[#8b0000] bg-white px-3 py-2"
+                className="flex-1 rounded-md border border-[#b37a45] bg-[#f6ead8] px-3 py-2"
               >
-                <Text className="text-center font-black text-[#7f1d1d]">いいえ</Text>
+                <Text className="text-center font-black text-[#6b2a16]">いいえ</Text>
               </Pressable>
             </View>
           </View>
