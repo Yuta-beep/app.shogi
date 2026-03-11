@@ -4,6 +4,7 @@ export const homeAssets = {
   background: require('../../assets/home/background/home-bg.png'),
   userBar: require('../../assets/home/ui/user-bar.png'),
   pvpBadge: require('../../assets/home/ui/pvp-badge.png'),
+  gachaBallIcon: require('../../assets/home/ui/gacha-ball-icon.png'),
   buttons: {
     normalDungeon: require('../../assets/home/buttons/normal-dungeon.png'),
     specialDungeon: require('../../assets/home/buttons/special-dungeon.png'),
@@ -16,6 +17,7 @@ export const homeAssets = {
     require('../../assets/home/background/home-bg.png'),
     require('../../assets/home/ui/user-bar.png'),
     require('../../assets/home/ui/pvp-badge.png'),
+    require('../../assets/home/ui/gacha-ball-icon.png'),
     require('../../assets/home/buttons/normal-dungeon.png'),
     require('../../assets/home/buttons/special-dungeon.png'),
     require('../../assets/home/buttons/deck-builder.png'),
