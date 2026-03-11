@@ -61,7 +61,7 @@ export function PieceShopScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-[#140b06]" edges={['left', 'right', 'bottom']}>
-      <GlobalHomeHud />
+      <GlobalHomeHud pawnCurrency={vm.pawnCurrency} goldCurrency={vm.goldCurrency} />
 
       <View className="flex-1">
         <View className="absolute inset-0">

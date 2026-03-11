@@ -62,13 +62,20 @@ export function usePieceShopScreen(): PieceShopVM {
       return;
     }
 
+    const target = confirm.payload;
     setIsLoading(true);
     try {
-      const result = await purchaseUseCase.execute({ item: confirm.payload });
+      const result = await purchaseUseCase.execute({ item: target });
       if (result.success || result.reason === 'UI_ONLY') {
-        setOwned((prev) =>
-          prev.includes(confirm.payload!.key) ? prev : [...prev, confirm.payload!.key],
-        );
+        setOwned((prev) => (prev.includes(target.key) ? prev : [...prev, target.key]));
+      }
+
+      if (result.success && result.reason !== 'UI_ONLY') {
+        const snapshot = await loadUseCase.execute();
+        setItems(snapshot.items);
+        setPawnCurrency(snapshot.pawnCurrency);
+        setGoldCurrency(snapshot.goldCurrency);
+        setOwned(snapshot.owned);
       }
     } finally {
       setIsLoading(false);

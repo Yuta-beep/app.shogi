@@ -216,7 +216,7 @@ export function GachaRoomScreen() {
       edges={['left', 'right', 'bottom']}
       style={{ position: 'relative' }}
     >
-      <GlobalHomeHud />
+      <GlobalHomeHud pawnCurrency={vm.pawnCurrency} goldCurrency={vm.goldCurrency} />
       {/* 動画オーバーレイ */}
       {vm.phase === 'video' && <GachaVideoOverlay isHit={isHit} onEnd={vm.onVideoEnd} />}
 
