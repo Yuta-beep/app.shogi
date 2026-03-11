@@ -29,6 +29,7 @@ import { useAssetPreload } from '@/hooks/common/use-asset-preload';
 import { useAuthSession } from '@/hooks/common/use-auth-session';
 import { useScreenBgm } from '@/hooks/common/use-screen-bgm';
 import { createLoadPieceCatalogUseCase } from '@/usecases/piece-info/create-piece-info-usecases';
+import { createClaimStageClearRewardUseCase } from '@/usecases/stage-battle/create-stage-battle-usecases';
 import { CreateGameUseCase } from '@/usecases/stage-battle/create-game-usecase';
 import {
   AiSelectedMove,
@@ -561,7 +562,9 @@ export function StageShogiScreen() {
   const [pendingPromotion, setPendingPromotion] = useState<PendingPromotion | null>(null);
   const [pieceCatalog, setPieceCatalog] = useState<PieceCatalogItem[]>([]);
   const [winner, setWinner] = useState<Side | null>(null);
+  const [clearRewardText, setClearRewardText] = useState<string | null>(null);
   const loadPieceCatalogUseCase = useMemo(() => createLoadPieceCatalogUseCase(), []);
+  const claimStageClearRewardUseCase = useMemo(() => createClaimStageClearRewardUseCase(), []);
   const createGameUseCase = useMemo(() => new CreateGameUseCase(), []);
   const requestAiMoveUseCase = useMemo(() => new RequestAiMoveUseCase(), []);
   const isMountedRef = useRef(true);
@@ -569,6 +572,7 @@ export function StageShogiScreen() {
   const aiThinkingRef = useRef(false);
   const inFlightAiKeyRef = useRef<string | null>(null);
   const lastSuccessfulAiKeyRef = useRef<string | null>(null);
+  const clearRewardClaimedRef = useRef(false);
   useScreenBgm('battle');
 
   useEffect(() => {
@@ -632,9 +636,11 @@ export function StageShogiScreen() {
     setHands(createEmptyHandsState());
     setPendingPromotion(null);
     setWinner(null);
+    setClearRewardText(null);
     aiThinkingRef.current = false;
     inFlightAiKeyRef.current = null;
     lastSuccessfulAiKeyRef.current = null;
+    clearRewardClaimedRef.current = false;
   }, [gameId, snapshot, stageParam]);
 
   useEffect(() => {
@@ -786,6 +792,7 @@ export function StageShogiScreen() {
         setWinner('enemy');
       } else if (!hasKing(afterAiPieces, 'enemy')) {
         setWinner('player');
+        void claimStageClearRewardIfNeeded();
       }
     } catch (error: unknown) {
       setAiError(error instanceof Error ? error.message : String(error));
@@ -796,6 +803,23 @@ export function StageShogiScreen() {
       setIsAiThinking(false);
     }
   };
+
+  async function claimStageClearRewardIfNeeded() {
+    if (clearRewardClaimedRef.current) return;
+    clearRewardClaimedRef.current = true;
+    try {
+      const result = await claimStageClearRewardUseCase.execute({ stageId: stageParam });
+      if (!result) return;
+
+      const pieceCount = result.granted.pieces.reduce((sum, piece) => sum + piece.quantity, 0);
+      const pieceSummary = pieceCount > 0 ? ` / 駒+${pieceCount}` : '';
+      setClearRewardText(
+        `${result.firstClear ? '初回' : '周回'}報酬: 歩+${result.granted.pawn} 金+${result.granted.gold}${pieceSummary}`,
+      );
+    } catch (error: unknown) {
+      setAiError(error instanceof Error ? error.message : String(error));
+    }
+  }
 
   function legalTargetsForCell(row: number, col: number, board: BoardPiece[] = pieces) {
     const piece = findPieceAt(board, row, col);
@@ -829,6 +853,7 @@ export function StageShogiScreen() {
     setAiError(null);
     if (!hasKing(movedPieces, 'enemy')) {
       setWinner('player');
+      void claimStageClearRewardIfNeeded();
       return;
     }
     setSideToMove('enemy');
@@ -856,6 +881,7 @@ export function StageShogiScreen() {
     setAiError(null);
     if (!hasKing(droppedPieces, 'enemy')) {
       setWinner('player');
+      void claimStageClearRewardIfNeeded();
       return;
     }
     setSideToMove('enemy');
@@ -992,6 +1018,9 @@ export function StageShogiScreen() {
         <Text className="text-base font-black text-ink">{`${snapshot.stageLabel}  手番: ${sideToMove === 'player' ? 'あなた' : 'CPU'}`}</Text>
         {isFinished ? (
           <Text className="mt-1 text-sm font-black text-[#7f1d1d]">{`対局終了: ${winner === 'player' ? 'あなたの勝ち' : 'CPUの勝ち'}`}</Text>
+        ) : null}
+        {clearRewardText ? (
+          <Text className="mt-1 text-xs text-[#14532d]">{clearRewardText}</Text>
         ) : null}
         {aiError ? <Text className="mt-1 text-xs text-red-600">{aiError}</Text> : null}
       </View>

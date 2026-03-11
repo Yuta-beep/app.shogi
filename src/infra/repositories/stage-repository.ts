@@ -1,5 +1,6 @@
 import {
   StageBattleSetup,
+  StageClearReward,
   StageRepository,
   StageSelectResult,
   StageSummary,
@@ -20,5 +21,9 @@ export class ApiStageRepository implements StageRepository {
 
   async getBattleSetup(stageNo: number): Promise<StageBattleSetup> {
     return this.dataSource.getBattleSetup(stageNo);
+  }
+
+  async clearStage(stageNo: number): Promise<StageClearReward> {
+    return this.dataSource.postClearStage(stageNo);
   }
 }

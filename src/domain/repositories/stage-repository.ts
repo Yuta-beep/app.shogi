@@ -35,8 +35,29 @@ export type StageBattleSetup = {
   };
 };
 
+export type StageClearReward = {
+  stageNo: number;
+  firstClear: boolean;
+  clearCount: number;
+  granted: {
+    pawn: number;
+    gold: number;
+    pieces: {
+      pieceId: number;
+      char: string;
+      name: string;
+      quantity: number;
+    }[];
+  };
+  wallet: {
+    pawnCurrency: number;
+    goldCurrency: number;
+  };
+};
+
 export interface StageRepository {
   listStages(): Promise<StageSummary[]>;
   selectStage(stageNo: number): Promise<StageSelectResult>;
   getBattleSetup(stageNo: number): Promise<StageBattleSetup>;
+  clearStage(stageNo: number): Promise<StageClearReward>;
 }

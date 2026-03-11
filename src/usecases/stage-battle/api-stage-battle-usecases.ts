@@ -1,6 +1,10 @@
 import { StageRepository } from '@/domain/repositories/stage-repository';
 import { ApiStageRepository } from '@/infra/repositories/stage-repository';
 import {
+  ClaimStageClearRewardUseCase,
+  StageClearRewardResult,
+} from '@/usecases/stage-battle/claim-stage-clear-reward-usecase';
+import {
   PrepareStageBattleUseCase,
   StageBattleSnapshot,
 } from '@/usecases/stage-battle/prepare-stage-battle-usecase';
@@ -48,5 +52,16 @@ export class ApiPrepareStageBattleUseCase implements PrepareStageBattleUseCase {
         imageSignedUrl: placement.piece.imageSignedUrl ?? null,
       })),
     };
+  }
+}
+
+export class ApiClaimStageClearRewardUseCase implements ClaimStageClearRewardUseCase {
+  constructor(private readonly repository: StageRepository = new ApiStageRepository()) {}
+
+  async execute(input: { stageId?: string }): Promise<StageClearRewardResult | null> {
+    if (!input.stageId) return null;
+    const stageNo = Number(input.stageId);
+    if (!Number.isInteger(stageNo) || stageNo <= 0) return null;
+    return this.repository.clearStage(stageNo);
   }
 }
