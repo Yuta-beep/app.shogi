@@ -1,6 +1,5 @@
 import { Image } from 'expo-image';
 import { useVideoPlayer, VideoView } from 'expo-video';
-import { useRouter } from 'expo-router';
 import { useEffect } from 'react';
 import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -14,7 +13,6 @@ import { useScreenBgm } from '@/hooks/common/use-screen-bgm';
 import { playSe } from '@/lib/audio/audio-manager';
 
 const gachaAssets = {
-  home: require('../../../../assets/shared/home-back.png'),
   draw1: require('../../../../assets/gacha/draw-1.png'),
   draw0: require('../../../../assets/gacha/draw-0.png'),
   drawGold: require('../../../../assets/gacha/draw-gold.png'),
@@ -60,17 +58,9 @@ function ResultCard({ vm }: { vm: GachaRoomVM }) {
   if (vm.phase === 'idle') {
     return (
       <View className="rounded-2xl border border-white/20 bg-white/10 p-4">
-        <Text className="text-sm text-slate-300">ガチャを引いて結果を確認しよう！</Text>
-        <Pressable
-          onPress={() => {
-            void playSe('confirm');
-            void vm.roll();
-          }}
-          className="mt-3 items-center rounded-xl bg-gradient-to-r from-purple-500 via-pink-500 to-yellow-500 py-3 active:opacity-80"
-          style={{ backgroundColor: '#ec4899' }}
-        >
-          <Text className="text-base font-black text-white">ガチャを引く</Text>
-        </Pressable>
+        <Text className="text-sm text-slate-300">
+          上の各ガチャバナー右側のボタンからガチャを引けます。
+        </Text>
       </View>
     );
   }
@@ -92,16 +82,9 @@ function ResultCard({ vm }: { vm: GachaRoomVM }) {
             </View>
           )}
           <Text className="text-sm text-slate-200">{result.piece.description}</Text>
-          <Pressable
-            onPress={() => {
-              void playSe('confirm');
-              void vm.roll();
-            }}
-            className="mt-4 items-center rounded-xl py-3 active:opacity-80"
-            style={{ backgroundColor: '#ec4899' }}
-          >
-            <Text className="text-base font-black text-white">もう一度引く</Text>
-          </Pressable>
+          <Text className="mt-4 text-sm text-slate-300">
+            続けて引く場合は、上の各ガチャのボタンを押してください。
+          </Text>
         </View>
       );
     } else {
@@ -121,16 +104,9 @@ function ResultCard({ vm }: { vm: GachaRoomVM }) {
             </View>
           )}
           <Text className="text-sm text-slate-300">{`${label} の通貨が増えました。ショップで使いましょう。`}</Text>
-          <Pressable
-            onPress={() => {
-              void playSe('confirm');
-              void vm.roll();
-            }}
-            className="mt-4 items-center rounded-xl py-3 active:opacity-80"
-            style={{ backgroundColor: '#ec4899' }}
-          >
-            <Text className="text-base font-black text-white">もう一度引く</Text>
-          </Pressable>
+          <Text className="mt-4 text-sm text-slate-300">
+            続けて引く場合は、上の各ガチャのボタンを押してください。
+          </Text>
         </View>
       );
     }
@@ -213,10 +189,8 @@ function PieceOverlay({ char, onDismiss }: { char: string; onDismiss: () => void
 }
 
 export function GachaRoomScreen() {
-  const router = useRouter();
   const vm = useGachaRoomScreen();
   const { isReady: areAssetsReady } = useAssetPreload([
-    gachaAssets.home,
     gachaAssets.draw1,
     gachaAssets.draw0,
     gachaAssets.drawGold,
@@ -232,7 +206,7 @@ export function GachaRoomScreen() {
 
   return (
     <SafeAreaView
-      className="flex-1 bg-[#0f172a]"
+      className="flex-1 bg-[#2f1b14]"
       edges={['left', 'right', 'bottom']}
       style={{ position: 'relative' }}
     >
@@ -246,31 +220,8 @@ export function GachaRoomScreen() {
       )}
 
       {/* ヘッダー */}
-      <View className="border-b border-white/15 bg-[#111827] px-4 py-3">
-        <View className="flex-row items-center justify-between">
-          <Text className="text-lg font-black text-white">ガチャルーム</Text>
-          <Pressable
-            onPress={() => {
-              void playSe('tap');
-              router.replace('/home');
-            }}
-            className="active:scale-95"
-          >
-            <Image
-              source={gachaAssets.home}
-              contentFit="contain"
-              style={{ width: 128, height: 40 }}
-            />
-          </Pressable>
-        </View>
-        <View className="mt-2 flex-row gap-2">
-          <View className="rounded-lg border border-white/20 bg-white/10 px-3 py-1.5">
-            <Text className="text-xs font-black text-white">{`歩 x${vm.pawnCurrency}`}</Text>
-          </View>
-          <View className="rounded-lg border border-amber-300/40 bg-white/10 px-3 py-1.5">
-            <Text className="text-xs font-black text-amber-200">{`金 x${vm.goldCurrency}`}</Text>
-          </View>
-        </View>
+      <View className="border-b border-[#f4c86a]/30 bg-[#3a152d] px-4 py-3">
+        <Text className="text-lg font-black text-[#ffd56a]">ガチャルーム</Text>
       </View>
 
       <ScrollView className="flex-1" contentContainerClassName="gap-4 p-4 pb-8">
@@ -286,7 +237,7 @@ export function GachaRoomScreen() {
           return (
             <View
               key={banner.key}
-              className={`rounded-2xl border p-3 ${active ? 'border-amber-300 bg-white/10' : 'border-white/20 bg-white/5'}`}
+              className={`overflow-hidden rounded-2xl ${active ? 'bg-white/10' : 'bg-white/5'}`}
             >
               <Pressable
                 onPress={() => {
@@ -297,12 +248,12 @@ export function GachaRoomScreen() {
               >
                 <Image
                   source={gachaAssets.banners[banner.key]}
-                  contentFit="contain"
+                  contentFit="cover"
                   style={{ width: '100%', height: 120 }}
                 />
               </Pressable>
 
-              <View className="mt-2 flex-row items-center justify-between">
+              <View className="flex-row items-center justify-between px-3 py-3">
                 <View>
                   <Text className="text-base font-black text-white">{banner.name}</Text>
                   <Text className="text-xs text-slate-300">{banner.rareRateText}</Text>
@@ -321,7 +272,7 @@ export function GachaRoomScreen() {
                   <Image
                     source={drawImage}
                     contentFit="contain"
-                    style={{ width: 100, height: 40 }}
+                    style={{ width: 140, height: 56 }}
                   />
                 </Pressable>
               </View>
