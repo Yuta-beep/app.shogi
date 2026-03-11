@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { ApiClientError } from '@/infra/http/api-client';
 import { GachaBanner } from '@/usecases/gacha-room/load-gacha-lobby-usecase';
@@ -8,7 +8,7 @@ import {
 } from '@/usecases/gacha-room/create-gacha-room-usecases';
 import { RollGachaResult } from '@/usecases/gacha-room/roll-gacha-usecase';
 
-export type GachaPhase = 'idle' | 'video' | 'pieceOverlay' | 'done';
+export type GachaPhase = 'idle' | 'rolling' | 'video' | 'pieceOverlay' | 'done';
 
 export type GachaRoomVM = {
   isLoading: boolean;
@@ -20,7 +20,7 @@ export type GachaRoomVM = {
   noticeMessage: string | null;
   phase: GachaPhase;
   lastResult: RollGachaResult | null;
-  roll: () => Promise<void>;
+  roll: (gachaKey?: GachaBanner['key']) => Promise<void>;
   onVideoEnd: () => void;
   onPieceOverlayDismiss: () => void;
 };
@@ -34,6 +34,7 @@ export function useGachaRoomScreen(): GachaRoomVM {
   const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
   const [phase, setPhase] = useState<GachaPhase>('idle');
   const [lastResult, setLastResult] = useState<RollGachaResult | null>(null);
+  const isRollingRef = useRef(false);
 
   const loadUseCase = useMemo(() => createLoadGachaLobbyUseCase(), []);
   const rollUseCase = useMemo(() => createRollGachaUseCase(), []);
@@ -60,15 +61,21 @@ export function useGachaRoomScreen(): GachaRoomVM {
     };
   }, [loadUseCase]);
 
-  async function roll() {
-    if (phase !== 'idle') return;
+  async function roll(gachaKey?: GachaBanner['key']) {
+    if (isRollingRef.current) return;
+    if (phase !== 'idle' && phase !== 'done') return;
+    const targetKey = gachaKey ?? selectedKey;
+    isRollingRef.current = true;
+    setSelectedKey(targetKey);
     setNoticeMessage(null);
-    setPhase('video');
+    setPhase('rolling');
+    setLastResult(null);
     try {
-      const result = await rollUseCase.execute({ gachaId: selectedKey });
+      const result = await rollUseCase.execute({ gachaId: targetKey });
       setLastResult(result);
       setPawnCurrency(result.pawnCurrency);
       setGoldCurrency(result.goldCurrency);
+      setPhase('video');
     } catch (error: unknown) {
       if (error instanceof ApiClientError && error.code === 'INSUFFICIENT_CURRENCY') {
         setNoticeMessage('効果が足りません');
@@ -77,10 +84,17 @@ export function useGachaRoomScreen(): GachaRoomVM {
       }
       console.error('[gacha-room] failed to roll gacha', error);
       setPhase('idle');
+    } finally {
+      isRollingRef.current = false;
     }
   }
 
   function onVideoEnd() {
+    if (!lastResult) {
+      setPhase('idle');
+      return;
+    }
+
     if (lastResult?.type === 'hit') {
       setPhase('pieceOverlay');
     } else {
