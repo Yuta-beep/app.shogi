@@ -7,11 +7,14 @@ type CurrencyStackProps = {
   goldCurrency: number;
 };
 
+const pawnPieceCoinIcon = require('../../../assets/home/ui/hoPieceCoin.png');
+const goldPieceCoinIcon = require('../../../assets/home/ui/KinPieceCoin.png');
+
 export function CurrencyStack({ pawnCurrency, goldCurrency }: CurrencyStackProps) {
   return (
     <View className="min-w-[120px] flex-row items-center justify-end gap-3">
-      <CurrencyChip label="歩" value={pawnCurrency} />
-      <CurrencyChip label="金" value={goldCurrency} />
+      <CurrencyChip iconSource={pawnPieceCoinIcon} value={pawnCurrency} />
+      <CurrencyChip iconSource={goldPieceCoinIcon} value={goldCurrency} />
     </View>
   );
 }
