@@ -10,10 +10,35 @@ import {
 } from '@/usecases/gacha-room/roll-gacha-usecase';
 
 const banners: GachaLobbySnapshot['banners'] = [
-  { key: 'ukanmuri', name: 'うかんむりガチャ', rareRateText: 'UR 3% / SSR 8%' },
-  { key: 'hihen', name: 'ひへんガチャ', rareRateText: 'UR 4% / SSR 10%' },
-  { key: 'shinnyo', name: 'しんにょうガチャ', rareRateText: 'UR 3% / SSR 9%' },
-  { key: 'kanken1', name: '漢検1級ガチャ', rareRateText: 'UR 7% / SSR 15%', usesGold: true },
+  {
+    key: 'ukanmuri',
+    name: 'うかんむりガチャ',
+    rareRateText: 'UR 3% / SSR 8%',
+    pawnCost: 30,
+    goldCost: 0,
+  },
+  {
+    key: 'hihen',
+    name: 'ひへんガチャ',
+    rareRateText: 'UR 4% / SSR 10%',
+    pawnCost: 30,
+    goldCost: 0,
+  },
+  {
+    key: 'shinnyo',
+    name: 'しんにょうガチャ',
+    rareRateText: 'UR 3% / SSR 9%',
+    pawnCost: 30,
+    goldCost: 0,
+  },
+  {
+    key: 'kanken1',
+    name: '漢検1級ガチャ',
+    rareRateText: 'UR 7% / SSR 15%',
+    usesGold: true,
+    pawnCost: 0,
+    goldCost: 1,
+  },
 ];
 
 type GachaConfig = {
@@ -163,12 +188,19 @@ export class MockLoadGachaLobbyUseCase implements LoadGachaLobbyUseCase {
 export class MockRollGachaUseCase implements RollGachaUseCase {
   async execute(input: RollGachaInput): Promise<RollGachaResult> {
     const config = GACHA_CONFIGS[input.gachaId];
-    if (!config) return { type: 'miss', currency: 'pawn', amount: 5 };
+    if (!config)
+      return { type: 'miss', currency: 'pawn', amount: 5, pawnCurrency: 3005, goldCurrency: 20 };
 
     if (Math.random() < config.hitRate) {
       const picked = pickWeightedRandom(config.pieces);
       if (picked.isCurrency && picked.currencyType) {
-        return { type: 'miss', currency: picked.currencyType, amount: 1 };
+        return {
+          type: 'miss',
+          currency: picked.currencyType,
+          amount: 1,
+          pawnCurrency: picked.currencyType === 'pawn' ? 3001 : 3000,
+          goldCurrency: picked.currencyType === 'gold' ? 21 : 20,
+        };
       }
       return {
         type: 'hit',
@@ -179,6 +211,8 @@ export class MockRollGachaUseCase implements RollGachaUseCase {
           description: picked.description,
         },
         alreadyOwned: false,
+        pawnCurrency: 3000,
+        goldCurrency: 20,
       };
     }
 
@@ -187,6 +221,8 @@ export class MockRollGachaUseCase implements RollGachaUseCase {
       type: 'miss',
       currency: isGold ? 'gold' : 'pawn',
       amount: isGold ? config.goldFailReward : config.pawnFailReward,
+      pawnCurrency: isGold ? 3000 : 3000 + config.pawnFailReward,
+      goldCurrency: isGold ? 20 + config.goldFailReward : 20,
     };
   }
 }

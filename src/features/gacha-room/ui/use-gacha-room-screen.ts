@@ -2,9 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { GachaBanner } from '@/usecases/gacha-room/load-gacha-lobby-usecase';
 import {
-  MockLoadGachaLobbyUseCase,
-  MockRollGachaUseCase,
-} from '@/usecases/gacha-room/mock-gacha-room-usecases';
+  createLoadGachaLobbyUseCase,
+  createRollGachaUseCase,
+} from '@/usecases/gacha-room/create-gacha-room-usecases';
 import { RollGachaResult } from '@/usecases/gacha-room/roll-gacha-usecase';
 
 export type GachaPhase = 'idle' | 'video' | 'pieceOverlay' | 'done';
@@ -32,8 +32,8 @@ export function useGachaRoomScreen(): GachaRoomVM {
   const [phase, setPhase] = useState<GachaPhase>('idle');
   const [lastResult, setLastResult] = useState<RollGachaResult | null>(null);
 
-  const loadUseCase = useMemo(() => new MockLoadGachaLobbyUseCase(), []);
-  const rollUseCase = useMemo(() => new MockRollGachaUseCase(), []);
+  const loadUseCase = useMemo(() => createLoadGachaLobbyUseCase(), []);
+  const rollUseCase = useMemo(() => createRollGachaUseCase(), []);
 
   useEffect(() => {
     let active = true;
@@ -43,6 +43,9 @@ export function useGachaRoomScreen(): GachaRoomVM {
       .then((snapshot) => {
         if (!active) return;
         setBanners(snapshot.banners);
+        if (snapshot.banners.length > 0) {
+          setSelectedKey(snapshot.banners[0].key);
+        }
         setPawnCurrency(snapshot.pawnCurrency);
         setGoldCurrency(snapshot.goldCurrency);
       })
@@ -59,10 +62,8 @@ export function useGachaRoomScreen(): GachaRoomVM {
     setPhase('video');
     const result = await rollUseCase.execute({ gachaId: selectedKey });
     setLastResult(result);
-    if (result.type === 'miss') {
-      setPawnCurrency((prev) => (result.currency === 'pawn' ? prev + result.amount : prev));
-      setGoldCurrency((prev) => (result.currency === 'gold' ? prev + result.amount : prev));
-    }
+    setPawnCurrency(result.pawnCurrency);
+    setGoldCurrency(result.goldCurrency);
   }
 
   function onVideoEnd() {
