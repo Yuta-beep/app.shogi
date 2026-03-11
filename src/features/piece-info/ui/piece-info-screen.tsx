@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, ScrollView, Text, View } from 'react-native';
+import { useMemo } from 'react';
+import { ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppLoadingScreen } from '@/components/organism/app-loading-screen';
@@ -25,7 +25,6 @@ const pieceImages: Record<string, number> = {
 // 5x5グリッド（中心 [2][2] = 駒位置）
 const GRID_SIZE = 5;
 const CENTER = 2;
-const DETAIL_FADE_MS = 180;
 
 function MovementGrid({ vectors, isRepeatable }: { vectors: MoveVector[]; isRepeatable: boolean }) {
   // グリッドセルに移動可能かどうかをマーク
@@ -75,30 +74,12 @@ function MovementGrid({ vectors, isRepeatable }: { vectors: MoveVector[]; isRepe
 
 export function PieceInfoScreen() {
   const { piece, items, index, total, selectIndex, isLoading } = usePieceCatalogScreen();
-  const detailOpacity = useRef(new Animated.Value(1)).current;
-  const [isRemoteImageFailed, setIsRemoteImageFailed] = useState(false);
-  const localPieceImage = pieceImages[piece.char] ?? null;
-  const currentPieceImage =
-    piece.imageSignedUrl && !isRemoteImageFailed ? { uri: piece.imageSignedUrl } : localPieceImage;
   const carouselItems = useMemo(() => (items.length > 0 ? items : [piece]), [items, piece]);
   const { isReady: areAssetsReady } = useAssetPreload([
     pieceInfoBackground,
     ...Object.values(pieceImages),
   ]);
   useScreenBgm('catalog');
-
-  useEffect(() => {
-    detailOpacity.setValue(0);
-    Animated.timing(detailOpacity, {
-      toValue: 1,
-      duration: DETAIL_FADE_MS,
-      useNativeDriver: true,
-    }).start();
-  }, [detailOpacity, index]);
-
-  useEffect(() => {
-    setIsRemoteImageFailed(false);
-  }, [piece.char, piece.imageSignedUrl, index]);
 
   if (isLoading || !areAssetsReady) {
     return <AppLoadingScreen imageSource={homeAssets.loadingImage} />;
@@ -116,12 +97,12 @@ export function PieceInfoScreen() {
           />
         </View>
 
-        <View className="flex-1 px-4 pb-4">
+        <View className="-mt-2 flex-1 px-4 pb-2">
           <View className="flex-row items-center justify-end">
             <Text className="text-lg font-black text-[#2f1b14]">駒情報</Text>
           </View>
 
-          <View className="mt-3 items-center justify-center">
+          <View className="mt-1 items-center justify-center">
             <Text
               className="text-[32px] text-[#2f1b14]"
               style={{
@@ -136,27 +117,34 @@ export function PieceInfoScreen() {
           </View>
 
           <ScrollView
-            className="mt-2 flex-1"
+            className="mt-1 flex-1"
             showsVerticalScrollIndicator={false}
             scrollEnabled={false}
           >
-            <Animated.View style={{ opacity: detailOpacity, transform: [{ translateY: 0 }] }}>
-              <View className="mt-0 items-center">
-                {currentPieceImage ? (
-                  <Image
-                    source={currentPieceImage}
-                    contentFit="contain"
-                    style={{ width: 300, height: 300 }}
-                    onError={() => {
-                      setIsRemoteImageFailed(true);
+            <View style={{ transform: [{ translateY: -24 }] }}>
+              <View className="-mx-4 -mt-2 h-[300px] justify-center">
+                <View style={{ transform: [{ translateY: -26 }] }}>
+                  <PieceSwipeCarousel
+                    items={carouselItems}
+                    selectedIndex={index}
+                    onSelectIndex={selectIndex}
+                    onChangeEffect={() => {
+                      void playSe('tap');
                     }}
+                    pieceImages={pieceImages}
+                    itemWidth={144}
+                    itemGap={0}
+                    cellHeight={300}
+                    activeImageSize={228}
+                    inactiveImageSize={164}
+                    activeScale={1}
+                    inactiveScale={0.92}
                   />
-                ) : (
-                  <Text className="text-8xl font-black text-[#2f1b14]">{piece.char}</Text>
-                )}
+                </View>
               </View>
+              <Text className="mt-1 text-center text-sm font-bold text-[#6b4532]">{`${index + 1} / ${total}`}</Text>
 
-              <View className="-mt-8 rounded-xl border border-[#8b0000]/50 bg-white/90 p-4">
+              <View className="-mt-20 rounded-xl border border-[#8b0000]/50 bg-white/90 p-4">
                 {piece.moveVectors.length > 0 && (
                   <MovementGrid vectors={piece.moveVectors} isRepeatable={piece.isRepeatable} />
                 )}
@@ -172,23 +160,10 @@ export function PieceInfoScreen() {
                   </Text>
                 )}
               </View>
-            </Animated.View>
+            </View>
 
-            <View className="h-6" />
+            <View className="h-2" />
           </ScrollView>
-
-          <View style={{ transform: [{ translateY: 28 }] }}>
-            <PieceSwipeCarousel
-              items={carouselItems}
-              selectedIndex={index}
-              onSelectIndex={selectIndex}
-              onChangeEffect={() => {
-                void playSe('tap');
-              }}
-              pieceImages={pieceImages}
-            />
-            <Text className="mt-2 text-center text-sm font-bold text-[#6b4532]">{`${index + 1} / ${total}`}</Text>
-          </View>
         </View>
       </View>
     </SafeAreaView>
