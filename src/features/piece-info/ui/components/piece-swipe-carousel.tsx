@@ -4,8 +4,6 @@ import { Animated, FlatList, Pressable, Text, View, useWindowDimensions } from '
 
 import type { PieceCatalogItem } from '@/domain/models/piece';
 
-const ITEM_WIDTH = 84;
-const ITEM_GAP = 4;
 const LOOP_MULTIPLIER = 5;
 
 type CarouselCell = {
@@ -19,6 +17,13 @@ type PieceSwipeCarouselProps = {
   onSelectIndex: (index: number) => void;
   onChangeEffect?: () => void;
   pieceImages: Record<string, number>;
+  itemWidth?: number;
+  itemGap?: number;
+  cellHeight?: number;
+  activeImageSize?: number;
+  inactiveImageSize?: number;
+  activeScale?: number;
+  inactiveScale?: number;
 };
 
 export function PieceSwipeCarousel({
@@ -27,12 +32,19 @@ export function PieceSwipeCarousel({
   onSelectIndex,
   onChangeEffect,
   pieceImages,
+  itemWidth = 84,
+  itemGap = 4,
+  cellHeight = 80,
+  activeImageSize = 88,
+  inactiveImageSize = 62,
+  activeScale = 1.28,
+  inactiveScale = 0.75,
 }: PieceSwipeCarouselProps) {
   const { width: screenWidth } = useWindowDimensions();
   const ref = useRef<FlatList<CarouselCell>>(null);
   const scrollX = useRef(new Animated.Value(0)).current;
-  const snapInterval = ITEM_WIDTH + ITEM_GAP;
-  const sidePadding = Math.max((screenWidth - ITEM_WIDTH) / 2, 0);
+  const snapInterval = itemWidth + itemGap;
+  const sidePadding = Math.max((screenWidth - itemWidth) / 2, 0);
   const baseCount = items.length;
   const isLoopable = baseCount > 1;
   const middleBlockOffset = isLoopable ? baseCount * Math.floor(LOOP_MULTIPLIER / 2) : 0;
@@ -43,6 +55,17 @@ export function PieceSwipeCarousel({
       rawIndex,
     }));
   }, [baseCount, isLoopable, items]);
+  const latestSelectedIndexRef = useRef(selectedIndex);
+
+  useEffect(() => {
+    latestSelectedIndexRef.current = selectedIndex;
+  }, [selectedIndex]);
+
+  function normalizedIndexFromOffset(offsetX: number) {
+    if (baseCount === 0) return 0;
+    const rawIndex = Math.round(offsetX / snapInterval);
+    return ((rawIndex % baseCount) + baseCount) % baseCount;
+  }
 
   useEffect(() => {
     if (items.length === 0) return;
@@ -61,9 +84,8 @@ export function PieceSwipeCarousel({
       keyExtractor={(cell) => `${cell.piece.pieceId ?? cell.piece.char}-${cell.rawIndex}`}
       decelerationRate="fast"
       snapToInterval={snapInterval}
-      disableIntervalMomentum
       contentContainerStyle={{ paddingHorizontal: sidePadding }}
-      ItemSeparatorComponent={() => <View style={{ width: ITEM_GAP }} />}
+      ItemSeparatorComponent={() => <View style={{ width: itemGap }} />}
       getItemLayout={(_, rawIndex) => ({
         length: snapInterval,
         offset: snapInterval * rawIndex,
@@ -71,16 +93,20 @@ export function PieceSwipeCarousel({
       })}
       onScroll={Animated.event([{ nativeEvent: { contentOffset: { x: scrollX } } }], {
         useNativeDriver: true,
+        listener: (event: { nativeEvent: { contentOffset: { x: number } } }) => {
+          if (baseCount === 0) return;
+          const nextIndex = normalizedIndexFromOffset(event.nativeEvent.contentOffset.x);
+          if (nextIndex !== latestSelectedIndexRef.current) {
+            latestSelectedIndexRef.current = nextIndex;
+            onSelectIndex(nextIndex);
+          }
+        },
       })}
       scrollEventThrottle={16}
       onMomentumScrollEnd={(event) => {
         if (items.length === 0) return;
         const rawIndex = Math.round(event.nativeEvent.contentOffset.x / snapInterval);
         const nextIndex = ((rawIndex % baseCount) + baseCount) % baseCount;
-        if (nextIndex !== selectedIndex) {
-          onChangeEffect?.();
-          onSelectIndex(nextIndex);
-        }
         if (isLoopable) {
           const rebasedRawIndex = middleBlockOffset + nextIndex;
           if (Math.abs(rawIndex - rebasedRawIndex) > baseCount) {
@@ -103,7 +129,7 @@ export function PieceSwipeCarousel({
         ];
         const scale = scrollX.interpolate({
           inputRange,
-          outputRange: [0.75, 1.28, 0.75],
+          outputRange: [inactiveScale, activeScale, inactiveScale],
           extrapolate: 'clamp',
         });
         const opacity = scrollX.interpolate({
@@ -112,9 +138,12 @@ export function PieceSwipeCarousel({
           extrapolate: 'clamp',
         });
         const isActive = normalizedIndex === selectedIndex;
+        const resolvedOpacity = isActive ? 1 : opacity;
 
         return (
-          <Animated.View style={{ width: ITEM_WIDTH, opacity, transform: [{ scale }] }}>
+          <Animated.View
+            style={{ width: itemWidth, opacity: resolvedOpacity, transform: [{ scale }] }}
+          >
             <Pressable
               onPress={() => {
                 if (normalizedIndex === selectedIndex) return;
@@ -125,13 +154,17 @@ export function PieceSwipeCarousel({
                   animated: true,
                 });
               }}
-              className="h-20 w-[84px] items-center justify-center"
+              className="items-center justify-center"
+              style={{ width: itemWidth, height: cellHeight }}
             >
               {source ? (
                 <Image
                   source={source}
                   contentFit="contain"
-                  style={{ width: isActive ? 88 : 62, height: isActive ? 88 : 62 }}
+                  style={{
+                    width: isActive ? activeImageSize : inactiveImageSize,
+                    height: isActive ? activeImageSize : inactiveImageSize,
+                  }}
                 />
               ) : (
                 <Text className="text-3xl font-black text-[#2f1b14]">{cell.piece.char}</Text>
