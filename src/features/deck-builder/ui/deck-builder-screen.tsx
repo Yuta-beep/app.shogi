@@ -35,7 +35,7 @@ export function DeckBuilderScreen() {
   }
 
   return (
-    <UiScreenShell title="マイデッキ作成" subtitle="将棋盤に駒を配置して保存">
+    <UiScreenShell title="マイデッキ作成" subtitle="将棋盤に駒を配置して保存" hideBackButton>
       <View className="overflow-hidden rounded-2xl border border-[#8b0000]/50">
         <Image source={deckAssets.bg} contentFit="cover" style={{ width: '100%', height: 180 }} />
       </View>

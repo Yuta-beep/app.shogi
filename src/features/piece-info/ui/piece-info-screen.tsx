@@ -1,9 +1,10 @@
 import { Image } from 'expo-image';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppLoadingScreen } from '@/components/organism/app-loading-screen';
+import { GlobalHomeHud } from '@/components/organism/global-home-hud';
 import { homeAssets } from '@/constants/home-assets';
 import { PieceSwipeCarousel } from '@/features/piece-info/ui/components/piece-swipe-carousel';
 import { usePieceCatalogScreen } from '@/features/piece-info/ui/use-piece-catalog-screen';
@@ -13,7 +14,6 @@ import { playSe } from '@/lib/audio/audio-manager';
 import { MoveVector } from '@/domain/models/piece';
 
 const pieceInfoBackground = require('../../../../assets/piece-info/piece-info-bg.png');
-const boardHeader = require('../../../../assets/piece-info/board.png');
 const pieceImages: Record<string, number> = {
   香: require('../../../../assets/piece-info/pieces/香.png'),
   桂: require('../../../../assets/piece-info/pieces/桂.png'),
@@ -76,13 +76,13 @@ function MovementGrid({ vectors, isRepeatable }: { vectors: MoveVector[]; isRepe
 export function PieceInfoScreen() {
   const { piece, items, index, total, selectIndex, isLoading } = usePieceCatalogScreen();
   const detailOpacity = useRef(new Animated.Value(1)).current;
-  const currentPieceImage = piece.imageSignedUrl
-    ? { uri: piece.imageSignedUrl }
-    : (pieceImages[piece.char] ?? null);
+  const [isRemoteImageFailed, setIsRemoteImageFailed] = useState(false);
+  const localPieceImage = pieceImages[piece.char] ?? null;
+  const currentPieceImage =
+    piece.imageSignedUrl && !isRemoteImageFailed ? { uri: piece.imageSignedUrl } : localPieceImage;
   const carouselItems = useMemo(() => (items.length > 0 ? items : [piece]), [items, piece]);
   const { isReady: areAssetsReady } = useAssetPreload([
     pieceInfoBackground,
-    boardHeader,
     ...Object.values(pieceImages),
   ]);
   useScreenBgm('catalog');
@@ -96,69 +96,67 @@ export function PieceInfoScreen() {
     }).start();
   }, [detailOpacity, index]);
 
+  useEffect(() => {
+    setIsRemoteImageFailed(false);
+  }, [piece.char, piece.imageSignedUrl, index]);
+
   if (isLoading || !areAssetsReady) {
     return <AppLoadingScreen imageSource={homeAssets.loadingImage} />;
   }
 
   return (
-    <View className="flex-1">
-      <View className="absolute inset-0">
-        <Image
-          source={pieceInfoBackground}
-          contentFit="fill"
-          style={{ width: '100%', height: '108%', transform: [{ translateY: -24 }] }}
-        />
-      </View>
+    <SafeAreaView className="flex-1 bg-black" edges={['left', 'right', 'bottom']}>
+      <GlobalHomeHud />
+      <View className="flex-1">
+        <View className="absolute inset-0">
+          <Image
+            source={pieceInfoBackground}
+            contentFit="fill"
+            style={{ width: '100%', height: '100%' }}
+          />
+        </View>
 
-      <SafeAreaView className="flex-1" edges={['left', 'right', 'bottom']}>
         <View className="flex-1 px-4 pb-4">
           <View className="flex-row items-center justify-end">
             <Text className="text-lg font-black text-[#2f1b14]">駒情報</Text>
           </View>
 
-          <View
-            className="-mt-1 h-24 w-full overflow-hidden rounded-xl"
-            style={{ transform: [{ translateY: 3 }] }}
-          >
-            <Image
-              source={boardHeader}
-              contentFit="cover"
-              style={{ width: '100%', height: '100%' }}
-            />
-            <View className="absolute inset-x-0 bottom-3 items-center justify-center">
-              <Text
-                className="text-[32px] text-[#2f1b14]"
-                style={{
-                  fontFamily: 'ShipporiMincho_700Bold',
-                  textShadowColor: 'rgba(47, 27, 20, 0.22)',
-                  textShadowOffset: { width: 0.6, height: 0.6 },
-                  textShadowRadius: 0.4,
-                }}
-              >
-                駒図鑑
-              </Text>
-            </View>
+          <View className="mt-3 items-center justify-center">
+            <Text
+              className="text-[32px] text-[#2f1b14]"
+              style={{
+                fontFamily: 'ShipporiMincho_700Bold',
+                textShadowColor: 'rgba(47, 27, 20, 0.22)',
+                textShadowOffset: { width: 0.6, height: 0.6 },
+                textShadowRadius: 0.4,
+              }}
+            >
+              駒図鑑
+            </Text>
           </View>
 
           <ScrollView
-            className="mt-1 flex-1"
+            className="mt-2 flex-1"
             showsVerticalScrollIndicator={false}
             scrollEnabled={false}
           >
-            <Animated.View style={{ opacity: detailOpacity, transform: [{ translateY: -9 }] }}>
-              <View className="-mt-10 items-center">
+            <Animated.View style={{ opacity: detailOpacity, transform: [{ translateY: 0 }] }}>
+              <View className="mt-0 items-center">
                 {currentPieceImage ? (
                   <Image
                     source={currentPieceImage}
                     contentFit="contain"
                     style={{ width: 300, height: 300 }}
+                    onError={() => {
+                      setIsRemoteImageFailed(true);
+                    }}
                   />
                 ) : (
                   <Text className="text-8xl font-black text-[#2f1b14]">{piece.char}</Text>
                 )}
               </View>
 
-              <View className="-mt-16 rounded-xl border border-[#8b0000]/50 bg-white/90 p-4">
+              <View className="-mt-8 rounded-xl border border-[#8b0000]/50 bg-white/90 p-4">
                 {piece.moveVectors.length > 0 && (
                   <MovementGrid vectors={piece.moveVectors} isRepeatable={piece.isRepeatable} />
                 )}
@@ -192,7 +190,7 @@ export function PieceInfoScreen() {
             <Text className="mt-2 text-center text-sm font-bold text-[#6b4532]">{`${index + 1} / ${total}`}</Text>
           </View>
         </View>
-      </SafeAreaView>
-    </View>
+      </View>
+    </SafeAreaView>
   );
 }
