@@ -62,14 +62,7 @@ export function StageSelectScreen() {
   }, [currentPage, currentRange.height, isLoading, isReady, selectedStage]);
 
   if (!isReady || isLoading) {
-    return (
-      <SafeAreaView className="flex-1 bg-black/20" edges={['left', 'right', 'bottom']}>
-        <GlobalHomeHud />
-        <ImageBackground source={stageSelectBackgrounds[1]} resizeMode="cover" className="flex-1">
-          <AppLoadingScreen imageSource={homeAssets.loadingImage} />
-        </ImageBackground>
-      </SafeAreaView>
-    );
+    return <AppLoadingScreen imageSource={homeAssets.loadingImage} />;
   }
 
   return (

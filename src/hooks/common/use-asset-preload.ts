@@ -1,32 +1,104 @@
 import { Asset } from 'expo-asset';
-import { useEffect, useMemo, useState } from 'react';
+import { Image } from 'expo-image';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 export type UseAssetPreloadResult = {
   isReady: boolean;
   error: Error | null;
 };
 
-export function useAssetPreload(assetModules: readonly number[]): UseAssetPreloadResult {
+type PreloadTarget = number | string | null | undefined;
+type UseAssetPreloadOptions = {
+  blockOnTargetChange?: boolean;
+  initialSettleMs?: number;
+  enabled?: boolean;
+};
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+export function useAssetPreload(
+  assetModules: readonly PreloadTarget[],
+  options?: UseAssetPreloadOptions,
+): UseAssetPreloadResult {
   const [isReady, setIsReady] = useState(false);
   const [error, setError] = useState<Error | null>(null);
+  const hasCompletedInitialPreloadRef = useRef(false);
+  const blockOnTargetChange = options?.blockOnTargetChange ?? false;
+  const initialSettleMs = options?.initialSettleMs ?? 250;
+  const enabled = options?.enabled ?? true;
 
   // JSON.stringify で中身ベースの比較にし、インライン配列でも再実行しない
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const targets = useMemo(() => assetModules.filter(Boolean), [JSON.stringify(assetModules)]);
+  const targets = useMemo(
+    () =>
+      assetModules.filter((target): target is number | string => {
+        if (typeof target === 'number') return target > 0;
+        return isNonEmptyString(target);
+      }),
+    [JSON.stringify(assetModules)],
+  );
 
   useEffect(() => {
+    if (!enabled) {
+      if (!hasCompletedInitialPreloadRef.current) {
+        setIsReady(false);
+      }
+      return () => undefined;
+    }
+
     let active = true;
 
     async function preload() {
+      if (active) {
+        setError(null);
+        if (!hasCompletedInitialPreloadRef.current || blockOnTargetChange) {
+          setIsReady(false);
+        }
+      }
+
       try {
-        await Promise.all(targets.map((asset) => Asset.fromModule(asset).downloadAsync()));
+        const localAssetTargets = targets.filter(
+          (target): target is number => typeof target === 'number',
+        );
+        const remoteUrlTargets = targets.filter(isNonEmptyString);
+
+        const downloadedAssets = await Promise.all(
+          localAssetTargets.map(async (assetModule) => {
+            const asset = Asset.fromModule(assetModule);
+            await asset.downloadAsync();
+            return asset;
+          }),
+        );
+
+        const preloadUrls = [
+          ...downloadedAssets
+            .map((asset) => asset.localUri ?? asset.uri ?? null)
+            .filter(isNonEmptyString),
+          ...remoteUrlTargets,
+        ];
+
+        if (preloadUrls.length > 0) {
+          await Image.prefetch(preloadUrls);
+        }
+
+        if (!hasCompletedInitialPreloadRef.current && initialSettleMs > 0) {
+          await new Promise((resolve) => {
+            setTimeout(resolve, initialSettleMs);
+          });
+          if (!active) return;
+        }
+
         if (active) {
           setIsReady(true);
+          hasCompletedInitialPreloadRef.current = true;
         }
       } catch (e) {
         if (active) {
           setError(e instanceof Error ? e : new Error('Asset preload failed'));
           setIsReady(true);
+          hasCompletedInitialPreloadRef.current = true;
         }
       }
     }
@@ -36,7 +108,7 @@ export function useAssetPreload(assetModules: readonly number[]): UseAssetPreloa
     return () => {
       active = false;
     };
-  }, [targets]);
+  }, [blockOnTargetChange, enabled, initialSettleMs, targets]);
 
   return { isReady, error };
 }
