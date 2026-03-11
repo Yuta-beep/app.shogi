@@ -1,6 +1,8 @@
 import { Image } from 'expo-image';
+import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef } from 'react';
-import { Animated, Easing, Text, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Animated, Easing, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { homeAssets } from '@/constants/home-assets';
 
@@ -68,23 +70,42 @@ export function AppLoadingScreen({
   label = 'Loading',
   imageSource = homeAssets.loadingImage,
 }: AppLoadingScreenProps) {
-  const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
 
   return (
-    <View className="flex-1 items-center justify-center px-6">
-      {imageSource ? (
-        <View className="absolute inset-0">
-          <Image source={imageSource} contentFit="cover" style={{ width, height }} />
-          <Text className="absolute bottom-3 right-3 text-[12px] font-light tracking-widest text-white">
-            {label}
-          </Text>
-        </View>
-      ) : (
-        <View className="flex-row items-center rounded-lg bg-black/45 px-3 py-2">
-          <Text className="text-base font-bold text-[#ffe6a5]">{label}</Text>
-          <LoadingDots />
-        </View>
-      )}
+    <View className="flex-1 bg-black">
+      <StatusBar style="light" backgroundColor="#000000" />
+      {insets.top > 0 ? (
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            height: insets.top,
+            backgroundColor: '#000000',
+            zIndex: 10,
+          }}
+        />
+      ) : null}
+
+      <View className="flex-1 items-center justify-center px-6">
+        {imageSource ? (
+          <View style={StyleSheet.absoluteFill}>
+            <Image source={imageSource} contentFit="cover" style={StyleSheet.absoluteFill} />
+            <View className="absolute bottom-6 right-6 flex-row items-center gap-2">
+              <Text className="text-[18px] font-semibold tracking-widest text-white">{label}</Text>
+              <ActivityIndicator size="small" color="#ffffff" />
+            </View>
+          </View>
+        ) : (
+          <View className="flex-row items-center rounded-lg bg-black/45 px-3 py-2">
+            <Text className="text-base font-bold text-[#ffe6a5]">{label}</Text>
+            <LoadingDots />
+          </View>
+        )}
+      </View>
     </View>
   );
 }
