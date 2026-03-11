@@ -1,8 +1,10 @@
 import { Image } from 'expo-image';
+import { useRouter } from 'expo-router';
 import { useMemo } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { BackButton } from '@/components/atom/back-button';
 import { AppLoadingScreen } from '@/components/organism/app-loading-screen';
 import { GlobalHomeHud } from '@/components/organism/global-home-hud';
 import { homeAssets } from '@/constants/home-assets';
@@ -73,6 +75,7 @@ function MovementGrid({ vectors, isRepeatable }: { vectors: MoveVector[]; isRepe
 }
 
 export function PieceInfoScreen() {
+  const router = useRouter();
   const { piece, items, index, total, selectIndex, isLoading } = usePieceCatalogScreen();
   const carouselItems = useMemo(() => (items.length > 0 ? items : [piece]), [items, piece]);
   const { isReady: areAssetsReady } = useAssetPreload([
@@ -97,9 +100,15 @@ export function PieceInfoScreen() {
           />
         </View>
 
-        <View className="-mt-2 flex-1 px-4 pb-2">
-          <View className="flex-row items-center justify-end">
+        <View className="mt-4 flex-1 px-4 pb-2">
+          <View className="flex-row items-center justify-between">
             <Text className="text-lg font-black text-[#2f1b14]">駒情報</Text>
+            <BackButton
+              onPress={() => {
+                void playSe('tap');
+                router.back();
+              }}
+            />
           </View>
 
           <View className="mt-1 items-center justify-center">

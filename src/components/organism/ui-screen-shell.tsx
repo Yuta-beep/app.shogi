@@ -3,6 +3,7 @@ import { ReactNode } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { BackButton } from '@/components/atom/back-button';
 import { GlobalHomeHud } from '@/components/organism/global-home-hud';
 import { playSe } from '@/lib/audio/audio-manager';
 
@@ -11,6 +12,7 @@ type UiScreenShellProps = {
   subtitle?: string;
   children: ReactNode;
   hideBackButton?: boolean;
+  rightAction?: ReactNode;
 };
 
 export function UiScreenShell({
@@ -18,6 +20,7 @@ export function UiScreenShell({
   subtitle,
   children,
   hideBackButton = false,
+  rightAction,
 }: UiScreenShellProps) {
   const router = useRouter();
 
@@ -31,25 +34,24 @@ export function UiScreenShell({
           {hideBackButton ? (
             <View />
           ) : (
-            <Pressable
+            <BackButton
               onPress={() => {
                 void playSe('tap');
                 router.back();
               }}
+            />
+          )}
+          {rightAction ?? (
+            <Pressable
+              onPress={() => {
+                void playSe('tap');
+                router.replace('/home');
+              }}
               className="rounded-md border border-accent px-3 py-1 active:scale-95"
             >
-              <Text className="text-sm font-bold text-ink">戻る</Text>
+              <Text className="text-sm font-bold text-ink">ホーム</Text>
             </Pressable>
           )}
-          <Pressable
-            onPress={() => {
-              void playSe('tap');
-              router.replace('/home');
-            }}
-            className="rounded-md border border-accent px-3 py-1 active:scale-95"
-          >
-            <Text className="text-sm font-bold text-ink">ホーム</Text>
-          </Pressable>
         </View>
         <Text className={`${hideBackButton ? 'mt-0' : 'mt-3'} text-2xl font-black text-ink`}>
           {title}
