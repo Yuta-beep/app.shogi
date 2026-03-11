@@ -23,7 +23,7 @@ export function HomeScreen() {
   }
 
   return (
-    <ImageBackground source={homeAssets.background} resizeMode="cover" className="flex-1">
+    <ImageBackground source={homeAssets.background} resizeMode="stretch" className="flex-1">
       <SafeAreaView className="flex-1 bg-black/10">
         <View className="flex-1">
           <HomeBackgroundSection />

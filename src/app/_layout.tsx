@@ -1,3 +1,5 @@
+import { useFonts } from 'expo-font';
+import { ShipporiMincho_700Bold } from '@expo-google-fonts/shippori-mincho';
 import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
@@ -12,6 +14,9 @@ import '../../global.css';
 
 export default function RootLayout() {
   const router = useRouter();
+  const [fontsLoaded] = useFonts({
+    ShipporiMincho_700Bold,
+  });
   const { isReady, needsUsernameSetup, error } = useAuthSession();
 
   useEffect(() => {
@@ -26,7 +31,7 @@ export default function RootLayout() {
     }
   }, [isReady, error, needsUsernameSetup, router]);
 
-  if (!isReady) {
+  if (!fontsLoaded || !isReady) {
     return <AppLoadingScreen />;
   }
 
