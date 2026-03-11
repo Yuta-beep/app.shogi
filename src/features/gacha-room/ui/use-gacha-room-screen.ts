@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 
+import { ApiClientError } from '@/infra/http/api-client';
 import { GachaBanner } from '@/usecases/gacha-room/load-gacha-lobby-usecase';
 import {
   createLoadGachaLobbyUseCase,
@@ -16,6 +17,7 @@ export type GachaRoomVM = {
   banners: GachaBanner[];
   pawnCurrency: number;
   goldCurrency: number;
+  noticeMessage: string | null;
   phase: GachaPhase;
   lastResult: RollGachaResult | null;
   roll: () => Promise<void>;
@@ -29,6 +31,7 @@ export function useGachaRoomScreen(): GachaRoomVM {
   const [banners, setBanners] = useState<GachaBanner[]>([]);
   const [pawnCurrency, setPawnCurrency] = useState(0);
   const [goldCurrency, setGoldCurrency] = useState(0);
+  const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
   const [phase, setPhase] = useState<GachaPhase>('idle');
   const [lastResult, setLastResult] = useState<RollGachaResult | null>(null);
 
@@ -59,11 +62,22 @@ export function useGachaRoomScreen(): GachaRoomVM {
 
   async function roll() {
     if (phase !== 'idle') return;
+    setNoticeMessage(null);
     setPhase('video');
-    const result = await rollUseCase.execute({ gachaId: selectedKey });
-    setLastResult(result);
-    setPawnCurrency(result.pawnCurrency);
-    setGoldCurrency(result.goldCurrency);
+    try {
+      const result = await rollUseCase.execute({ gachaId: selectedKey });
+      setLastResult(result);
+      setPawnCurrency(result.pawnCurrency);
+      setGoldCurrency(result.goldCurrency);
+    } catch (error: unknown) {
+      if (error instanceof ApiClientError && error.code === 'INSUFFICIENT_CURRENCY') {
+        setNoticeMessage('効果が足りません');
+        setPhase('idle');
+        return;
+      }
+      console.error('[gacha-room] failed to roll gacha', error);
+      setPhase('idle');
+    }
   }
 
   function onVideoEnd() {
@@ -85,6 +99,7 @@ export function useGachaRoomScreen(): GachaRoomVM {
     banners,
     pawnCurrency,
     goldCurrency,
+    noticeMessage,
     phase,
     lastResult,
     roll,
