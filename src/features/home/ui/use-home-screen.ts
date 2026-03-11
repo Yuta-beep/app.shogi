@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 
 import { HomeSnapshot } from '@/domain/models/home';
 import { createLoadHomeSnapshotUseCase } from '@/usecases/home/create-home-usecases';
@@ -22,25 +23,27 @@ export function useHomeScreen(): HomeScreenVM {
   const [isLoading, setIsLoading] = useState(true);
   const loadUseCase = useMemo(() => createLoadHomeSnapshotUseCase(), []);
 
-  useEffect(() => {
-    let active = true;
-    setIsLoading(true);
-    loadUseCase
-      .execute()
-      .then((next) => {
-        if (active) {
-          setSnapshot(next);
-        }
-      })
-      .finally(() => {
-        if (active) {
-          setIsLoading(false);
-        }
-      });
-    return () => {
-      active = false;
-    };
-  }, [loadUseCase]);
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      setIsLoading(true);
+      loadUseCase
+        .execute()
+        .then((next) => {
+          if (active) {
+            setSnapshot(next);
+          }
+        })
+        .finally(() => {
+          if (active) {
+            setIsLoading(false);
+          }
+        });
+      return () => {
+        active = false;
+      };
+    }, [loadUseCase]),
+  );
 
   return { snapshot, isLoading };
 }

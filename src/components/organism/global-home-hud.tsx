@@ -3,7 +3,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { HomeCommonHeader } from '@/components/organism/home-common-header';
 import { useHomeHudSnapshot } from '@/hooks/common/use-home-hud-snapshot';
 
-export function GlobalHomeHud() {
+type GlobalHomeHudProps = {
+  pawnCurrency?: number;
+  goldCurrency?: number;
+};
+
+export function GlobalHomeHud({ pawnCurrency, goldCurrency }: GlobalHomeHudProps) {
   const snapshot = useHomeHudSnapshot();
 
   return (
@@ -13,8 +18,8 @@ export function GlobalHomeHud() {
         userName={snapshot.playerName}
         rank={snapshot.playerRank}
         exp={snapshot.playerExp}
-        pawnCurrency={snapshot.pawnCurrency}
-        goldCurrency={snapshot.goldCurrency}
+        pawnCurrency={pawnCurrency ?? snapshot.pawnCurrency}
+        goldCurrency={goldCurrency ?? snapshot.goldCurrency}
       />
     </>
   );
