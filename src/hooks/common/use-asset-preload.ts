@@ -29,15 +29,13 @@ export function useAssetPreload(
   const initialSettleMs = options?.initialSettleMs ?? 250;
   const enabled = options?.enabled ?? true;
 
-  // JSON.stringify で中身ベースの比較にし、インライン配列でも再実行しない
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const targets = useMemo(
     () =>
       assetModules.filter((target): target is number | string => {
         if (typeof target === 'number') return target > 0;
         return isNonEmptyString(target);
       }),
-    [JSON.stringify(assetModules)],
+    [assetModules],
   );
 
   useEffect(() => {

@@ -81,7 +81,7 @@ describe('useAssetPreload', () => {
 
     const { result, rerender } = renderHook<
       ReturnType<typeof useAssetPreload>,
-      { targets: Array<number | string> }
+      { targets: (number | string)[] }
     >(({ targets }) => useAssetPreload(targets), {
       initialProps: { targets: [1] },
     });
@@ -103,7 +103,7 @@ describe('useAssetPreload', () => {
 
     const { result, rerender } = renderHook<
       ReturnType<typeof useAssetPreload>,
-      { targets: Array<number | string> }
+      { targets: (number | string)[] }
     >(({ targets }) => useAssetPreload(targets, { blockOnTargetChange: true }), {
       initialProps: { targets: [1] },
     });

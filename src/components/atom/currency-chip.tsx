@@ -1,6 +1,5 @@
 import { Image } from 'expo-image';
-import { Text, View } from 'react-native';
-import { ImageSourcePropType } from 'react-native';
+import { ImageSourcePropType, Text, View } from 'react-native';
 
 type CurrencyChipProps = {
   iconSource: ImageSourcePropType;
