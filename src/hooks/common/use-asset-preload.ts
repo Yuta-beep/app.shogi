@@ -1,6 +1,6 @@
 import { Asset } from 'expo-asset';
 import { Image } from 'expo-image';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 export type UseAssetPreloadResult = {
   isReady: boolean;
@@ -18,6 +18,23 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
 }
 
+function normalizeTargets(assetModules: readonly PreloadTarget[]) {
+  const targets: (number | string)[] = [];
+  for (const target of assetModules) {
+    if (typeof target === 'number' && target > 0) {
+      targets.push(target);
+      continue;
+    }
+    if (isNonEmptyString(target)) {
+      targets.push(target);
+    }
+  }
+  const key = targets
+    .map((target) => (typeof target === 'number' ? `n:${target}` : `s:${target}`))
+    .join('|');
+  return { key, targets };
+}
+
 export function useAssetPreload(
   assetModules: readonly PreloadTarget[],
   options?: UseAssetPreloadOptions,
@@ -28,19 +45,15 @@ export function useAssetPreload(
   const blockOnTargetChange = options?.blockOnTargetChange ?? false;
   const initialSettleMs = options?.initialSettleMs ?? 250;
   const enabled = options?.enabled ?? true;
-
-  // JSON.stringify で中身ベースの比較にし、インライン配列でも再実行しない
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const targets = useMemo(
-    () =>
-      assetModules.filter((target): target is number | string => {
-        if (typeof target === 'number') return target > 0;
-        return isNonEmptyString(target);
-      }),
-    [JSON.stringify(assetModules)],
-  );
+  const normalizedTargets = normalizeTargets(assetModules);
+  const stableTargetsRef = useRef(normalizedTargets);
+  if (stableTargetsRef.current.key !== normalizedTargets.key) {
+    stableTargetsRef.current = normalizedTargets;
+  }
+  const targetsKey = stableTargetsRef.current.key;
 
   useEffect(() => {
+    const targets = stableTargetsRef.current.targets;
     if (!enabled) {
       if (!hasCompletedInitialPreloadRef.current) {
         setIsReady(false);
@@ -108,7 +121,7 @@ export function useAssetPreload(
     return () => {
       active = false;
     };
-  }, [blockOnTargetChange, enabled, initialSettleMs, targets]);
+  }, [blockOnTargetChange, enabled, initialSettleMs, targetsKey]);
 
   return { isReady, error };
 }
