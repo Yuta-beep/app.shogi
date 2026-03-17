@@ -33,12 +33,14 @@ export type BattleCommittedMove = {
   moveNo: number;
   actorSide: 'player' | 'enemy';
   move: BattleMove;
+  skillTriggered: boolean;
   position: BattleCanonicalPosition;
   game: BattleGameStatus;
 };
 
 export type BattleAiTurn = {
   selectedMove: BattleMove;
+  skillTriggered: boolean;
   meta: {
     engineVersion: string;
     thinkMs: number;
@@ -70,6 +72,10 @@ function asString(value: unknown): string | null {
 
 function asNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function asBoolean(value: unknown): boolean | null {
+  return typeof value === 'boolean' ? value : null;
 }
 
 function parseMove(raw: unknown): BattleMove {
@@ -174,6 +180,7 @@ export function parseBattleCommittedMove(raw: unknown): BattleCommittedMove {
     moveNo,
     actorSide,
     move: parseMove(obj.move),
+    skillTriggered: parseSkillTriggered(obj.skillTriggered ?? obj.skill_triggered, obj.move),
     position: parsePosition(obj.position),
     game: parseGame(obj.game),
   };
@@ -191,6 +198,10 @@ export function parseBattleAiTurn(raw: unknown): BattleAiTurn {
 
   return {
     selectedMove: parseMove(obj.selectedMove ?? obj.selected_move),
+    skillTriggered: parseSkillTriggered(
+      obj.skillTriggered ?? obj.skill_triggered,
+      obj.selectedMove ?? obj.selected_move,
+    ),
     meta: {
       engineVersion: asString(meta.engineVersion ?? meta.engine_version) ?? '',
       thinkMs: asNumber(meta.thinkMs ?? meta.think_ms) ?? 0,
@@ -206,6 +217,15 @@ export function parseBattleAiTurn(raw: unknown): BattleAiTurn {
     position: parsePosition(obj.position),
     game: parseGame(obj.game),
   };
+}
+
+function parseSkillTriggered(rawSkillTriggered: unknown, rawMove: unknown): boolean {
+  const skillTriggered = asBoolean(rawSkillTriggered);
+  if (skillTriggered !== null) return skillTriggered;
+  const move = parseMove(rawMove);
+  if (!move.notation) return false;
+  if (/^[1-9][a-i][1-9][a-i]\+?$/i.test(move.notation)) return false;
+  return true;
 }
 
 export function parseBattleLegalMoves(raw: unknown): BattleLegalMoves {
