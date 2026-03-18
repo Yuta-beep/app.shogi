@@ -321,7 +321,7 @@ function piecesFromCanonicalPosition(
               piece.pieceCode === pieceCode &&
               piece.side === side &&
               piece.imageSignedUrl &&
-              piece.promoted === promoted,
+              (piece.promoted ?? false) === promoted,
           )?.imageSignedUrl ??
           null;
 
@@ -461,6 +461,7 @@ export function StageShogiScreen() {
           col,
           pieceCode: pieceCodeFromPlacement(placement.pieceCode, placement.char),
           char: placement.char,
+          promoted: false,
           imageSignedUrl: placement.imageSignedUrl,
         } satisfies BoardPiece;
       })
