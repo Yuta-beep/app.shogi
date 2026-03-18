@@ -461,7 +461,7 @@ export function StageShogiScreen() {
           col,
           pieceCode: pieceCodeFromPlacement(placement.pieceCode, placement.char),
           char: placement.char,
-          promoted: false,
+          promoted: false as boolean,
           imageSignedUrl: placement.imageSignedUrl,
         } satisfies BoardPiece;
       })
