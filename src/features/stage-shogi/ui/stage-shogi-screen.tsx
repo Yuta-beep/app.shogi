@@ -455,15 +455,16 @@ export function StageShogiScreen() {
         const col = normalizeCellIndex(placement.col);
         if (row === null || col === null) return null;
         const side = normalizeSide(placement.side);
-        return {
+        const piece: BoardPiece = {
           side,
           row,
           col,
           pieceCode: pieceCodeFromPlacement(placement.pieceCode, placement.char),
           char: placement.char,
-          promoted: false as boolean,
+          promoted: false,
           imageSignedUrl: placement.imageSignedUrl,
-        } satisfies BoardPiece;
+        };
+        return piece;
       })
       .filter((value): value is BoardPiece => value !== null);
 
