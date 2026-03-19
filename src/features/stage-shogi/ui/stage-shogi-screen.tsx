@@ -751,6 +751,52 @@ export function StageShogiScreen() {
     }
   }
 
+  function applyOptimisticMove(move: BattleMove) {
+    if (move.dropPieceCode) {
+      const pieceCode = move.dropPieceCode;
+      const pieceDef = pieceDefsByCode[pieceCode];
+      setPieces((prev) => [
+        ...prev,
+        {
+          side: 'player' as Side,
+          row: move.toRow,
+          col: move.toCol,
+          pieceCode,
+          char: pieceCharFromCode(pieceCode, 'player', false),
+          promoted: false,
+          imageSignedUrl: pieceDef?.imageSignedUrl ?? null,
+        },
+      ]);
+      setHands((prev) => ({
+        ...prev,
+        player: {
+          ...prev.player,
+          [pieceCode]: Math.max(0, (prev.player[pieceCode] ?? 1) - 1),
+        },
+      }));
+    } else if (move.fromRow !== null && move.fromCol !== null) {
+      const fromRow = move.fromRow;
+      const fromCol = move.fromCol;
+      setPieces((prev) => {
+        const moving = prev.find((p) => p.row === fromRow && p.col === fromCol);
+        if (!moving) return prev;
+        const promoted = move.promote ? true : (moving.promoted ?? false);
+        const promotedDef = move.promote ? promotedPieceDefsByCode[moving.pieceCode ?? ''] : null;
+        const imageSignedUrl = promotedDef?.imageSignedUrl ?? moving.imageSignedUrl;
+        const char = moving.pieceCode
+          ? pieceCharFromCode(moving.pieceCode, moving.side, promoted)
+          : moving.char;
+        return prev
+          .filter((p) => !(p.row === move.toRow && p.col === move.toCol))
+          .map((p) =>
+            p.row === fromRow && p.col === fromCol
+              ? { ...p, row: move.toRow, col: move.toCol, promoted, imageSignedUrl, char }
+              : p,
+          );
+      });
+    }
+  }
+
   async function commitPlayerMove(move: BattleMove) {
     if (!gameId || isAiThinking || isCreatingGame) return;
 
@@ -760,6 +806,7 @@ export function StageShogiScreen() {
     setPlayerLegalMoves([]);
     setPendingPromotion(null);
     setAiError(null);
+    applyOptimisticMove(move);
 
     try {
       const result = await commitGameMoveUseCase.execute({
