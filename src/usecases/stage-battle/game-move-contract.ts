@@ -39,7 +39,7 @@ export type BattleCommittedMove = {
 };
 
 export type BattleAiTurn = {
-  selectedMove: BattleMove;
+  selectedMove: BattleMove | null;
   skillTriggered: boolean;
   meta: {
     engineVersion: string;
@@ -49,7 +49,7 @@ export type BattleAiTurn = {
     evalCp: number;
     candidateCount: number;
     configApplied: Record<string, unknown>;
-  };
+  } | null;
   position: BattleCanonicalPosition;
   game: BattleGameStatus;
 };
@@ -196,24 +196,24 @@ export function parseBattleAiTurn(raw: unknown): BattleAiTurn {
     throw new Error('ai meta is invalid');
   }
 
+  const rawMove = obj.selectedMove ?? obj.selected_move;
   return {
-    selectedMove: parseMove(obj.selectedMove ?? obj.selected_move),
-    skillTriggered: parseSkillTriggered(
-      obj.skillTriggered ?? obj.skill_triggered,
-      obj.selectedMove ?? obj.selected_move,
-    ),
-    meta: {
-      engineVersion: asString(meta.engineVersion ?? meta.engine_version) ?? '',
-      thinkMs: asNumber(meta.thinkMs ?? meta.think_ms) ?? 0,
-      searchedNodes: asNumber(meta.searchedNodes ?? meta.searched_nodes) ?? 0,
-      searchDepth: asNumber(meta.searchDepth ?? meta.search_depth) ?? 0,
-      evalCp: asNumber(meta.evalCp ?? meta.eval_cp) ?? 0,
-      candidateCount: asNumber(meta.candidateCount ?? meta.candidate_count) ?? 0,
-      configApplied: (asRecord(meta.configApplied ?? meta.config_applied) ?? {}) as Record<
-        string,
-        unknown
-      >,
-    },
+    selectedMove: rawMove != null ? parseMove(rawMove) : null,
+    skillTriggered: parseSkillTriggered(obj.skillTriggered ?? obj.skill_triggered, rawMove),
+    meta: meta
+      ? {
+          engineVersion: asString(meta.engineVersion ?? meta.engine_version) ?? '',
+          thinkMs: asNumber(meta.thinkMs ?? meta.think_ms) ?? 0,
+          searchedNodes: asNumber(meta.searchedNodes ?? meta.searched_nodes) ?? 0,
+          searchDepth: asNumber(meta.searchDepth ?? meta.search_depth) ?? 0,
+          evalCp: asNumber(meta.evalCp ?? meta.eval_cp) ?? 0,
+          candidateCount: asNumber(meta.candidateCount ?? meta.candidate_count) ?? 0,
+          configApplied: (asRecord(meta.configApplied ?? meta.config_applied) ?? {}) as Record<
+            string,
+            unknown
+          >,
+        }
+      : null,
     position: parsePosition(obj.position),
     game: parseGame(obj.game),
   };

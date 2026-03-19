@@ -640,6 +640,10 @@ export function StageShogiScreen() {
           setPlayerLegalMoves([]);
           return;
         }
+        if (result.legalMoves.length === 0) {
+          setWinner('enemy');
+          return;
+        }
         setPlayerLegalMoves(result.legalMoves);
       })
       .catch((error: unknown) => {
@@ -716,7 +720,7 @@ export function StageShogiScreen() {
         engineConfig: {},
       });
 
-      if (response.skillTriggered) {
+      if (response.skillTriggered && response.selectedMove) {
         showSkillActivation('enemy', response.selectedMove);
       }
 
@@ -896,7 +900,7 @@ export function StageShogiScreen() {
     setLegalTargets(targets);
   }
 
-  function renderHandsRow(side: Side) {
+  function renderHandsRow(side: Side, compact = false) {
     const entries = HAND_CODES_IN_SFEN_ORDER.map((code) => ({
       code,
       count: hands[side][code] ?? 0,
@@ -907,7 +911,7 @@ export function StageShogiScreen() {
     }
 
     return (
-      <View className="mt-1 flex-row flex-wrap gap-2">
+      <View className={`${compact ? 'mt-0' : 'mt-1'} flex-row flex-wrap gap-0.5`}>
         {entries.map((entry) => {
           const isPlayer = side === 'player';
           const disabled =
@@ -918,6 +922,9 @@ export function StageShogiScreen() {
             isFinished ||
             pendingPromotion !== null;
           const selected = isPlayer && selectedDropPieceCode === entry.code;
+          const handImageUri = getPieceImageUri(
+            pieceDefsByCode[entry.code]?.imageSignedUrl ?? null,
+          );
           return (
             <Pressable
               key={`${side}-${entry.code}`}
@@ -926,9 +933,28 @@ export function StageShogiScreen() {
               onPress={() => {
                 handleHandPiecePress(entry.code);
               }}
-              className={`rounded-md border px-2 py-1 ${selected ? 'border-blue-700 bg-blue-100' : 'border-[#b08b5a] bg-[#f9f1e0]'} ${disabled ? 'opacity-60' : ''}`}
+              className="px-0.5 py-0.5"
             >
-              <Text className="text-sm font-bold text-[#5d3b2e]">{`${CODE_TO_CHAR[entry.code] ?? entry.code} x${entry.count}`}</Text>
+              <View className="flex-row items-center gap-0">
+                <View className="h-10 w-10 items-center justify-center">
+                  {handImageUri ? (
+                    <Image
+                      source={{ uri: handImageUri }}
+                      contentFit="contain"
+                      style={{ width: '100%', height: '100%' }}
+                    />
+                  ) : (
+                    <Text className="text-base font-black text-[#5d3b2e]">
+                      {CODE_TO_CHAR[entry.code] ?? entry.code}
+                    </Text>
+                  )}
+                </View>
+                <Text
+                  className={`-ml-0.5 text-sm font-bold ${selected ? 'text-blue-700' : 'text-[#5d3b2e]'}`}
+                >
+                  {`x${entry.count}`}
+                </Text>
+              </View>
             </Pressable>
           );
         })}
@@ -949,15 +975,12 @@ export function StageShogiScreen() {
   }
 
   return (
-    <UiScreenShell title="Stage Shogi" subtitle="バトル画面（AI接続）">
+    <UiScreenShell title="Stage Shogi" subtitle="バトル画面（AI接続）" hideTitleText plainHeader>
       <View className="rounded-xl border-2 border-accent bg-[#f3ead3] p-3">
         <Text className="text-sm font-bold text-[#6b4532]">{`TURN ${moveNo}`}</Text>
         <Text className="text-base font-black text-ink">{`${snapshot.stageLabel}  手番: ${sideToMove === 'player' ? 'あなた' : 'CPU'}`}</Text>
         {isFinished ? (
           <Text className="mt-1 text-sm font-black text-[#7f1d1d]">{`対局終了: ${winner === 'player' ? 'あなたの勝ち' : 'CPUの勝ち'}`}</Text>
-        ) : null}
-        {clearRewardText ? (
-          <Text className="mt-1 text-xs text-[#14532d]">{clearRewardText}</Text>
         ) : null}
         {aiError ? <Text className="mt-1 text-xs text-red-600">{aiError}</Text> : null}
       </View>
@@ -976,207 +999,251 @@ export function StageShogiScreen() {
         </Pressable>
       </View>
 
-      <View className="-mx-2 mt-3 overflow-hidden rounded-xl border-2 border-[#a27700] bg-[#e3c690]">
-        <View className="relative w-full self-center" style={{ aspectRatio: 1 }}>
-          <Svg width="100%" height="100%" viewBox={`0 0 ${BOARD_VIEWBOX} ${BOARD_VIEWBOX}`}>
-            <Rect x={0} y={0} width={BOARD_VIEWBOX} height={BOARD_VIEWBOX} fill="#deb887" />
-            <Rect
-              x={BOARD_PADDING}
-              y={BOARD_PADDING}
-              width={BOARD_INNER}
-              height={BOARD_INNER}
-              fill="#e8c88e"
-              stroke="#7a4b20"
-              strokeWidth={2}
-            />
-            {Array.from({ length: BOARD_SIZE + 1 }).map((_, i) => {
-              const p = BOARD_PADDING + BOARD_CELL * i;
-              return (
-                <Line
-                  key={`v-${i}`}
-                  x1={p}
-                  y1={BOARD_PADDING}
-                  x2={p}
-                  y2={BOARD_PADDING + BOARD_INNER}
-                  stroke="#6b3f1a"
-                  strokeWidth={1.5}
-                />
-              );
-            })}
-            {Array.from({ length: BOARD_SIZE + 1 }).map((_, i) => {
-              const p = BOARD_PADDING + BOARD_CELL * i;
-              return (
-                <Line
-                  key={`h-${i}`}
-                  x1={BOARD_PADDING}
-                  y1={p}
-                  x2={BOARD_PADDING + BOARD_INNER}
-                  y2={p}
-                  stroke="#6b3f1a"
-                  strokeWidth={1.5}
-                />
-              );
-            })}
-          </Svg>
-
-          <View
-            className="absolute"
-            style={{
-              top: `${BOARD_PADDING_RATIO * 100}%`,
-              left: `${BOARD_PADDING_RATIO * 100}%`,
-              width: `${(BOARD_INNER / BOARD_VIEWBOX) * 100}%`,
-              height: `${(BOARD_INNER / BOARD_VIEWBOX) * 100}%`,
-            }}
-          >
-            <Svg
-              width="100%"
-              height="100%"
-              viewBox={`0 0 ${BOARD_INNER} ${BOARD_INNER}`}
-              style={{ position: 'absolute', top: 0, left: 0 }}
-              pointerEvents="none"
-            >
-              {selectedCell ? (
-                <Rect
-                  x={selectedCell.col * BOARD_CELL}
-                  y={selectedCell.row * BOARD_CELL}
-                  width={BOARD_CELL}
-                  height={BOARD_CELL}
-                  fill="none"
-                  stroke="#2563eb"
-                  strokeWidth={4}
-                />
-              ) : null}
-              {legalTargets.map((target) => (
-                <Rect
-                  key={`legal-${target.row}-${target.col}`}
-                  x={target.col * BOARD_CELL}
-                  y={target.row * BOARD_CELL}
-                  width={BOARD_CELL}
-                  height={BOARD_CELL}
-                  fill="none"
-                  stroke="#16a34a"
-                  strokeWidth={4}
-                />
-              ))}
+      <View className="relative -mx-2 mt-20 mb-20">
+        <View className="absolute -top-16 right-1 z-10 flex-row items-center gap-2">
+          <View className="rounded-xl border border-accent/60 bg-white px-2 py-1.5">
+            {renderHandsRow('enemy', true)}
+          </View>
+          <View className="pointer-events-none rounded-md border border-blue-700 bg-white/80 px-2 py-1">
+            <Text className="text-lg font-black text-blue-700">後手</Text>
+          </View>
+        </View>
+        <View className="absolute -bottom-16 right-1 z-10 flex-row items-center gap-2">
+          <View className="rounded-xl border border-accent/60 bg-white px-2 py-1.5">
+            {renderHandsRow('player', true)}
+          </View>
+          <View className="pointer-events-none rounded-md border border-blue-700 bg-white/80 px-2 py-1">
+            <Text className="text-lg font-black text-blue-700">先手</Text>
+          </View>
+        </View>
+        <View className="overflow-hidden rounded-xl border-2 border-[#a27700] bg-[#e3c690]">
+          <View className="relative w-full self-center" style={{ aspectRatio: 1 }}>
+            <Svg width="100%" height="100%" viewBox={`0 0 ${BOARD_VIEWBOX} ${BOARD_VIEWBOX}`}>
+              <Rect x={0} y={0} width={BOARD_VIEWBOX} height={BOARD_VIEWBOX} fill="#deb887" />
+              <Rect
+                x={BOARD_PADDING}
+                y={BOARD_PADDING}
+                width={BOARD_INNER}
+                height={BOARD_INNER}
+                fill="#e8c88e"
+                stroke="#7a4b20"
+                strokeWidth={2}
+              />
+              {Array.from({ length: BOARD_SIZE + 1 }).map((_, i) => {
+                const p = BOARD_PADDING + BOARD_CELL * i;
+                return (
+                  <Line
+                    key={`v-${i}`}
+                    x1={p}
+                    y1={BOARD_PADDING}
+                    x2={p}
+                    y2={BOARD_PADDING + BOARD_INNER}
+                    stroke="#6b3f1a"
+                    strokeWidth={1.5}
+                  />
+                );
+              })}
+              {Array.from({ length: BOARD_SIZE + 1 }).map((_, i) => {
+                const p = BOARD_PADDING + BOARD_CELL * i;
+                return (
+                  <Line
+                    key={`h-${i}`}
+                    x1={BOARD_PADDING}
+                    y1={p}
+                    x2={BOARD_PADDING + BOARD_INNER}
+                    y2={p}
+                    stroke="#6b3f1a"
+                    strokeWidth={1.5}
+                  />
+                );
+              })}
             </Svg>
 
-            {Array.from({ length: BOARD_SIZE }).map((_, rowIndex) =>
-              Array.from({ length: BOARD_SIZE }).map((__, colIndex) => (
-                <Pressable
-                  key={`cell-${rowIndex}-${colIndex}`}
-                  testID={`board-cell-${rowIndex}-${colIndex}`}
-                  className="absolute items-center justify-center"
-                  style={{
-                    top: `${rowIndex * BOARD_CELL_INNER_RATIO * 100}%`,
-                    left: `${colIndex * BOARD_CELL_INNER_RATIO * 100}%`,
-                    width: `${BOARD_CELL_INNER_RATIO * 100}%`,
-                    height: `${BOARD_CELL_INNER_RATIO * 100}%`,
-                  }}
-                  onPress={() => {
-                    handleCellPress(rowIndex, colIndex);
-                  }}
-                />
-              )),
-            )}
+            <View
+              className="absolute"
+              style={{
+                top: `${BOARD_PADDING_RATIO * 100}%`,
+                left: `${BOARD_PADDING_RATIO * 100}%`,
+                width: `${(BOARD_INNER / BOARD_VIEWBOX) * 100}%`,
+                height: `${(BOARD_INNER / BOARD_VIEWBOX) * 100}%`,
+              }}
+            >
+              <Svg
+                width="100%"
+                height="100%"
+                viewBox={`0 0 ${BOARD_INNER} ${BOARD_INNER}`}
+                style={{ position: 'absolute', top: 0, left: 0 }}
+                pointerEvents="none"
+              >
+                {selectedCell ? (
+                  <Rect
+                    x={selectedCell.col * BOARD_CELL}
+                    y={selectedCell.row * BOARD_CELL}
+                    width={BOARD_CELL}
+                    height={BOARD_CELL}
+                    fill="none"
+                    stroke="#2563eb"
+                    strokeWidth={4}
+                  />
+                ) : null}
+                {legalTargets.map((target) => (
+                  <Rect
+                    key={`legal-${target.row}-${target.col}`}
+                    x={target.col * BOARD_CELL}
+                    y={target.row * BOARD_CELL}
+                    width={BOARD_CELL}
+                    height={BOARD_CELL}
+                    fill="none"
+                    stroke="#16a34a"
+                    strokeWidth={4}
+                  />
+                ))}
+              </Svg>
 
-            <View pointerEvents="none" style={{ position: 'absolute', inset: 0 }}>
-              {pieces.map((placement) => {
-                const rowIndex = normalizeCellIndex(placement.row);
-                const colIndex = normalizeCellIndex(placement.col);
-                if (rowIndex === null || colIndex === null) {
-                  return null;
-                }
-
-                const enemy = isEnemySide(placement.side);
-                const king = placement.pieceCode === 'OU' || isKingChar(placement.char);
-                const pieceScalePercent = king
-                  ? KING_PIECE_SIZE_PERCENT
-                  : NORMAL_PIECE_SIZE_PERCENT;
-                const placementKey = `${placement.side}-${placement.pieceCode ?? 'X'}-${placement.promoted ? 'P' : 'N'}-${placement.row}-${placement.col}`;
-                const imageUri = failedImageKeys[placementKey]
-                  ? null
-                  : getPieceImageUri(placement.imageSignedUrl);
-
-                return (
-                  <View
-                    key={placementKey}
+              {Array.from({ length: BOARD_SIZE }).map((_, rowIndex) =>
+                Array.from({ length: BOARD_SIZE }).map((__, colIndex) => (
+                  <Pressable
+                    key={`cell-${rowIndex}-${colIndex}`}
+                    testID={`board-cell-${rowIndex}-${colIndex}`}
+                    className="absolute items-center justify-center"
                     style={{
-                      position: 'absolute',
                       top: `${rowIndex * BOARD_CELL_INNER_RATIO * 100}%`,
                       left: `${colIndex * BOARD_CELL_INNER_RATIO * 100}%`,
                       width: `${BOARD_CELL_INNER_RATIO * 100}%`,
                       height: `${BOARD_CELL_INNER_RATIO * 100}%`,
-                      alignItems: 'center',
-                      justifyContent: 'center',
                     }}
-                  >
+                    onPress={() => {
+                      handleCellPress(rowIndex, colIndex);
+                    }}
+                  />
+                )),
+              )}
+
+              <View pointerEvents="none" style={{ position: 'absolute', inset: 0 }}>
+                {pieces.map((placement) => {
+                  const rowIndex = normalizeCellIndex(placement.row);
+                  const colIndex = normalizeCellIndex(placement.col);
+                  if (rowIndex === null || colIndex === null) {
+                    return null;
+                  }
+
+                  const enemy = isEnemySide(placement.side);
+                  const king = placement.pieceCode === 'OU' || isKingChar(placement.char);
+                  const pieceScalePercent = king
+                    ? KING_PIECE_SIZE_PERCENT
+                    : NORMAL_PIECE_SIZE_PERCENT;
+                  const placementKey = `${placement.side}-${placement.pieceCode ?? 'X'}-${placement.promoted ? 'P' : 'N'}-${placement.row}-${placement.col}`;
+                  const imageUri = failedImageKeys[placementKey]
+                    ? null
+                    : getPieceImageUri(placement.imageSignedUrl);
+
+                  return (
                     <View
-                      className="items-center justify-center"
+                      key={placementKey}
                       style={{
-                        width: `${pieceScalePercent}%`,
-                        height: `${pieceScalePercent}%`,
-                        overflow: 'hidden',
-                        transform: [{ rotate: enemy ? '180deg' : '0deg' }],
+                        position: 'absolute',
+                        top: `${rowIndex * BOARD_CELL_INNER_RATIO * 100}%`,
+                        left: `${colIndex * BOARD_CELL_INNER_RATIO * 100}%`,
+                        width: `${BOARD_CELL_INNER_RATIO * 100}%`,
+                        height: `${BOARD_CELL_INNER_RATIO * 100}%`,
+                        alignItems: 'center',
+                        justifyContent: 'center',
                       }}
                     >
-                      {imageUri ? (
-                        <Image
-                          source={{ uri: imageUri }}
-                          contentFit="contain"
-                          style={{ width: '100%', height: '100%' }}
-                          onError={() => {
-                            setFailedImageKeys((prev) => ({ ...prev, [placementKey]: true }));
-                          }}
-                        />
-                      ) : (
-                        <View style={{ width: '100%', height: '100%' }}>
-                          <Svg width="100%" height="100%" viewBox="0 0 100 120">
-                            <Polygon
-                              points="50,3 97,30 83,117 17,117 3,30"
-                              fill={fallbackPiecePalette(placement.side).fill}
-                              stroke={fallbackPiecePalette(placement.side).stroke}
-                              strokeWidth={5}
-                            />
-                          </Svg>
-                          <View
-                            style={{
-                              position: 'absolute',
-                              inset: 0,
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              gap: 2,
+                      <View
+                        className="items-center justify-center"
+                        style={{
+                          width: `${pieceScalePercent}%`,
+                          height: `${pieceScalePercent}%`,
+                          overflow: 'hidden',
+                          transform: [{ rotate: enemy ? '180deg' : '0deg' }],
+                        }}
+                      >
+                        {imageUri ? (
+                          <Image
+                            source={{ uri: imageUri }}
+                            contentFit="contain"
+                            style={{ width: '100%', height: '100%' }}
+                            onError={() => {
+                              setFailedImageKeys((prev) => ({ ...prev, [placementKey]: true }));
                             }}
-                          >
-                            {king ? (
-                              <Crown size={16} color={fallbackPiecePalette(placement.side).icon} />
-                            ) : (
-                              <Shield size={16} color={fallbackPiecePalette(placement.side).icon} />
-                            )}
-                            <Text
-                              className="text-sm font-black"
-                              style={{ color: fallbackPiecePalette(placement.side).text }}
+                          />
+                        ) : (
+                          <View style={{ width: '100%', height: '100%' }}>
+                            <Svg width="100%" height="100%" viewBox="0 0 100 120">
+                              <Polygon
+                                points="50,3 97,30 83,117 17,117 3,30"
+                                fill={fallbackPiecePalette(placement.side).fill}
+                                stroke={fallbackPiecePalette(placement.side).stroke}
+                                strokeWidth={5}
+                              />
+                            </Svg>
+                            <View
+                              style={{
+                                position: 'absolute',
+                                inset: 0,
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: 2,
+                              }}
                             >
-                              {getDisplayChar(placement)}
-                            </Text>
+                              {king ? (
+                                <Crown
+                                  size={16}
+                                  color={fallbackPiecePalette(placement.side).icon}
+                                />
+                              ) : (
+                                <Shield
+                                  size={16}
+                                  color={fallbackPiecePalette(placement.side).icon}
+                                />
+                              )}
+                              <Text
+                                className="text-sm font-black"
+                                style={{ color: fallbackPiecePalette(placement.side).text }}
+                              >
+                                {getDisplayChar(placement)}
+                              </Text>
+                            </View>
                           </View>
-                        </View>
-                      )}
+                        )}
+                      </View>
                     </View>
-                  </View>
-                );
-              })}
+                  );
+                })}
+              </View>
             </View>
           </View>
         </View>
       </View>
 
-      <View className="mt-3 rounded-xl border border-accent/60 bg-white p-3">
-        <Text className="text-sm font-bold text-ink">CPU持ち駒</Text>
-        {renderHandsRow('enemy')}
-        <View className="my-2 h-px bg-[#e5d1ae]" />
-        <Text className="text-sm font-bold text-ink">あなたの持ち駒</Text>
-        {renderHandsRow('player')}
-      </View>
+      {isFinished ? (
+        <View className="absolute inset-0 items-center justify-center bg-black/50 p-6">
+          <View
+            className={`w-full max-w-sm rounded-2xl border-2 p-6 ${
+              winner === 'player'
+                ? 'border-yellow-500 bg-[#fffbeb]'
+                : 'border-[#7f1d1d] bg-[#fff5f5]'
+            }`}
+          >
+            <Text
+              className={`text-center text-3xl font-black ${
+                winner === 'player' ? 'text-yellow-600' : 'text-[#7f1d1d]'
+              }`}
+            >
+              {winner === 'player' ? '勝利！' : '敗北...'}
+            </Text>
+            <Text className="mt-2 text-center text-sm font-bold text-gray-500">
+              {winner === 'player' ? 'おめでとうございます！' : 'またチャレンジしよう'}
+            </Text>
+            {clearRewardText ? (
+              <Text className="mt-3 text-center text-xs font-bold text-[#14532d]">
+                {clearRewardText}
+              </Text>
+            ) : null}
+          </View>
+        </View>
+      ) : null}
 
       {pendingPromotion ? (
         <View className="absolute inset-0 items-center justify-center bg-black/35 p-6">
@@ -1217,10 +1284,6 @@ export function StageShogiScreen() {
       {selectedDropPieceCode && legalTargets.length === 0 ? (
         <Text className="mt-2 text-xs text-red-600">その駒は打てる場所がありません。</Text>
       ) : null}
-      {snapshot.handLabel ? (
-        <Text className="mt-2 text-xs text-[#6b4532]">{snapshot.handLabel}</Text>
-      ) : null}
-
       {isAiThinking ? (
         <View className="absolute bottom-3 right-3 rounded-md bg-black/65 px-2 py-1">
           <Text className="text-xs font-bold text-white">Loading...</Text>
