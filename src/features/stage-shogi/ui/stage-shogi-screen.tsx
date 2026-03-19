@@ -851,7 +851,11 @@ export function StageShogiScreen() {
         void commitPlayerMove(dropMoves[0]);
         return;
       }
-      // 持ち駒の打ち先でなければ持ち駒選択を解除し、盤上駒の選択に移れるようにする
+      // 無効マスでは持ち駒選択を維持し、自駒タップ時のみ通常の駒選択へ戻す
+      const tappedPiece = findPieceAt(pieces, row, col);
+      if (!tappedPiece || tappedPiece.side !== 'player') {
+        return;
+      }
       setSelectedDropPieceCode(null);
       setLegalTargets([]);
     }
