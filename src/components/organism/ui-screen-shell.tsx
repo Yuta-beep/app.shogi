@@ -13,6 +13,8 @@ type UiScreenShellProps = {
   children: ReactNode;
   hideBackButton?: boolean;
   rightAction?: ReactNode;
+  hideTitleText?: boolean;
+  plainHeader?: boolean;
 };
 
 export function UiScreenShell({
@@ -21,6 +23,8 @@ export function UiScreenShell({
   children,
   hideBackButton = false,
   rightAction,
+  hideTitleText = false,
+  plainHeader = false,
 }: UiScreenShellProps) {
   const router = useRouter();
 
@@ -28,7 +32,11 @@ export function UiScreenShell({
     <SafeAreaView className="flex-1 bg-paper" edges={['left', 'right', 'bottom']}>
       <GlobalHomeHud />
       <View
-        className={`border-b-2 border-accent/50 bg-[#f2e4c2] px-4 ${hideBackButton ? 'py-1.5' : 'py-3'}`}
+        className={
+          plainHeader
+            ? `px-4 ${hideBackButton ? 'py-1.5' : 'py-2'}`
+            : `border-b-2 border-accent/50 bg-[#f2e4c2] px-4 ${hideBackButton ? 'py-1.5' : 'py-3'}`
+        }
       >
         <View className="flex-row items-center justify-between">
           {hideBackButton ? (
@@ -53,13 +61,17 @@ export function UiScreenShell({
             </Pressable>
           )}
         </View>
-        <Text className={`${hideBackButton ? 'mt-0' : 'mt-3'} text-2xl font-black text-ink`}>
-          {title}
-        </Text>
-        {subtitle ? (
-          <Text className={`${hideBackButton ? 'mt-0' : 'mt-1'} text-sm text-[#6b4532]`}>
-            {subtitle}
-          </Text>
+        {!hideTitleText ? (
+          <>
+            <Text className={`${hideBackButton ? 'mt-0' : 'mt-3'} text-2xl font-black text-ink`}>
+              {title}
+            </Text>
+            {subtitle ? (
+              <Text className={`${hideBackButton ? 'mt-0' : 'mt-1'} text-sm text-[#6b4532]`}>
+                {subtitle}
+              </Text>
+            ) : null}
+          </>
         ) : null}
       </View>
 

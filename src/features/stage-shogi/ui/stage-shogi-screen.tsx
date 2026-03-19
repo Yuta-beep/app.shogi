@@ -849,8 +849,11 @@ export function StageShogiScreen() {
       );
       if (dropMoves.length > 0) {
         void commitPlayerMove(dropMoves[0]);
+        return;
       }
-      return;
+      // 持ち駒の打ち先でなければ持ち駒選択を解除し、盤上駒の選択に移れるようにする
+      setSelectedDropPieceCode(null);
+      setLegalTargets([]);
     }
 
     if (selectedCell) {
@@ -907,11 +910,11 @@ export function StageShogiScreen() {
     })).filter((entry) => entry.count > 0);
 
     if (entries.length === 0) {
-      return <Text className="text-xs text-[#6b4532]">なし</Text>;
+      return null;
     }
 
     return (
-      <View className={`${compact ? 'mt-0' : 'mt-1'} flex-row flex-wrap gap-0.5`}>
+      <View className={`${compact ? 'mt-0' : 'mt-1'} flex-row flex-wrap gap-0`}>
         {entries.map((entry) => {
           const isPlayer = side === 'player';
           const disabled =
@@ -933,7 +936,7 @@ export function StageShogiScreen() {
               onPress={() => {
                 handleHandPiecePress(entry.code);
               }}
-              className="px-0.5 py-0.5"
+              className="px-0 py-0.5"
             >
               <View className="flex-row items-center gap-0">
                 <View className="h-10 w-10 items-center justify-center">
@@ -1000,18 +1003,14 @@ export function StageShogiScreen() {
       </View>
 
       <View className="relative -mx-2 mt-20 mb-20">
-        <View className="absolute -top-16 right-1 z-10 flex-row items-center gap-2">
-          <View className="rounded-xl border border-accent/60 bg-white px-2 py-1.5">
-            {renderHandsRow('enemy', true)}
-          </View>
+        <View className="absolute -top-16 left-0 right-1 z-10 flex-row items-center justify-between gap-2">
+          <View className="flex-1">{renderHandsRow('enemy', true)}</View>
           <View className="pointer-events-none rounded-md border border-blue-700 bg-white/80 px-2 py-1">
             <Text className="text-lg font-black text-blue-700">後手</Text>
           </View>
         </View>
-        <View className="absolute -bottom-16 right-1 z-10 flex-row items-center gap-2">
-          <View className="rounded-xl border border-accent/60 bg-white px-2 py-1.5">
-            {renderHandsRow('player', true)}
-          </View>
+        <View className="absolute -bottom-16 left-0 right-1 z-10 flex-row items-center justify-between gap-2">
+          <View className="flex-1">{renderHandsRow('player', true)}</View>
           <View className="pointer-events-none rounded-md border border-blue-700 bg-white/80 px-2 py-1">
             <Text className="text-lg font-black text-blue-700">先手</Text>
           </View>
