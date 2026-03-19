@@ -20,6 +20,7 @@ import { useStageBattleScreen } from '@/features/stage-shogi/ui/use-stage-battle
 import { useAssetPreload } from '@/hooks/common/use-asset-preload';
 import { useAuthSession } from '@/hooks/common/use-auth-session';
 import { useScreenBgm } from '@/hooks/common/use-screen-bgm';
+import { ApiClientError } from '@/infra/http/api-client';
 import { createLoadPieceCatalogUseCase } from '@/usecases/piece-info/create-piece-info-usecases';
 import { createClaimStageClearRewardUseCase } from '@/usecases/stage-battle/create-stage-battle-usecases';
 import { CommitGameMoveUseCase } from '@/usecases/stage-battle/commit-game-move-usecase';
@@ -151,6 +152,18 @@ function fallbackPiecePalette(side: string) {
 function pieceCodeFromPlacement(pieceCode: string | null, char: string): string | null {
   if (pieceCode && CODE_TO_SFEN[pieceCode]) return pieceCode;
   return CHAR_TO_CODE[char] ?? null;
+}
+
+function isGameAlreadyFinishedError(error: unknown): boolean {
+  if (!(error instanceof ApiClientError)) return false;
+  const code = error.code.toUpperCase();
+  const message = error.message.toLowerCase();
+  return (
+    code === 'GAME_ALREADY_FINISHED' ||
+    code === 'GAME_FINISHED' ||
+    code === 'INVALID_POSITION' ||
+    message.includes('already finished')
+  );
 }
 
 function toSfenBoard(placements: BoardPiece[]) {
@@ -730,7 +743,13 @@ export function StageShogiScreen() {
         void claimStageClearRewardIfNeeded();
       }
     } catch (error: unknown) {
-      setAiError(error instanceof Error ? error.message : String(error));
+      if (isGameAlreadyFinishedError(error)) {
+        setWinner('player');
+        setAiError(null);
+        void claimStageClearRewardIfNeeded();
+      } else {
+        setAiError(error instanceof Error ? error.message : String(error));
+      }
     } finally {
       aiThinkingRef.current = false;
       inFlightAiKeyRef.current = null;

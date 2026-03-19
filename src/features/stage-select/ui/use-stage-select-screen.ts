@@ -1,5 +1,6 @@
 import type { StageNodeData } from '@/domain/models/stage-select';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 
 import { stageRanges } from '@/constants/stage-select-data';
 import {
@@ -46,7 +47,7 @@ export function useStageSelectScreen(): StageSelectScreenVM {
   );
   const selectStageUseCase = useMemo(() => createSelectStageUseCase(), []);
 
-  useEffect(() => {
+  const loadStageNodes = useCallback(() => {
     let active = true;
     async function load() {
       setIsLoading(true);
@@ -75,6 +76,9 @@ export function useStageSelectScreen(): StageSelectScreenVM {
       active = false;
     };
   }, [loadStageSelectWithProgressUseCase]);
+
+  useEffect(() => loadStageNodes(), [loadStageNodes]);
+  useFocusEffect(loadStageNodes);
 
   const nodesInPage = useMemo(
     () => nodes.filter((node) => node.page === currentPage),
