@@ -191,10 +191,7 @@ export function parseBattleAiTurn(raw: unknown): BattleAiTurn {
   if (!obj) {
     throw new Error('ai turn response is not an object');
   }
-  const meta = asRecord(obj.meta);
-  if (!meta) {
-    throw new Error('ai meta is invalid');
-  }
+  const meta = asRecord(obj.meta) ?? null;
 
   const rawMove = obj.selectedMove ?? obj.selected_move;
   return {
