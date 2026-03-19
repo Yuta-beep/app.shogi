@@ -316,7 +316,7 @@ function piecesFromCanonicalPosition(
       const pieceCode = sfenCharToPieceCode(ch);
       if (pieceCode && row >= 0 && row < BOARD_SIZE && col >= 0 && col < BOARD_SIZE) {
         const pieceDef = promoted
-          ? promotedPieceDefsByCode[pieceCode] ?? pieceDefsByCode[pieceCode]
+          ? (promotedPieceDefsByCode[pieceCode] ?? pieceDefsByCode[pieceCode])
           : pieceDefsByCode[pieceCode];
         const imageSignedUrl =
           pieceDef?.imageSignedUrl ??
