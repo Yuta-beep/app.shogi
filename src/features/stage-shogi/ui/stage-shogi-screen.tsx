@@ -359,6 +359,15 @@ function getDisplayChar(piece: BoardPiece) {
   return piece.char ?? (piece.pieceCode ? (CODE_TO_CHAR[piece.pieceCode] ?? '?') : '?');
 }
 
+function normalizeSkillName(skill: string | undefined): string | null {
+  if (!skill) return null;
+  const normalized = skill.trim();
+  if (!normalized || normalized === '-' || normalized === 'なし' || normalized === '準備中') {
+    return null;
+  }
+  return normalized;
+}
+
 export function StageShogiScreen() {
   const params = useLocalSearchParams<{ stage?: string }>();
   const stageParam = Array.isArray(params.stage) ? params.stage[0] : params.stage;
@@ -386,6 +395,7 @@ export function StageShogiScreen() {
   const [pieceCatalog, setPieceCatalog] = useState<PieceCatalogItem[]>([]);
   const [winner, setWinner] = useState<Side | null>(null);
   const [clearRewardText, setClearRewardText] = useState<string | null>(null);
+  const [skillActivationText, setSkillActivationText] = useState<string | null>(null);
   const loadPieceCatalogUseCase = useMemo(() => createLoadPieceCatalogUseCase(), []);
   const claimStageClearRewardUseCase = useMemo(() => createClaimStageClearRewardUseCase(), []);
   const createGameUseCase = useMemo(() => new CreateGameUseCase(), []);
@@ -398,11 +408,15 @@ export function StageShogiScreen() {
   const inFlightAiKeyRef = useRef<string | null>(null);
   const lastSuccessfulAiKeyRef = useRef<string | null>(null);
   const clearRewardClaimedRef = useRef(false);
+  const skillToastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useScreenBgm('battle');
 
   useEffect(() => {
     return () => {
       isMountedRef.current = false;
+      if (skillToastTimeoutRef.current) {
+        clearTimeout(skillToastTimeoutRef.current);
+      }
     };
   }, []);
 
@@ -432,6 +446,30 @@ export function StageShogiScreen() {
       ),
     [pieceDefsByChar],
   );
+
+  function resolveSkillName(move: BattleMove): string | null {
+    const code = move.pieceCode || move.dropPieceCode;
+    if (!code) return null;
+    const base = normalizeSkillName(pieceDefsByCode[code]?.skill);
+    const promoted = normalizeSkillName(promotedPieceDefsByCode[code]?.skill);
+    return move.promote ? (promoted ?? base) : (base ?? promoted);
+  }
+
+  function showSkillActivation(actor: Side, move: BattleMove) {
+    const actorLabel = actor === 'player' ? 'あなた' : 'CPU';
+    const skillName = resolveSkillName(move);
+    const message = skillName
+      ? `${actorLabel} スキル発動: ${skillName}`
+      : `${actorLabel} スキル発動`;
+    setSkillActivationText(message);
+    if (skillToastTimeoutRef.current) {
+      clearTimeout(skillToastTimeoutRef.current);
+    }
+    skillToastTimeoutRef.current = setTimeout(() => {
+      setSkillActivationText(null);
+      skillToastTimeoutRef.current = null;
+    }, 1400);
+  }
 
   function syncFromCanonicalPosition(
     position: BattleCanonicalPosition,
@@ -506,6 +544,11 @@ export function StageShogiScreen() {
     setPendingPromotion(null);
     setWinner(null);
     setClearRewardText(null);
+    setSkillActivationText(null);
+    if (skillToastTimeoutRef.current) {
+      clearTimeout(skillToastTimeoutRef.current);
+      skillToastTimeoutRef.current = null;
+    }
     aiThinkingRef.current = false;
     inFlightAiKeyRef.current = null;
     lastSuccessfulAiKeyRef.current = null;
@@ -673,6 +716,10 @@ export function StageShogiScreen() {
         engineConfig: {},
       });
 
+      if (response.skillTriggered) {
+        showSkillActivation('enemy', response.selectedMove);
+      }
+
       const nextWinner = syncFromCanonicalPosition(response.position, response.game);
       lastSuccessfulAiKeyRef.current = requestKey;
       if (nextWinner === 'player') {
@@ -721,6 +768,10 @@ export function StageShogiScreen() {
         actorSide: 'player',
         move,
       });
+
+      if (result.skillTriggered) {
+        showSkillActivation('player', result.move);
+      }
 
       const nextWinner = syncFromCanonicalPosition(result.position, result.game);
       if (nextWinner === 'player') {
@@ -1104,6 +1155,14 @@ export function StageShogiScreen() {
                 <Text className="text-center font-bold text-white">成らない</Text>
               </Pressable>
             </View>
+          </View>
+        </View>
+      ) : null}
+
+      {skillActivationText ? (
+        <View pointerEvents="none" className="absolute inset-0 items-center justify-center">
+          <View className="rounded-lg bg-black/75 px-4 py-2">
+            <Text className="text-sm font-black text-white">{skillActivationText}</Text>
           </View>
         </View>
       ) : null}
