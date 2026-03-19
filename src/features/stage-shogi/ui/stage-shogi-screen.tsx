@@ -232,6 +232,19 @@ function pieceCodeFromPlacement(pieceCode: string | null, char: string): string 
   return CHAR_TO_CODE[char] ?? null;
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object') return null;
+  return value as Record<string, unknown>;
+}
+
+function asString(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
+function asBoolean(value: unknown): boolean | null {
+  return typeof value === 'boolean' ? value : null;
+}
+
 function isGameAlreadyFinishedError(error: unknown): boolean {
   if (!(error instanceof ApiClientError)) return false;
   const code = error.code.toUpperCase();
@@ -306,6 +319,33 @@ function buildSfen(placements: BoardPiece[], hands: HandsState, sideToMove: Side
   const side = sideToMove === 'player' ? 'b' : 'w';
   const sfenHands = toSfenHands(hands);
   return `${board} ${side} ${sfenHands} ${Math.max(1, moveNo)}`;
+}
+
+function buildBoardState(placements: BoardPiece[]): Record<string, unknown> {
+  const pieces = placements.map((placement) => ({
+    side: placement.side,
+    row: placement.row,
+    col: placement.col,
+    pieceCode: placement.pieceCode,
+    char: placement.char,
+    promoted: Boolean(placement.promoted),
+    imageSignedUrl: placement.imageSignedUrl,
+  }));
+
+  return {
+    pieces,
+    placements: pieces.map((piece) => ({
+      side: piece.side,
+      row: piece.row,
+      col: piece.col,
+      piece: {
+        code: piece.pieceCode,
+        char: piece.char,
+        promoted: piece.promoted,
+        imageSignedUrl: piece.imageSignedUrl,
+      },
+    })),
+  };
 }
 
 function uniqueTargetsFromMoves(moves: BattleMove[]): BoardCell[] {
@@ -414,6 +454,74 @@ function handsFromCanonical(position: BattleCanonicalPosition): HandsState {
   };
 }
 
+function piecesFromCanonicalBoardState(
+  position: BattleCanonicalPosition,
+  pieceDefsByCode: Partial<Record<string, PieceCatalogItem>>,
+  promotedPieceDefsByCode: Partial<Record<string, PieceCatalogItem>>,
+  existingPieces: BoardPiece[],
+): BoardPiece[] | null {
+  const boardState = asRecord(position.boardState);
+  if (!boardState) return null;
+  const rawPieces = [
+    boardState.pieces,
+    boardState.placements,
+    boardState.boardPieces,
+    boardState.board_pieces,
+  ].find((value) => Array.isArray(value)) as unknown[] | undefined;
+  if (!rawPieces || rawPieces.length === 0) return null;
+
+  const next: BoardPiece[] = [];
+  const seen = new Set<string>();
+  for (const raw of rawPieces) {
+    const entry = asRecord(raw);
+    if (!entry) continue;
+    const nested = asRecord(entry.piece) ?? entry;
+    const row = normalizeCellIndex(Number(entry.row));
+    const col = normalizeCellIndex(Number(entry.col));
+    if (row === null || col === null) continue;
+    const side = normalizeSide(asString(entry.side ?? nested.side) ?? 'player');
+    const promoted = asBoolean(entry.promoted ?? nested.promoted) ?? false;
+    const code =
+      asString(nested.pieceCode ?? nested.piece_code ?? nested.code) ??
+      CHAR_TO_CODE[asString(nested.char ?? entry.char) ?? ''] ??
+      null;
+    if (!code) continue;
+    const key = `${side}:${row}:${col}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    const pieceDef = promoted
+      ? (promotedPieceDefsByCode[code] ?? pieceDefsByCode[code])
+      : pieceDefsByCode[code];
+    const char = asString(nested.char ?? entry.char) ?? pieceCharFromCode(code, side, promoted);
+    const imageSignedUrl =
+      asString(nested.imageSignedUrl ?? nested.image_signed_url ?? entry.imageSignedUrl) ??
+      pieceDef?.imageSignedUrl ??
+      existingPieces.find(
+        (piece) =>
+          piece.side === side &&
+          piece.row === row &&
+          piece.col === col &&
+          piece.imageSignedUrl &&
+          piece.pieceCode === code &&
+          (piece.promoted ?? false) === promoted,
+      )?.imageSignedUrl ??
+      null;
+
+    next.push({
+      side,
+      row,
+      col,
+      pieceCode: code,
+      char,
+      promoted,
+      imageSignedUrl,
+    });
+  }
+
+  return next.length > 0 ? next : null;
+}
+
 function piecesFromCanonicalPosition(
   position: BattleCanonicalPosition,
   pieceDefsByCode: Partial<Record<string, PieceCatalogItem>>,
@@ -471,7 +579,24 @@ function piecesFromCanonicalPosition(
     }
   });
 
-  return next;
+  const boardStatePieces = piecesFromCanonicalBoardState(
+    position,
+    pieceDefsByCode,
+    promotedPieceDefsByCode,
+    existingPieces,
+  );
+  if (!boardStatePieces) {
+    return next;
+  }
+
+  const mergedByKey = new Map<string, BoardPiece>();
+  for (const piece of next) {
+    mergedByKey.set(`${piece.side}:${piece.row}:${piece.col}`, piece);
+  }
+  for (const piece of boardStatePieces) {
+    mergedByKey.set(`${piece.side}:${piece.row}:${piece.col}`, piece);
+  }
+  return [...mergedByKey.values()];
 }
 
 function findPieceAt(placements: BoardPiece[], row: number, col: number) {
@@ -562,6 +687,7 @@ export function StageShogiScreen() {
   const [playerLegalMoves, setPlayerLegalMoves] = useState<BattleMove[]>([]);
   const [hands, setHands] = useState<HandsState>(createEmptyHandsState());
   const [pendingPromotion, setPendingPromotion] = useState<PendingPromotion | null>(null);
+  const [stateHash, setStateHash] = useState<string | null>(null);
   const [pieceCatalog, setPieceCatalog] = useState<PieceCatalogItem[]>([]);
   const [winner, setWinner] = useState<Side | null>(null);
   const [clearRewardText, setClearRewardText] = useState<string | null>(null);
@@ -663,6 +789,7 @@ export function StageShogiScreen() {
     setLegalTargets([]);
     setPlayerLegalMoves([]);
     setPendingPromotion(null);
+    setStateHash(position.stateHash);
 
     if (game.status === 'finished') {
       const nextWinner = game.winnerSide ?? null;
@@ -714,6 +841,7 @@ export function StageShogiScreen() {
     setPlayerLegalMoves([]);
     setHands(createEmptyHandsState());
     setPendingPromotion(null);
+    setStateHash(null);
     setWinner(null);
     setClearRewardText(null);
     setSkillActivationText(null);
@@ -762,7 +890,7 @@ export function StageShogiScreen() {
           turnNumber: moveNo,
           moveCount: moveNo - 1,
           sfen: buildSfen(pieces, hands, sideToMove, moveNo),
-          boardState: {},
+          boardState: buildBoardState(pieces),
           hands,
         },
       })
@@ -812,6 +940,7 @@ export function StageShogiScreen() {
           setPlayerLegalMoves([]);
           return;
         }
+        setStateHash(result.stateHash);
         if (result.legalMoves.length === 0) {
           setWinner('enemy');
           return;
@@ -889,6 +1018,7 @@ export function StageShogiScreen() {
       const response = await requestAiMoveUseCase.execute({
         gameId,
         moveNo: nextMoveNo,
+        stateHash,
         engineConfig: {},
       });
 
@@ -1033,6 +1163,7 @@ export function StageShogiScreen() {
         moveNo,
         actorSide: 'player',
         move,
+        stateHash,
       });
 
       if (result.skillTriggered) {

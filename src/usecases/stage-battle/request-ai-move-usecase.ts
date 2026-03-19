@@ -4,6 +4,7 @@ import { BattleAiTurn, parseBattleAiTurn } from '@/usecases/stage-battle/game-mo
 export type RequestAiMoveInput = {
   gameId: string;
   moveNo?: number;
+  stateHash?: string | null;
   engineConfig: Record<string, unknown>;
 };
 
