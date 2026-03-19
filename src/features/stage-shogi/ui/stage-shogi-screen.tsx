@@ -64,9 +64,9 @@ const CODE_TO_CHAR: Record<string, string> = {
 };
 const PROMOTED_CODE_TO_CHAR: Record<string, string> = {
   FU: 'と',
-  KY: '杏',
-  KE: '圭',
-  GI: '全',
+  KY: '成香',
+  KE: '成桂',
+  GI: '成銀',
   KA: '馬',
   HI: '龍',
 };
@@ -291,6 +291,7 @@ function handsFromCanonical(position: BattleCanonicalPosition): HandsState {
 function piecesFromCanonicalPosition(
   position: BattleCanonicalPosition,
   pieceDefsByCode: Partial<Record<string, PieceCatalogItem>>,
+  promotedPieceDefsByCode: Partial<Record<string, PieceCatalogItem>>,
   existingPieces: BoardPiece[],
 ): BoardPiece[] {
   const board = position.sfen.split(' ')[0] ?? '';
@@ -314,8 +315,11 @@ function piecesFromCanonicalPosition(
       const side: Side = ch === ch.toUpperCase() ? 'player' : 'enemy';
       const pieceCode = sfenCharToPieceCode(ch);
       if (pieceCode && row >= 0 && row < BOARD_SIZE && col >= 0 && col < BOARD_SIZE) {
+        const pieceDef = promoted
+          ? promotedPieceDefsByCode[pieceCode] ?? pieceDefsByCode[pieceCode]
+          : pieceDefsByCode[pieceCode];
         const imageSignedUrl =
-          pieceDefsByCode[pieceCode]?.imageSignedUrl ??
+          pieceDef?.imageSignedUrl ??
           existingPieces.find(
             (piece) =>
               piece.pieceCode === pieceCode &&
@@ -419,12 +423,26 @@ export function StageShogiScreen() {
       ),
     [pieceDefsByChar],
   );
+  const promotedPieceDefsByCode = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(PROMOTED_CODE_TO_CHAR)
+          .map(([code, char]) => [code, pieceDefsByChar[char]])
+          .filter((entry): entry is [string, PieceCatalogItem] => Boolean(entry[1])),
+      ),
+    [pieceDefsByChar],
+  );
 
   function syncFromCanonicalPosition(
     position: BattleCanonicalPosition,
     game: BattleGameStatus,
   ): Side | null {
-    const nextPieces = piecesFromCanonicalPosition(position, pieceDefsByCode, pieces);
+    const nextPieces = piecesFromCanonicalPosition(
+      position,
+      pieceDefsByCode,
+      promotedPieceDefsByCode,
+      pieces,
+    );
     const nextHands = handsFromCanonical(position);
     setPieces(nextPieces);
     setHands(nextHands);
@@ -976,7 +994,7 @@ export function StageShogiScreen() {
                 const pieceScalePercent = king
                   ? KING_PIECE_SIZE_PERCENT
                   : NORMAL_PIECE_SIZE_PERCENT;
-                const placementKey = `${placement.side}-${placement.pieceCode ?? 'X'}-${placement.row}-${placement.col}`;
+                const placementKey = `${placement.side}-${placement.pieceCode ?? 'X'}-${placement.promoted ? 'P' : 'N'}-${placement.row}-${placement.col}`;
                 const imageUri = failedImageKeys[placementKey]
                   ? null
                   : getPieceImageUri(placement.imageSignedUrl);
