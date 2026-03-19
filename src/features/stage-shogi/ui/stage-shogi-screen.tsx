@@ -35,7 +35,7 @@ import { PieceCatalogItem } from '@/usecases/piece-info/load-piece-catalog-useca
 
 const BOARD_SIZE = 9;
 const BOARD_VIEWBOX = 900;
-const BOARD_PADDING = 36;
+const BOARD_PADDING = 18;
 const BOARD_INNER = BOARD_VIEWBOX - BOARD_PADDING * 2;
 const BOARD_CELL = BOARD_INNER / BOARD_SIZE;
 const BOARD_PADDING_RATIO = BOARD_PADDING / BOARD_VIEWBOX;
@@ -976,7 +976,7 @@ export function StageShogiScreen() {
         </Pressable>
       </View>
 
-      <View className="mt-3 overflow-hidden rounded-xl border-2 border-[#a27700] bg-[#e3c690]">
+      <View className="-mx-2 mt-3 overflow-hidden rounded-xl border-2 border-[#a27700] bg-[#e3c690]">
         <View className="relative w-full self-center" style={{ aspectRatio: 1 }}>
           <Svg width="100%" height="100%" viewBox={`0 0 ${BOARD_VIEWBOX} ${BOARD_VIEWBOX}`}>
             <Rect x={0} y={0} width={BOARD_VIEWBOX} height={BOARD_VIEWBOX} fill="#deb887" />
