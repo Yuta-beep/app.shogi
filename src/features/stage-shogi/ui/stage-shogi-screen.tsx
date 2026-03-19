@@ -62,6 +62,21 @@ const CODE_TO_CHAR: Record<string, string> = {
   KA: '角',
   HI: '飛',
   OU: '王',
+  NIN: '忍',
+  KAG: '影',
+  HOU: '砲',
+  RYU: '竜',
+  HOO: '鳳',
+  ENN: '炎',
+  FIR: '火',
+  SUI: '水',
+  NAM: '波',
+  MOK: '木',
+  HAA: '葉',
+  HIK: '光',
+  HOS: '星',
+  YAM: '闇',
+  MAK: '魔',
 };
 const PROMOTED_CODE_TO_CHAR: Record<string, string> = {
   FU: 'と',
@@ -82,6 +97,21 @@ const CHAR_TO_CODE: Record<string, string> = {
   飛: 'HI',
   王: 'OU',
   玉: 'OU',
+  忍: 'NIN',
+  影: 'KAG',
+  砲: 'HOU',
+  竜: 'RYU',
+  鳳: 'HOO',
+  炎: 'ENN',
+  火: 'FIR',
+  水: 'SUI',
+  波: 'NAM',
+  木: 'MOK',
+  葉: 'HAA',
+  光: 'HIK',
+  星: 'HOS',
+  闇: 'YAM',
+  魔: 'MAK',
 };
 
 const CODE_TO_SFEN: Record<string, string> = {
@@ -93,8 +123,46 @@ const CODE_TO_SFEN: Record<string, string> = {
   KA: 'B',
   HI: 'R',
   OU: 'K',
+  NIN: 'C',
+  KAG: 'D',
+  HOU: 'E',
+  RYU: 'F',
+  HOO: 'H',
+  ENN: 'I',
+  FIR: 'J',
+  SUI: 'M',
+  NAM: 'Q',
+  MOK: 'T',
+  HAA: 'U',
+  HIK: 'V',
+  HOS: 'W',
+  YAM: 'X',
+  MAK: 'Y',
 };
-const HAND_CODES_IN_SFEN_ORDER = ['HI', 'KA', 'KI', 'GI', 'KE', 'KY', 'FU'];
+const HAND_CODES_IN_SFEN_ORDER = [
+  'HI',
+  'KA',
+  'KI',
+  'GI',
+  'KE',
+  'KY',
+  'FU',
+  'NIN',
+  'KAG',
+  'HOU',
+  'RYU',
+  'HOO',
+  'ENN',
+  'FIR',
+  'SUI',
+  'NAM',
+  'MOK',
+  'HAA',
+  'HIK',
+  'HOS',
+  'YAM',
+  'MAK',
+];
 
 function isEnemySide(side: string) {
   const normalized = side.toLowerCase();
@@ -281,6 +349,36 @@ function sfenCharToPieceCode(ch: string): string | null {
       return 'HI';
     case 'K':
       return 'OU';
+    case 'C':
+      return 'NIN';
+    case 'D':
+      return 'KAG';
+    case 'E':
+      return 'HOU';
+    case 'F':
+      return 'RYU';
+    case 'H':
+      return 'HOO';
+    case 'I':
+      return 'ENN';
+    case 'J':
+      return 'FIR';
+    case 'M':
+      return 'SUI';
+    case 'Q':
+      return 'NAM';
+    case 'T':
+      return 'MOK';
+    case 'U':
+      return 'HAA';
+    case 'V':
+      return 'HIK';
+    case 'W':
+      return 'HOS';
+    case 'X':
+      return 'YAM';
+    case 'Y':
+      return 'MAK';
     default:
       return null;
   }
