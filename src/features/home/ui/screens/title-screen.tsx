@@ -45,15 +45,15 @@ export function TitleScreen() {
     }, TITLE_TO_HOME_LOADING_MS);
   }
 
+  if (!isReady || isTransitioning) {
+    return <AppLoadingScreen />;
+  }
+
   return (
     <ImageBackground source={homeAssets.titleBackground} resizeMode="cover" className="flex-1">
       <SafeAreaView className="flex-1">
         <View className="flex-1 bg-black/20">
-          {isReady && !isTransitioning ? (
-            <TapToStartScreen onPressStart={startHomeTransition} />
-          ) : (
-            <AppLoadingScreen />
-          )}
+          <TapToStartScreen onPressStart={startHomeTransition} />
         </View>
       </SafeAreaView>
     </ImageBackground>
