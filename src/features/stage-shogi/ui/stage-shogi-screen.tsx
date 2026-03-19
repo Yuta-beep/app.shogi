@@ -44,6 +44,7 @@ const BOARD_CELL_INNER_RATIO = 1 / BOARD_SIZE;
 const NORMAL_PIECE_SIZE_PERCENT = 120;
 const KING_PIECE_SIZE_PERCENT = 136;
 const ENABLE_PIECE_IMAGES = process.env.EXPO_PUBLIC_ENABLE_PIECE_IMAGES !== 'false';
+const STANDARD_PIECE_CODES = new Set(['FU', 'KY', 'KE', 'GI', 'KI', 'KA', 'HI', 'OU']);
 
 type BoardPiece = RuleBoardPiece & {
   imageSignedUrl: string | null;
@@ -51,6 +52,15 @@ type BoardPiece = RuleBoardPiece & {
 type PendingPromotion = {
   promoteMove: BattleMove;
   nonPromoteMove: BattleMove;
+};
+type PreservedMovedPiece = {
+  side: Side;
+  toRow: number;
+  toCol: number;
+  pieceCode: string | null;
+  char: string;
+  imageSignedUrl: string | null;
+  promoted?: boolean;
 };
 
 const CODE_TO_CHAR: Record<string, string> = {
@@ -123,21 +133,21 @@ const CODE_TO_SFEN: Record<string, string> = {
   KA: 'B',
   HI: 'R',
   OU: 'K',
-  NIN: 'C',
-  KAG: 'D',
-  HOU: 'E',
-  RYU: 'F',
-  HOO: 'H',
-  ENN: 'I',
-  FIR: 'J',
-  SUI: 'M',
-  NAM: 'Q',
-  MOK: 'T',
-  HAA: 'U',
-  HIK: 'V',
-  HOS: 'W',
-  YAM: 'X',
-  MAK: 'Y',
+  NIN: 'P',
+  KAG: 'P',
+  HOU: 'P',
+  RYU: 'P',
+  HOO: 'P',
+  ENN: 'P',
+  FIR: 'P',
+  SUI: 'P',
+  NAM: 'P',
+  MOK: 'P',
+  HAA: 'P',
+  HIK: 'P',
+  HOS: 'P',
+  YAM: 'P',
+  MAK: 'P',
 };
 const HAND_CODES_IN_SFEN_ORDER = [
   'HI',
@@ -270,18 +280,23 @@ function toSfenBoard(placements: BoardPiece[]) {
 }
 
 function toSfenHands(hands: HandsState) {
-  const chunks: string[] = [];
+  const playerBySfen: Record<string, number> = {};
+  const enemyBySfen: Record<string, number> = {};
   for (const code of HAND_CODES_IN_SFEN_ORDER) {
     const sfen = CODE_TO_SFEN[code];
     if (!sfen) continue;
     const playerCount = hands.player[code] ?? 0;
     const enemyCount = hands.enemy[code] ?? 0;
-    if (playerCount > 0) {
-      chunks.push(`${playerCount > 1 ? String(playerCount) : ''}${sfen}`);
-    }
-    if (enemyCount > 0) {
+    if (playerCount > 0) playerBySfen[sfen] = (playerBySfen[sfen] ?? 0) + playerCount;
+    if (enemyCount > 0) enemyBySfen[sfen] = (enemyBySfen[sfen] ?? 0) + enemyCount;
+  }
+  const chunks: string[] = [];
+  for (const sfen of ['R', 'B', 'G', 'S', 'N', 'L', 'P']) {
+    const playerCount = playerBySfen[sfen] ?? 0;
+    const enemyCount = enemyBySfen[sfen] ?? 0;
+    if (playerCount > 0) chunks.push(`${playerCount > 1 ? String(playerCount) : ''}${sfen}`);
+    if (enemyCount > 0)
       chunks.push(`${enemyCount > 1 ? String(enemyCount) : ''}${sfen.toLowerCase()}`);
-    }
   }
   return chunks.length > 0 ? chunks.join('') : '-';
 }
@@ -470,6 +485,50 @@ function getDisplayChar(piece: BoardPiece) {
   return piece.char ?? (piece.pieceCode ? (CODE_TO_CHAR[piece.pieceCode] ?? '?') : '?');
 }
 
+function isSpecialDisplayPiece(piece: BoardPiece): boolean {
+  if (piece.pieceCode && !STANDARD_PIECE_CODES.has(piece.pieceCode)) return true;
+  return (
+    CHAR_TO_CODE[piece.char] != null && !STANDARD_PIECE_CODES.has(CHAR_TO_CODE[piece.char] ?? '')
+  );
+}
+
+function preserveMovedPieceIdentity(
+  nextPieces: BoardPiece[],
+  preserved?: PreservedMovedPiece,
+): BoardPiece[] {
+  if (!preserved) return nextPieces;
+  const index = nextPieces.findIndex(
+    (piece) =>
+      piece.side === preserved.side &&
+      piece.row === preserved.toRow &&
+      piece.col === preserved.toCol,
+  );
+  if (index >= 0) {
+    const updated = [...nextPieces];
+    updated[index] = {
+      ...updated[index],
+      pieceCode: preserved.pieceCode,
+      char: preserved.char,
+      imageSignedUrl: preserved.imageSignedUrl,
+      promoted: preserved.promoted ?? false,
+    };
+    return updated;
+  }
+
+  return [
+    ...nextPieces,
+    {
+      side: preserved.side,
+      row: preserved.toRow,
+      col: preserved.toCol,
+      pieceCode: preserved.pieceCode,
+      char: preserved.char,
+      imageSignedUrl: preserved.imageSignedUrl,
+      promoted: preserved.promoted ?? false,
+    },
+  ];
+}
+
 function normalizeSkillName(skill: string | undefined): string | null {
   if (!skill) return null;
   const normalized = skill.trim();
@@ -585,13 +644,15 @@ export function StageShogiScreen() {
   function syncFromCanonicalPosition(
     position: BattleCanonicalPosition,
     game: BattleGameStatus,
+    preservedMovedPiece?: PreservedMovedPiece,
   ): Side | null {
-    const nextPieces = piecesFromCanonicalPosition(
+    const parsedPieces = piecesFromCanonicalPosition(
       position,
       pieceDefsByCode,
       promotedPieceDefsByCode,
       pieces,
     );
+    const nextPieces = preserveMovedPieceIdentity(parsedPieces, preservedMovedPiece);
     const nextHands = handsFromCanonical(position);
     setPieces(nextPieces);
     setHands(nextHands);
@@ -835,7 +896,28 @@ export function StageShogiScreen() {
         showSkillActivation('enemy', response.selectedMove);
       }
 
-      const nextWinner = syncFromCanonicalPosition(response.position, response.game);
+      let preservedMovedPiece: PreservedMovedPiece | undefined;
+      const selectedMove = response.selectedMove;
+      if (selectedMove?.fromRow != null && selectedMove?.fromCol != null) {
+        const moved = findPieceAt(pieces, selectedMove.fromRow, selectedMove.fromCol);
+        if (moved && moved.side === 'enemy' && isSpecialDisplayPiece(moved)) {
+          preservedMovedPiece = {
+            side: moved.side,
+            toRow: selectedMove.toRow,
+            toCol: selectedMove.toCol,
+            pieceCode: moved.pieceCode,
+            char: moved.char,
+            imageSignedUrl: moved.imageSignedUrl,
+            promoted: moved.promoted,
+          };
+        }
+      }
+
+      const nextWinner = syncFromCanonicalPosition(
+        response.position,
+        response.game,
+        preservedMovedPiece,
+      );
       lastSuccessfulAiKeyRef.current = requestKey;
       if (nextWinner === 'player') {
         void claimStageClearRewardIfNeeded();
@@ -921,6 +1003,22 @@ export function StageShogiScreen() {
   async function commitPlayerMove(move: BattleMove) {
     if (!gameId || isAiThinking || isCreatingGame) return;
 
+    let preservedMovedPiece: PreservedMovedPiece | undefined;
+    if (move.fromRow != null && move.fromCol != null) {
+      const moved = findPieceAt(pieces, move.fromRow, move.fromCol);
+      if (moved && moved.side === 'player' && isSpecialDisplayPiece(moved)) {
+        preservedMovedPiece = {
+          side: moved.side,
+          toRow: move.toRow,
+          toCol: move.toCol,
+          pieceCode: moved.pieceCode,
+          char: moved.char,
+          imageSignedUrl: moved.imageSignedUrl,
+          promoted: move.promote ? true : moved.promoted,
+        };
+      }
+    }
+
     setSelectedCell(null);
     setSelectedDropPieceCode(null);
     setLegalTargets([]);
@@ -941,7 +1039,11 @@ export function StageShogiScreen() {
         showSkillActivation('player', result.move);
       }
 
-      const nextWinner = syncFromCanonicalPosition(result.position, result.game);
+      const nextWinner = syncFromCanonicalPosition(
+        result.position,
+        result.game,
+        preservedMovedPiece,
+      );
       if (nextWinner === 'player') {
         void claimStageClearRewardIfNeeded();
         return;
