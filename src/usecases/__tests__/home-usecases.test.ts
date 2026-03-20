@@ -14,6 +14,7 @@ describe('MockLoadHomeSnapshotUseCase', () => {
       playerExp: homeMock.playerExp,
       stamina: homeMock.stamina,
       maxStamina: homeMock.maxStamina,
+      nextRecoveryAt: homeMock.nextRecoveryAt,
     });
   });
 });
