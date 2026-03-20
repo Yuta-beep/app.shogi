@@ -11,6 +11,7 @@ type HomeCommonHeaderProps = {
   goldCurrency?: number;
   stamina?: number;
   maxStamina?: number;
+  nextRecoveryAt?: string | null;
 };
 
 const MOCK_EXP_PER_LEVEL = 1000;
@@ -23,6 +24,7 @@ export function HomeCommonHeader({
   goldCurrency = 0,
   stamina = 50,
   maxStamina = 50,
+  nextRecoveryAt,
 }: HomeCommonHeaderProps) {
   return (
     <View className="w-full">
@@ -46,6 +48,7 @@ export function HomeCommonHeader({
           expPerLevel={MOCK_EXP_PER_LEVEL}
           stamina={stamina}
           maxStamina={maxStamina}
+          nextRecoveryAt={nextRecoveryAt}
         />
         <CurrencyStack pawnCurrency={pawnCurrency} goldCurrency={goldCurrency} />
       </View>

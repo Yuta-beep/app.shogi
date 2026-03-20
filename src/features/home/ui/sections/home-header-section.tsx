@@ -13,6 +13,7 @@ type HomeHeaderSectionProps = {
   goldCurrency: number;
   stamina?: number;
   maxStamina?: number;
+  nextRecoveryAt?: string | null;
 };
 
 export function HomeHeaderSection({
@@ -24,6 +25,7 @@ export function HomeHeaderSection({
   goldCurrency,
   stamina,
   maxStamina,
+  nextRecoveryAt,
 }: HomeHeaderSectionProps) {
   return (
     <View>
@@ -35,6 +37,7 @@ export function HomeHeaderSection({
         goldCurrency={goldCurrency}
         stamina={stamina}
         maxStamina={maxStamina}
+        nextRecoveryAt={nextRecoveryAt}
       />
 
       <Pressable

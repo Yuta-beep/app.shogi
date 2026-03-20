@@ -22,6 +22,7 @@ export function GlobalHomeHud({ pawnCurrency, goldCurrency }: GlobalHomeHudProps
         goldCurrency={goldCurrency ?? snapshot.goldCurrency}
         stamina={snapshot.stamina}
         maxStamina={snapshot.maxStamina}
+        nextRecoveryAt={snapshot.nextRecoveryAt}
       />
     </>
   );
