@@ -9,46 +9,48 @@ const mockGetJson = jest.fn();
 const mockExecutePieceCatalog = jest.fn();
 const MockView = View;
 const MockText = Text;
-const stageBattleSnapshot = {
+const mockDefaultPlacements = [
+  {
+    side: 'player',
+    row: 4,
+    col: 4,
+    pieceId: 1,
+    pieceCode: 'KA',
+    char: '角',
+    imageBucket: null,
+    imageKey: null,
+    imageSignedUrl: null,
+  },
+  {
+    side: 'player',
+    row: 8,
+    col: 4,
+    pieceId: 2,
+    pieceCode: 'OU',
+    char: '王',
+    imageBucket: null,
+    imageKey: null,
+    imageSignedUrl: null,
+  },
+  {
+    side: 'enemy',
+    row: 0,
+    col: 4,
+    pieceId: 3,
+    pieceCode: 'OU',
+    char: '玉',
+    imageBucket: null,
+    imageKey: null,
+    imageSignedUrl: null,
+  },
+] as const;
+
+const mockStageBattleSnapshot = {
   stageLabel: 'STAGE 1',
   turnLabel: 'TURN 1',
   handLabel: '持ち駒',
   boardSize: 9,
-  placements: [
-    {
-      side: 'player',
-      row: 4,
-      col: 4,
-      pieceId: 1,
-      pieceCode: 'KA',
-      char: '角',
-      imageBucket: null,
-      imageKey: null,
-      imageSignedUrl: null,
-    },
-    {
-      side: 'player',
-      row: 8,
-      col: 4,
-      pieceId: 2,
-      pieceCode: 'OU',
-      char: '王',
-      imageBucket: null,
-      imageKey: null,
-      imageSignedUrl: null,
-    },
-    {
-      side: 'enemy',
-      row: 0,
-      col: 4,
-      pieceId: 3,
-      pieceCode: 'OU',
-      char: '玉',
-      imageBucket: null,
-      imageKey: null,
-      imageSignedUrl: null,
-    },
-  ],
+  placements: [...mockDefaultPlacements],
 };
 
 jest.mock('expo-router', () => ({
@@ -56,7 +58,15 @@ jest.mock('expo-router', () => ({
 }));
 
 jest.mock('expo-image', () => {
-  const Image = (props: Record<string, unknown>) => <MockView {...props} />;
+  const Image = ({
+    source,
+    testID,
+    ...props
+  }: Record<string, unknown> & { source?: { uri?: string }; testID?: string }) => (
+    <MockView testID={testID} {...props}>
+      <MockText>{`img:${source?.uri ?? ''}`}</MockText>
+    </MockView>
+  );
   Image.prefetch = jest.fn(() => Promise.resolve(true));
   return { Image };
 });
@@ -75,7 +85,7 @@ jest.mock('@/usecases/piece-info/create-piece-info-usecases', () => ({
 jest.mock('@/features/stage-shogi/ui/use-stage-battle-screen', () => ({
   useStageBattleScreen: () => ({
     isLoading: false,
-    snapshot: stageBattleSnapshot,
+    snapshot: mockStageBattleSnapshot,
   }),
 }));
 
@@ -108,6 +118,7 @@ describe('StageShogiScreen ai call', () => {
     mockPostJson.mockReset();
     mockGetJson.mockReset();
     mockExecutePieceCatalog.mockReset();
+    mockStageBattleSnapshot.placements = [...mockDefaultPlacements];
 
     mockExecutePieceCatalog.mockResolvedValue([
       {
@@ -146,6 +157,32 @@ describe('StageShogiScreen ai call', () => {
         desc: 'test',
         skill: 'なし',
         move: '周囲1',
+        moveVectors: [{ dx: 0, dy: -1, maxStep: 1 }],
+        isRepeatable: false,
+      },
+      {
+        pieceCode: 'FU',
+        sfenCode: 'P',
+        isPromoted: false,
+        char: '歩',
+        name: '歩兵',
+        unlock: '初期',
+        desc: 'test',
+        skill: 'なし',
+        move: '前1',
+        moveVectors: [{ dx: 0, dy: -1, maxStep: 1 }],
+        isRepeatable: false,
+      },
+      {
+        pieceCode: 'HOU',
+        sfenCode: 'E',
+        isPromoted: false,
+        char: '砲',
+        name: '砲',
+        unlock: '初期',
+        desc: 'test',
+        skill: 'なし',
+        move: 'test',
         moveVectors: [{ dx: 0, dy: -1, maxStep: 1 }],
         isRepeatable: false,
       },
@@ -409,6 +446,231 @@ describe('StageShogiScreen ai call', () => {
           }),
         }),
       );
+    });
+  });
+
+  it('keeps the moved pawn image after syncing a canonical position without board placements', async () => {
+    mockStageBattleSnapshot.placements = [
+      {
+        side: 'player',
+        row: 6,
+        col: 4,
+        pieceId: 10,
+        pieceCode: 'FU',
+        char: '歩',
+        imageBucket: null,
+        imageKey: null,
+        imageSignedUrl: 'https://cdn.example.test/fu-player.png',
+      },
+      {
+        side: 'player',
+        row: 8,
+        col: 4,
+        pieceId: 11,
+        pieceCode: 'OU',
+        char: '王',
+        imageBucket: null,
+        imageKey: null,
+        imageSignedUrl: null,
+      },
+      {
+        side: 'enemy',
+        row: 0,
+        col: 4,
+        pieceId: 12,
+        pieceCode: 'OU',
+        char: '玉',
+        imageBucket: null,
+        imageKey: null,
+        imageSignedUrl: null,
+      },
+    ];
+
+    mockGetJson.mockImplementation((path: string) => {
+      if (path === '/api/v1/games/game-1/legal-moves') {
+        return Promise.resolve({
+          sideToMove: 'player',
+          moveNo: 1,
+          stateHash: null,
+          legalMoves: [
+            {
+              fromRow: 6,
+              fromCol: 4,
+              toRow: 5,
+              toCol: 4,
+              pieceCode: 'FU',
+              promote: false,
+              dropPieceCode: null,
+              capturedPieceCode: null,
+              notation: null,
+            },
+          ],
+        });
+      }
+
+      return Promise.reject(new Error(`unexpected GET path: ${path}`));
+    });
+
+    mockPostJson.mockImplementation((path: string) => {
+      if (path === '/api/v1/games') {
+        return Promise.resolve({
+          gameId: 'game-1',
+          status: 'active',
+          startedAt: '2026-03-10T00:00:00Z',
+        });
+      }
+
+      if (path === '/api/v1/games/game-1/moves') {
+        return Promise.resolve({
+          moveNo: 1,
+          actorSide: 'player',
+          move: {
+            fromRow: 6,
+            fromCol: 4,
+            toRow: 5,
+            toCol: 4,
+            pieceCode: 'FU',
+            promote: false,
+            dropPieceCode: null,
+            capturedPieceCode: null,
+            notation: null,
+          },
+          position: {
+            sideToMove: 'player',
+            turnNumber: 2,
+            moveCount: 1,
+            sfen: '4k4/9/9/9/9/4P4/9/9/4K4 b - 2',
+            stateHash: null,
+            boardState: {},
+            hands: { player: {}, enemy: {} },
+          },
+          game: {
+            status: 'finished',
+            result: 'player_win',
+            winnerSide: 'player',
+          },
+        });
+      }
+
+      return Promise.reject(new Error(`unexpected POST path: ${path}`));
+    });
+
+    const { getByTestId, getAllByText, queryByTestId } = render(<StageShogiScreen />);
+
+    await waitFor(() => {
+      expect(getAllByText('img:https://cdn.example.test/fu-player.png')).toHaveLength(1);
+    });
+    await waitFor(() => {
+      expect(mockGetJson).toHaveBeenCalledWith('/api/v1/games/game-1/legal-moves');
+      expect(queryByTestId('board-cell-6-4')).toBeTruthy();
+      expect(queryByTestId('board-cell-5-4')).toBeTruthy();
+    });
+
+    fireEvent.press(getByTestId('board-cell-6-4'));
+    fireEvent.press(getByTestId('board-cell-5-4'));
+
+    await waitFor(() => {
+      expect(mockPostJson).toHaveBeenCalledWith(
+        '/api/v1/games/game-1/moves',
+        expect.objectContaining({
+          move: expect.objectContaining({
+            pieceCode: 'FU',
+            fromRow: 6,
+            fromCol: 4,
+            toRow: 5,
+            toCol: 4,
+          }),
+        }),
+      );
+    });
+
+    await waitFor(() => {
+      expect(getAllByText('img:https://cdn.example.test/fu-player.png')).toHaveLength(1);
+    });
+  });
+
+  it('renders captured special pieces in player hands even when they are outside the default hand order', async () => {
+    mockGetJson.mockImplementation((path: string) => {
+      if (path === '/api/v1/games/game-1/legal-moves') {
+        return Promise.resolve({
+          sideToMove: 'player',
+          moveNo: 1,
+          stateHash: null,
+          legalMoves: [
+            {
+              fromRow: 4,
+              fromCol: 4,
+              toRow: 4,
+              toCol: 5,
+              pieceCode: 'KA',
+              promote: false,
+              dropPieceCode: null,
+              capturedPieceCode: 'HOU',
+              notation: null,
+            },
+          ],
+        });
+      }
+
+      return Promise.reject(new Error(`unexpected GET path: ${path}`));
+    });
+
+    mockPostJson.mockImplementation((path: string) => {
+      if (path === '/api/v1/games') {
+        return Promise.resolve({
+          gameId: 'game-1',
+          status: 'active',
+          startedAt: '2026-03-10T00:00:00Z',
+        });
+      }
+
+      if (path === '/api/v1/games/game-1/moves') {
+        return Promise.resolve({
+          moveNo: 1,
+          actorSide: 'player',
+          move: {
+            fromRow: 4,
+            fromCol: 4,
+            toRow: 4,
+            toCol: 5,
+            pieceCode: 'KA',
+            promote: false,
+            dropPieceCode: null,
+            capturedPieceCode: 'HOU',
+            notation: null,
+          },
+          position: {
+            sideToMove: 'player',
+            turnNumber: 2,
+            moveCount: 1,
+            sfen: '4k4/9/9/9/5B3/9/9/9/4K4 b E 2',
+            stateHash: null,
+            boardState: {},
+            hands: { player: { HOU: 1 }, enemy: {} },
+          },
+          game: {
+            status: 'finished',
+            result: 'player_win',
+            winnerSide: 'player',
+          },
+        });
+      }
+
+      return Promise.reject(new Error(`unexpected POST path: ${path}`));
+    });
+
+    const { getByTestId, getByText } = render(<StageShogiScreen />);
+
+    await waitFor(() => {
+      expect(mockGetJson).toHaveBeenCalledWith('/api/v1/games/game-1/legal-moves');
+    });
+
+    fireEvent.press(getByTestId('board-cell-4-4'));
+    fireEvent.press(getByTestId('board-cell-4-5'));
+
+    await waitFor(() => {
+      expect(getByTestId('hand-player-HOU')).toBeTruthy();
+      expect(getByText('x1')).toBeTruthy();
     });
   });
 });
