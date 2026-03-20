@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 
 import type { HomeSnapshot } from '@/domain/models/home';
 import { createLoadHomeSnapshotUseCase } from '@/usecases/home/create-home-usecases';
@@ -18,17 +19,19 @@ export function useHomeHudSnapshot() {
   const [snapshot, setSnapshot] = useState<HomeSnapshot>(emptySnapshot);
   const loadUseCase = useMemo(() => createLoadHomeSnapshotUseCase(), []);
 
-  useEffect(() => {
-    let active = true;
-    loadUseCase.execute().then((next) => {
-      if (active) {
-        setSnapshot(next);
-      }
-    });
-    return () => {
-      active = false;
-    };
-  }, [loadUseCase]);
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      loadUseCase.execute().then((next) => {
+        if (active) {
+          setSnapshot(next);
+        }
+      });
+      return () => {
+        active = false;
+      };
+    }, [loadUseCase]),
+  );
 
   return snapshot;
 }
