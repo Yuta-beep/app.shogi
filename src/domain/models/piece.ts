@@ -2,6 +2,7 @@ export type MoveVector = {
   dx: number;
   dy: number;
   maxStep: number;
+  captureMode?: string | null;
 };
 
 export type MoveRule = {
@@ -13,6 +14,9 @@ export type MoveRule = {
 export type PieceCatalogItem = {
   pieceId?: number;
   pieceCode?: string | null;
+  sfenCode?: string | null;
+  canonicalCode?: string | null;
+  isPromoted?: boolean;
   moveCode?: string | null;
   char: string;
   name: string;
