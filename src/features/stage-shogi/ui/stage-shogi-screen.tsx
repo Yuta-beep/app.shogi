@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import { useLocalSearchParams } from 'expo-router';
 import { Crown, Shield } from 'lucide-react-native';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import Svg, { Line, Polygon, Rect } from 'react-native-svg';
 
@@ -16,6 +16,16 @@ import {
   Side,
   HandsState,
 } from '@/features/stage-shogi/domain/game-rules';
+import {
+  createPieceSfenMapping,
+  sfenCharToDisplayChar,
+  CODE_TO_CHAR,
+  PROMOTED_CODE_TO_CHAR,
+  CHAR_TO_CODE,
+  type PieceSfenMapping,
+  toSfenBoardPure,
+  toSfenHandsPure,
+} from '@/features/stage-shogi/domain/piece-conversion';
 import { useStageBattleScreen } from '@/features/stage-shogi/ui/use-stage-battle-screen';
 import { useAssetPreload } from '@/hooks/common/use-asset-preload';
 import { useAuthSession } from '@/hooks/common/use-auth-session';
@@ -63,117 +73,6 @@ type PreservedMovedPiece = {
   promoted?: boolean;
 };
 
-const CODE_TO_CHAR: Record<string, string> = {
-  FU: '歩',
-  KY: '香',
-  KE: '桂',
-  GI: '銀',
-  KI: '金',
-  KA: '角',
-  HI: '飛',
-  OU: '王',
-  NIN: '忍',
-  KAG: '影',
-  HOU: '砲',
-  RYU: '竜',
-  HOO: '鳳',
-  ENN: '炎',
-  FIR: '火',
-  SUI: '水',
-  NAM: '波',
-  MOK: '木',
-  HAA: '葉',
-  HIK: '光',
-  HOS: '星',
-  YAM: '闇',
-  MAK: '魔',
-};
-const PROMOTED_CODE_TO_CHAR: Record<string, string> = {
-  FU: 'と',
-  KY: '成香',
-  KE: '成桂',
-  GI: '成銀',
-  KA: '馬',
-  HI: '龍',
-};
-
-const CHAR_TO_CODE: Record<string, string> = {
-  歩: 'FU',
-  香: 'KY',
-  桂: 'KE',
-  銀: 'GI',
-  金: 'KI',
-  角: 'KA',
-  飛: 'HI',
-  王: 'OU',
-  玉: 'OU',
-  忍: 'NIN',
-  影: 'KAG',
-  砲: 'HOU',
-  竜: 'RYU',
-  鳳: 'HOO',
-  炎: 'ENN',
-  火: 'FIR',
-  水: 'SUI',
-  波: 'NAM',
-  木: 'MOK',
-  葉: 'HAA',
-  光: 'HIK',
-  星: 'HOS',
-  闇: 'YAM',
-  魔: 'MAK',
-};
-
-const CODE_TO_SFEN: Record<string, string> = {
-  FU: 'P',
-  KY: 'L',
-  KE: 'N',
-  GI: 'S',
-  KI: 'G',
-  KA: 'B',
-  HI: 'R',
-  OU: 'K',
-  NIN: 'P',
-  KAG: 'P',
-  HOU: 'P',
-  RYU: 'P',
-  HOO: 'P',
-  ENN: 'P',
-  FIR: 'P',
-  SUI: 'P',
-  NAM: 'P',
-  MOK: 'P',
-  HAA: 'P',
-  HIK: 'P',
-  HOS: 'P',
-  YAM: 'P',
-  MAK: 'P',
-};
-const HAND_CODES_IN_SFEN_ORDER = [
-  'HI',
-  'KA',
-  'KI',
-  'GI',
-  'KE',
-  'KY',
-  'FU',
-  'NIN',
-  'KAG',
-  'HOU',
-  'RYU',
-  'HOO',
-  'ENN',
-  'FIR',
-  'SUI',
-  'NAM',
-  'MOK',
-  'HAA',
-  'HIK',
-  'HOS',
-  'YAM',
-  'MAK',
-];
-
 function isEnemySide(side: string) {
   const normalized = side.toLowerCase();
   return (
@@ -194,6 +93,10 @@ function getPieceImageUri(imageSignedUrl: string | null) {
   }
   if (imageSignedUrl) return imageSignedUrl;
   return null;
+}
+
+function hasRemoteBoardImages(placements: Array<{ imageSignedUrl: string | null }>) {
+  return placements.some((placement) => getPieceImageUri(placement.imageSignedUrl) !== null);
 }
 
 function normalizeCellIndex(value: number) {
@@ -227,8 +130,14 @@ function fallbackPiecePalette(side: string) {
   };
 }
 
-function pieceCodeFromPlacement(pieceCode: string | null, char: string): string | null {
-  if (pieceCode && CODE_TO_SFEN[pieceCode]) return pieceCode;
+function pieceCodeFromPlacement(
+  pieceCode: string | null,
+  char: string,
+  pieceDefsByChar: Partial<Record<string, PieceCatalogItem>>,
+): string | null {
+  if (pieceCode) return pieceCode;
+  const fromCatalog = pieceDefsByChar[char]?.pieceCode;
+  if (fromCatalog) return fromCatalog;
   return CHAR_TO_CODE[char] ?? null;
 }
 
@@ -257,71 +166,23 @@ function isGameAlreadyFinishedError(error: unknown): boolean {
   );
 }
 
-function toSfenBoard(placements: BoardPiece[]) {
-  const board = Array.from({ length: BOARD_SIZE }, () =>
-    Array<string | null>(BOARD_SIZE).fill(null),
-  );
-  for (const p of placements) {
-    if (p.row < 0 || p.row >= BOARD_SIZE || p.col < 0 || p.col >= BOARD_SIZE) continue;
-    const code = p.pieceCode ?? CHAR_TO_CODE[p.char];
-    if (!code) continue;
-    const sfen = CODE_TO_SFEN[code];
-    if (!sfen) continue;
-    const withPromotion = p.promoted ? `+${sfen}` : sfen;
-    board[p.row][p.col] = p.side === 'player' ? withPromotion : withPromotion.toLowerCase();
-  }
-
-  return board
-    .map((row) => {
-      let out = '';
-      let empty = 0;
-      for (const cell of row) {
-        if (!cell) {
-          empty += 1;
-        } else {
-          if (empty > 0) {
-            out += String(empty);
-            empty = 0;
-          }
-          out += cell;
-        }
-      }
-      if (empty > 0) out += String(empty);
-      return out;
-    })
-    .join('/');
-}
-
-function toSfenHands(hands: HandsState) {
-  const playerBySfen: Record<string, number> = {};
-  const enemyBySfen: Record<string, number> = {};
-  for (const code of HAND_CODES_IN_SFEN_ORDER) {
-    const sfen = CODE_TO_SFEN[code];
-    if (!sfen) continue;
-    const playerCount = hands.player[code] ?? 0;
-    const enemyCount = hands.enemy[code] ?? 0;
-    if (playerCount > 0) playerBySfen[sfen] = (playerBySfen[sfen] ?? 0) + playerCount;
-    if (enemyCount > 0) enemyBySfen[sfen] = (enemyBySfen[sfen] ?? 0) + enemyCount;
-  }
-  const chunks: string[] = [];
-  for (const sfen of ['R', 'B', 'G', 'S', 'N', 'L', 'P']) {
-    const playerCount = playerBySfen[sfen] ?? 0;
-    const enemyCount = enemyBySfen[sfen] ?? 0;
-    if (playerCount > 0) chunks.push(`${playerCount > 1 ? String(playerCount) : ''}${sfen}`);
-    if (enemyCount > 0)
-      chunks.push(`${enemyCount > 1 ? String(enemyCount) : ''}${sfen.toLowerCase()}`);
-  }
-  return chunks.length > 0 ? chunks.join('') : '-';
-}
-
-function buildSfen(placements: BoardPiece[], hands: HandsState, sideToMove: Side, moveNo: number) {
-  const board = toSfenBoard(placements);
+function buildSfen(
+  placements: BoardPiece[],
+  hands: HandsState,
+  sideToMove: Side,
+  moveNo: number,
+  pieceSfenMapping: PieceSfenMapping,
+) {
+  const board = toSfenBoardPure(placements, pieceSfenMapping);
   const side = sideToMove === 'player' ? 'b' : 'w';
-  const sfenHands = toSfenHands(hands);
+  const sfenHands = toSfenHandsPure(hands, pieceSfenMapping);
   return `${board} ${side} ${sfenHands} ${Math.max(1, moveNo)}`;
 }
 
-function buildBoardState(placements: BoardPiece[]): Record<string, unknown> {
+function buildBoardState(
+  placements: BoardPiece[],
+  pieceDefsByCode: Partial<Record<string, PieceCatalogItem>>,
+): Record<string, unknown> {
   const pieces = placements.map((placement) => ({
     side: placement.side,
     row: placement.row,
@@ -334,6 +195,20 @@ function buildBoardState(placements: BoardPiece[]): Record<string, unknown> {
 
   return {
     pieces,
+    custom_move_vectors: Object.fromEntries(
+      Object.entries(pieceDefsByCode)
+        .filter((entry): entry is [string, PieceCatalogItem] => Boolean(entry[1]))
+        .map(([code, item]) => [
+          code,
+          item.moveVectors.map((vector) => ({
+            dr: vector.dy,
+            dc: vector.dx,
+            slide: vector.maxStep > 1,
+            ...(vector.captureMode ? { capture_mode: vector.captureMode } : {}),
+          })),
+        ])
+        .filter(([, vectors]) => vectors.length > 0),
+    ),
     placements: pieces.map((piece) => ({
       side: piece.side,
       row: piece.row,
@@ -384,59 +259,6 @@ function pieceCharFromCode(pieceCode: string, side: Side, promoted: boolean) {
     return side === 'enemy' ? '玉' : '王';
   }
   return CODE_TO_CHAR[pieceCode] ?? '?';
-}
-
-function sfenCharToPieceCode(ch: string): string | null {
-  switch (ch.toUpperCase()) {
-    case 'P':
-      return 'FU';
-    case 'L':
-      return 'KY';
-    case 'N':
-      return 'KE';
-    case 'S':
-      return 'GI';
-    case 'G':
-      return 'KI';
-    case 'B':
-      return 'KA';
-    case 'R':
-      return 'HI';
-    case 'K':
-      return 'OU';
-    case 'C':
-      return 'NIN';
-    case 'D':
-      return 'KAG';
-    case 'E':
-      return 'HOU';
-    case 'F':
-      return 'RYU';
-    case 'H':
-      return 'HOO';
-    case 'I':
-      return 'ENN';
-    case 'J':
-      return 'FIR';
-    case 'M':
-      return 'SUI';
-    case 'Q':
-      return 'NAM';
-    case 'T':
-      return 'MOK';
-    case 'U':
-      return 'HAA';
-    case 'V':
-      return 'HIK';
-    case 'W':
-      return 'HOS';
-    case 'X':
-      return 'YAM';
-    case 'Y':
-      return 'MAK';
-    default:
-      return null;
-  }
 }
 
 function handsFromCanonical(position: BattleCanonicalPosition): HandsState {
@@ -497,15 +319,14 @@ function piecesFromCanonicalBoardState(
     const imageSignedUrl =
       asString(nested.imageSignedUrl ?? nested.image_signed_url ?? entry.imageSignedUrl) ??
       pieceDef?.imageSignedUrl ??
-      existingPieces.find(
-        (piece) =>
-          piece.side === side &&
-          piece.row === row &&
-          piece.col === col &&
-          piece.imageSignedUrl &&
-          piece.pieceCode === code &&
-          (piece.promoted ?? false) === promoted,
-      )?.imageSignedUrl ??
+      findBestExistingImage(existingPieces, {
+        side,
+        row,
+        col,
+        pieceCode: code,
+        char,
+        promoted,
+      }) ??
       null;
 
     next.push({
@@ -524,6 +345,7 @@ function piecesFromCanonicalBoardState(
 
 function piecesFromCanonicalPosition(
   position: BattleCanonicalPosition,
+  pieceSfenMapping: PieceSfenMapping,
   pieceDefsByCode: Partial<Record<string, PieceCatalogItem>>,
   promotedPieceDefsByCode: Partial<Record<string, PieceCatalogItem>>,
   existingPieces: BoardPiece[],
@@ -547,20 +369,23 @@ function piecesFromCanonicalPosition(
       }
 
       const side: Side = ch === ch.toUpperCase() ? 'player' : 'enemy';
-      const pieceCode = sfenCharToPieceCode(ch);
+      // DB 由来 mapping から未成り基準の pieceCode を復元する。
+      const pieceCode = sfenCharToDisplayChar(ch, false, pieceSfenMapping);
       if (pieceCode && row >= 0 && row < BOARD_SIZE && col >= 0 && col < BOARD_SIZE) {
         const pieceDef = promoted
           ? (promotedPieceDefsByCode[pieceCode] ?? pieceDefsByCode[pieceCode])
           : pieceDefsByCode[pieceCode];
+        const char = pieceCharFromCode(pieceCode, side, promoted);
         const imageSignedUrl =
           pieceDef?.imageSignedUrl ??
-          existingPieces.find(
-            (piece) =>
-              piece.pieceCode === pieceCode &&
-              piece.side === side &&
-              piece.imageSignedUrl &&
-              (piece.promoted ?? false) === promoted,
-          )?.imageSignedUrl ??
+          findBestExistingImage(existingPieces, {
+            side,
+            row,
+            col,
+            pieceCode,
+            char,
+            promoted,
+          }) ??
           null;
 
         next.push({
@@ -568,7 +393,7 @@ function piecesFromCanonicalPosition(
           row,
           col,
           pieceCode,
-          char: pieceCharFromCode(pieceCode, side, promoted),
+          char,
           promoted,
           imageSignedUrl,
         });
@@ -589,12 +414,23 @@ function piecesFromCanonicalPosition(
     return next;
   }
 
+  if (next.length === 0) {
+    return boardStatePieces;
+  }
+
   const mergedByKey = new Map<string, BoardPiece>();
   for (const piece of next) {
     mergedByKey.set(`${piece.side}:${piece.row}:${piece.col}`, piece);
   }
   for (const piece of boardStatePieces) {
-    mergedByKey.set(`${piece.side}:${piece.row}:${piece.col}`, piece);
+    const key = `${piece.side}:${piece.row}:${piece.col}`;
+    if (!mergedByKey.has(key)) {
+      continue;
+    }
+    mergedByKey.set(key, {
+      ...mergedByKey.get(key)!,
+      ...piece,
+    });
   }
   return [...mergedByKey.values()];
 }
@@ -608,6 +444,46 @@ function getDisplayChar(piece: BoardPiece) {
     return PROMOTED_CODE_TO_CHAR[piece.pieceCode];
   }
   return piece.char ?? (piece.pieceCode ? (CODE_TO_CHAR[piece.pieceCode] ?? '?') : '?');
+}
+
+function findBestExistingImage(
+  existingPieces: BoardPiece[],
+  target: {
+    side: Side;
+    row: number;
+    col: number;
+    pieceCode: string | null;
+    char: string;
+    promoted: boolean;
+  },
+) {
+  const samePromotion = (piece: BoardPiece) => (piece.promoted ?? false) === target.promoted;
+
+  return (
+    existingPieces.find(
+      (piece) =>
+        piece.side === target.side &&
+        piece.row === target.row &&
+        piece.col === target.col &&
+        piece.imageSignedUrl &&
+        samePromotion(piece),
+    )?.imageSignedUrl ??
+    existingPieces.find(
+      (piece) =>
+        piece.side === target.side &&
+        piece.pieceCode === target.pieceCode &&
+        piece.imageSignedUrl &&
+        samePromotion(piece),
+    )?.imageSignedUrl ??
+    existingPieces.find(
+      (piece) =>
+        piece.side === target.side &&
+        piece.char === target.char &&
+        piece.imageSignedUrl &&
+        samePromotion(piece),
+    )?.imageSignedUrl ??
+    null
+  );
 }
 
 function isSpecialDisplayPiece(piece: BoardPiece): boolean {
@@ -654,6 +530,168 @@ function preserveMovedPieceIdentity(
   ];
 }
 
+function pieceIdentityKey(piece: BoardPiece) {
+  return `${piece.side}:${piece.row}:${piece.col}`;
+}
+
+function sameBoardPiece(lhs: BoardPiece, rhs: BoardPiece) {
+  return (
+    lhs.side === rhs.side &&
+    lhs.row === rhs.row &&
+    lhs.col === rhs.col &&
+    lhs.pieceCode === rhs.pieceCode &&
+    lhs.char === rhs.char &&
+    (lhs.promoted ?? false) === (rhs.promoted ?? false) &&
+    lhs.imageSignedUrl === rhs.imageSignedUrl
+  );
+}
+
+function reconcilePieceIdentity(
+  nextPieces: BoardPiece[],
+  existingPieces: BoardPiece[],
+): BoardPiece[] {
+  const existingByKey = new Map(existingPieces.map((piece) => [pieceIdentityKey(piece), piece]));
+  return nextPieces.map((piece) => {
+    const existing = existingByKey.get(pieceIdentityKey(piece));
+    if (!existing) return piece;
+    return sameBoardPiece(existing, piece) ? existing : piece;
+  });
+}
+
+type BoardPieceSpriteProps = {
+  piece: BoardPiece;
+  failed: boolean;
+  onImageError: () => void;
+};
+
+const BoardPieceSprite = memo(
+  function BoardPieceSprite({ piece, failed, onImageError }: BoardPieceSpriteProps) {
+    const rowIndex = normalizeCellIndex(piece.row);
+    const colIndex = normalizeCellIndex(piece.col);
+    if (rowIndex === null || colIndex === null) {
+      return null;
+    }
+
+    const enemy = isEnemySide(piece.side);
+    const king = piece.pieceCode === 'OU' || isKingChar(piece.char);
+    const pieceScalePercent = king ? KING_PIECE_SIZE_PERCENT : NORMAL_PIECE_SIZE_PERCENT;
+    const imageUri = failed ? null : getPieceImageUri(piece.imageSignedUrl);
+
+    return (
+      <View
+        style={{
+          position: 'absolute',
+          top: `${rowIndex * BOARD_CELL_INNER_RATIO * 100}%`,
+          left: `${colIndex * BOARD_CELL_INNER_RATIO * 100}%`,
+          width: `${BOARD_CELL_INNER_RATIO * 100}%`,
+          height: `${BOARD_CELL_INNER_RATIO * 100}%`,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <View
+          className="items-center justify-center"
+          style={{
+            width: `${pieceScalePercent}%`,
+            height: `${pieceScalePercent}%`,
+            overflow: 'hidden',
+            transform: [{ rotate: enemy ? '180deg' : '0deg' }],
+          }}
+        >
+          {imageUri ? (
+            <Image
+              source={{ uri: imageUri }}
+              contentFit="contain"
+              style={{ width: '100%', height: '100%' }}
+              onError={onImageError}
+            />
+          ) : (
+            <View style={{ width: '100%', height: '100%' }}>
+              <Svg width="100%" height="100%" viewBox="0 0 100 120">
+                <Polygon
+                  points="50,3 97,30 83,117 17,117 3,30"
+                  fill={fallbackPiecePalette(piece.side).fill}
+                  stroke={fallbackPiecePalette(piece.side).stroke}
+                  strokeWidth={5}
+                />
+              </Svg>
+              <View
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 2,
+                }}
+              >
+                {king ? (
+                  <Crown size={16} color={fallbackPiecePalette(piece.side).icon} />
+                ) : (
+                  <Shield size={16} color={fallbackPiecePalette(piece.side).icon} />
+                )}
+                <Text
+                  className="text-sm font-black"
+                  style={{ color: fallbackPiecePalette(piece.side).text }}
+                >
+                  {getDisplayChar(piece)}
+                </Text>
+              </View>
+            </View>
+          )}
+        </View>
+      </View>
+    );
+  },
+  (prev, next) => {
+    return prev.failed === next.failed && sameBoardPiece(prev.piece, next.piece);
+  },
+);
+
+const StaticBoardBackground = memo(function StaticBoardBackground() {
+  return (
+    <Svg width="100%" height="100%" viewBox={`0 0 ${BOARD_VIEWBOX} ${BOARD_VIEWBOX}`}>
+      <Rect x={0} y={0} width={BOARD_VIEWBOX} height={BOARD_VIEWBOX} fill="#deb887" />
+      <Rect
+        x={BOARD_PADDING}
+        y={BOARD_PADDING}
+        width={BOARD_INNER}
+        height={BOARD_INNER}
+        fill="#e8c88e"
+        stroke="#7a4b20"
+        strokeWidth={2}
+      />
+      {Array.from({ length: BOARD_SIZE + 1 }).map((_, i) => {
+        const p = BOARD_PADDING + BOARD_CELL * i;
+        return (
+          <Line
+            key={`v-${i}`}
+            x1={p}
+            y1={BOARD_PADDING}
+            x2={p}
+            y2={BOARD_PADDING + BOARD_INNER}
+            stroke="#6b3f1a"
+            strokeWidth={1.5}
+          />
+        );
+      })}
+      {Array.from({ length: BOARD_SIZE + 1 }).map((_, i) => {
+        const p = BOARD_PADDING + BOARD_CELL * i;
+        return (
+          <Line
+            key={`h-${i}`}
+            x1={BOARD_PADDING}
+            y1={p}
+            x2={BOARD_PADDING + BOARD_INNER}
+            y2={p}
+            stroke="#6b3f1a"
+            strokeWidth={1.5}
+          />
+        );
+      })}
+    </Svg>
+  );
+});
+
 function normalizeSkillName(skill: string | undefined): string | null {
   if (!skill) return null;
   const normalized = skill.trim();
@@ -669,10 +707,10 @@ export function StageShogiScreen() {
   const { isReady: isAuthReady, userId } = useAuthSession();
   const { snapshot, isLoading } = useStageBattleScreen(
     stageParam,
-    isAuthReady ? (userId ?? 'guest') : 'auth-pending',
+    isAuthReady ? (userId ?? 'guest') : undefined,
   );
   const { isReady: areAssetsReady } = useAssetPreload([]);
-  const [areBoardImagesReady, setAreBoardImagesReady] = useState(false);
+  const [areBoardImagesReady, setAreBoardImagesReady] = useState(true);
   const [failedImageKeys, setFailedImageKeys] = useState<Record<string, true>>({});
   const [pieces, setPieces] = useState<BoardPiece[]>([]);
   const [sideToMove, setSideToMove] = useState<Side>('player');
@@ -685,6 +723,7 @@ export function StageShogiScreen() {
   const [selectedDropPieceCode, setSelectedDropPieceCode] = useState<string | null>(null);
   const [legalTargets, setLegalTargets] = useState<BoardCell[]>([]);
   const [playerLegalMoves, setPlayerLegalMoves] = useState<BattleMove[]>([]);
+  const [isLoadingPlayerLegalMoves, setIsLoadingPlayerLegalMoves] = useState(false);
   const [hands, setHands] = useState<HandsState>(createEmptyHandsState());
   const [pendingPromotion, setPendingPromotion] = useState<PendingPromotion | null>(null);
   const [stateHash, setStateHash] = useState<string | null>(null);
@@ -699,6 +738,9 @@ export function StageShogiScreen() {
   const loadGameLegalMovesUseCase = useMemo(() => new LoadGameLegalMovesUseCase(), []);
   const requestAiMoveUseCase = useMemo(() => new RequestAiMoveUseCase(), []);
   const isMountedRef = useRef(true);
+  const piecesRef = useRef<BoardPiece[]>([]);
+  const stateHashRef = useRef<string | null>(null);
+  const hasEnteredBattleRef = useRef(false);
   const prevStageRef = useRef<string | undefined>(undefined);
   const aiThinkingRef = useRef(false);
   const inFlightAiKeyRef = useRef<string | null>(null);
@@ -715,6 +757,14 @@ export function StageShogiScreen() {
       }
     };
   }, []);
+
+  useEffect(() => {
+    piecesRef.current = pieces;
+  }, [pieces]);
+
+  useEffect(() => {
+    stateHashRef.current = stateHash;
+  }, [stateHash]);
 
   const pieceDefsByChar = useMemo(
     () =>
@@ -742,6 +792,7 @@ export function StageShogiScreen() {
       ),
     [pieceDefsByChar],
   );
+  const pieceSfenMapping = useMemo(() => createPieceSfenMapping(pieceCatalog), [pieceCatalog]);
 
   function resolveSkillName(move: BattleMove): string | null {
     const code = move.pieceCode || move.dropPieceCode;
@@ -774,13 +825,15 @@ export function StageShogiScreen() {
   ): Side | null {
     const parsedPieces = piecesFromCanonicalPosition(
       position,
+      pieceSfenMapping,
       pieceDefsByCode,
       promotedPieceDefsByCode,
-      pieces,
+      piecesRef.current,
     );
     const nextPieces = preserveMovedPieceIdentity(parsedPieces, preservedMovedPiece);
+    const reconciledPieces = reconcilePieceIdentity(nextPieces, piecesRef.current);
     const nextHands = handsFromCanonical(position);
-    setPieces(nextPieces);
+    setPieces(reconciledPieces);
     setHands(nextHands);
     setSideToMove(position.sideToMove);
     setMoveNo(position.turnNumber);
@@ -814,7 +867,7 @@ export function StageShogiScreen() {
           side,
           row,
           col,
-          pieceCode: pieceCodeFromPlacement(placement.pieceCode, placement.char),
+          pieceCode: pieceCodeFromPlacement(placement.pieceCode, placement.char, pieceDefsByChar),
           char: placement.char,
           promoted: false,
           imageSignedUrl: placement.imageSignedUrl,
@@ -829,7 +882,7 @@ export function StageShogiScreen() {
       return;
     }
 
-    setAreBoardImagesReady(false);
+    setAreBoardImagesReady(true);
     setPieces(next);
     setSideToMove('player');
     setMoveNo(1);
@@ -853,7 +906,8 @@ export function StageShogiScreen() {
     inFlightAiKeyRef.current = null;
     lastSuccessfulAiKeyRef.current = null;
     clearRewardClaimedRef.current = false;
-  }, [gameId, snapshot, stageParam]);
+    hasEnteredBattleRef.current = false;
+  }, [gameId, pieceDefsByChar, snapshot, stageParam]);
 
   useEffect(() => {
     let active = true;
@@ -876,6 +930,7 @@ export function StageShogiScreen() {
 
   useEffect(() => {
     if (isLoading || isCreatingGame || gameId || !userId) return;
+    if (Object.keys(pieceSfenMapping.codeToSfen).length === 0) return;
     if (snapshot.placements.length > 0 && pieces.length === 0) return;
 
     setIsCreatingGame(true);
@@ -889,8 +944,8 @@ export function StageShogiScreen() {
           sideToMove,
           turnNumber: moveNo,
           moveCount: moveNo - 1,
-          sfen: buildSfen(pieces, hands, sideToMove, moveNo),
-          boardState: buildBoardState(pieces),
+          sfen: buildSfen(pieces, hands, sideToMove, moveNo, pieceSfenMapping),
+          boardState: buildBoardState(pieces, pieceDefsByCode),
           hands,
         },
       })
@@ -921,23 +976,24 @@ export function StageShogiScreen() {
     snapshot,
     userId,
     createGameUseCase,
+    pieceSfenMapping,
   ]);
 
   useEffect(() => {
     if (!gameId || sideToMove !== 'player' || isCreatingGame || isFinished) {
-      setPlayerLegalMoves([]);
       return;
     }
 
     let active = true;
     setAiError(null);
+    setIsLoadingPlayerLegalMoves(true);
 
     loadGameLegalMovesUseCase
       .execute({ gameId })
       .then((result) => {
         if (!active) return;
         if (result.sideToMove !== 'player' || result.moveNo !== moveNo) {
-          setPlayerLegalMoves([]);
+          setPlayerLegalMoves((prev) => (prev.length === 0 ? prev : []));
           return;
         }
         setStateHash(result.stateHash);
@@ -950,7 +1006,12 @@ export function StageShogiScreen() {
       .catch((error: unknown) => {
         if (active) {
           setAiError(error instanceof Error ? error.message : String(error));
-          setPlayerLegalMoves([]);
+          setPlayerLegalMoves((prev) => (prev.length === 0 ? prev : []));
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setIsLoadingPlayerLegalMoves(false);
         }
       });
 
@@ -978,7 +1039,6 @@ export function StageShogiScreen() {
     let active = true;
 
     if (remoteImageUrls.length === 0) {
-      setAreBoardImagesReady(true);
       return () => {
         active = false;
       };
@@ -1018,7 +1078,7 @@ export function StageShogiScreen() {
       const response = await requestAiMoveUseCase.execute({
         gameId,
         moveNo: nextMoveNo,
-        stateHash,
+        stateHash: stateHashRef.current,
         engineConfig: {},
       });
 
@@ -1029,8 +1089,8 @@ export function StageShogiScreen() {
       let preservedMovedPiece: PreservedMovedPiece | undefined;
       const selectedMove = response.selectedMove;
       if (selectedMove?.fromRow != null && selectedMove?.fromCol != null) {
-        const moved = findPieceAt(pieces, selectedMove.fromRow, selectedMove.fromCol);
-        if (moved && moved.side === 'enemy' && isSpecialDisplayPiece(moved)) {
+        const moved = findPieceAt(piecesRef.current, selectedMove.fromRow, selectedMove.fromCol);
+        if (moved && moved.side === 'enemy' && moved.imageSignedUrl) {
           preservedMovedPiece = {
             side: moved.side,
             toRow: selectedMove.toRow,
@@ -1135,8 +1195,8 @@ export function StageShogiScreen() {
 
     let preservedMovedPiece: PreservedMovedPiece | undefined;
     if (move.fromRow != null && move.fromCol != null) {
-      const moved = findPieceAt(pieces, move.fromRow, move.fromCol);
-      if (moved && moved.side === 'player' && isSpecialDisplayPiece(moved)) {
+      const moved = findPieceAt(piecesRef.current, move.fromRow, move.fromCol);
+      if (moved && moved.side === 'player' && moved.imageSignedUrl) {
         preservedMovedPiece = {
           side: moved.side,
           toRow: move.toRow,
@@ -1258,10 +1318,16 @@ export function StageShogiScreen() {
   }
 
   function renderHandsRow(side: Side, compact = false) {
-    const entries = HAND_CODES_IN_SFEN_ORDER.map((code) => ({
-      code,
-      count: hands[side][code] ?? 0,
-    })).filter((entry) => entry.count > 0);
+    const orderedCodes = [
+      ...pieceSfenMapping.handOrder,
+      ...Object.keys(hands[side]).filter((code) => !pieceSfenMapping.handOrder.includes(code)),
+    ];
+    const entries = orderedCodes
+      .map((code) => ({
+        code,
+        count: hands[side][code] ?? 0,
+      }))
+      .filter((entry) => entry.count > 0);
 
     if (entries.length === 0) {
       return null;
@@ -1319,15 +1385,40 @@ export function StageShogiScreen() {
     );
   }
 
-  const isWaitingForGameId =
+  const shouldBootstrapBattle =
     !isLoading &&
     areAssetsReady &&
-    areBoardImagesReady &&
+    isAuthReady &&
+    !!userId &&
+    Object.keys(pieceSfenMapping.codeToSfen).length > 0 &&
+    (snapshot.placements.length === 0 || pieces.length > 0) &&
     !gameId &&
-    isCreatingGame &&
-    aiError === null;
+    aiError === null &&
+    !isFinished;
 
-  if (isLoading || !areAssetsReady || !areBoardImagesReady || isWaitingForGameId) {
+  const isWaitingForGameId =
+    !isLoading && areAssetsReady && !gameId && isCreatingGame && aiError === null;
+
+  const isBootstrappingBattle =
+    shouldBootstrapBattle ||
+    isWaitingForGameId ||
+    (!hasEnteredBattleRef.current &&
+      gameId !== null &&
+      sideToMove === 'player' &&
+      playerLegalMoves.length === 0 &&
+      isLoadingPlayerLegalMoves);
+
+  if (
+    !hasEnteredBattleRef.current &&
+    gameId !== null &&
+    !isCreatingGame &&
+    sideToMove === 'player' &&
+    playerLegalMoves.length > 0
+  ) {
+    hasEnteredBattleRef.current = true;
+  }
+
+  if (isLoading || !areAssetsReady || isBootstrappingBattle) {
     return <AppLoadingScreen imageSource={homeAssets.loadingImage} />;
   }
 
@@ -1371,46 +1462,7 @@ export function StageShogiScreen() {
         </View>
         <View className="overflow-hidden rounded-xl border-2 border-[#a27700] bg-[#e3c690]">
           <View className="relative w-full self-center" style={{ aspectRatio: 1 }}>
-            <Svg width="100%" height="100%" viewBox={`0 0 ${BOARD_VIEWBOX} ${BOARD_VIEWBOX}`}>
-              <Rect x={0} y={0} width={BOARD_VIEWBOX} height={BOARD_VIEWBOX} fill="#deb887" />
-              <Rect
-                x={BOARD_PADDING}
-                y={BOARD_PADDING}
-                width={BOARD_INNER}
-                height={BOARD_INNER}
-                fill="#e8c88e"
-                stroke="#7a4b20"
-                strokeWidth={2}
-              />
-              {Array.from({ length: BOARD_SIZE + 1 }).map((_, i) => {
-                const p = BOARD_PADDING + BOARD_CELL * i;
-                return (
-                  <Line
-                    key={`v-${i}`}
-                    x1={p}
-                    y1={BOARD_PADDING}
-                    x2={p}
-                    y2={BOARD_PADDING + BOARD_INNER}
-                    stroke="#6b3f1a"
-                    strokeWidth={1.5}
-                  />
-                );
-              })}
-              {Array.from({ length: BOARD_SIZE + 1 }).map((_, i) => {
-                const p = BOARD_PADDING + BOARD_CELL * i;
-                return (
-                  <Line
-                    key={`h-${i}`}
-                    x1={BOARD_PADDING}
-                    y1={p}
-                    x2={BOARD_PADDING + BOARD_INNER}
-                    y2={p}
-                    stroke="#6b3f1a"
-                    strokeWidth={1.5}
-                  />
-                );
-              })}
-            </Svg>
+            <StaticBoardBackground />
 
             <View
               className="absolute"
@@ -1474,94 +1526,16 @@ export function StageShogiScreen() {
 
               <View pointerEvents="none" style={{ position: 'absolute', inset: 0 }}>
                 {pieces.map((placement) => {
-                  const rowIndex = normalizeCellIndex(placement.row);
-                  const colIndex = normalizeCellIndex(placement.col);
-                  if (rowIndex === null || colIndex === null) {
-                    return null;
-                  }
-
-                  const enemy = isEnemySide(placement.side);
-                  const king = placement.pieceCode === 'OU' || isKingChar(placement.char);
-                  const pieceScalePercent = king
-                    ? KING_PIECE_SIZE_PERCENT
-                    : NORMAL_PIECE_SIZE_PERCENT;
                   const placementKey = `${placement.side}-${placement.pieceCode ?? 'X'}-${placement.promoted ? 'P' : 'N'}-${placement.row}-${placement.col}`;
-                  const imageUri = failedImageKeys[placementKey]
-                    ? null
-                    : getPieceImageUri(placement.imageSignedUrl);
-
                   return (
-                    <View
+                    <BoardPieceSprite
                       key={placementKey}
-                      style={{
-                        position: 'absolute',
-                        top: `${rowIndex * BOARD_CELL_INNER_RATIO * 100}%`,
-                        left: `${colIndex * BOARD_CELL_INNER_RATIO * 100}%`,
-                        width: `${BOARD_CELL_INNER_RATIO * 100}%`,
-                        height: `${BOARD_CELL_INNER_RATIO * 100}%`,
-                        alignItems: 'center',
-                        justifyContent: 'center',
+                      piece={placement}
+                      failed={Boolean(failedImageKeys[placementKey])}
+                      onImageError={() => {
+                        setFailedImageKeys((prev) => ({ ...prev, [placementKey]: true }));
                       }}
-                    >
-                      <View
-                        className="items-center justify-center"
-                        style={{
-                          width: `${pieceScalePercent}%`,
-                          height: `${pieceScalePercent}%`,
-                          overflow: 'hidden',
-                          transform: [{ rotate: enemy ? '180deg' : '0deg' }],
-                        }}
-                      >
-                        {imageUri ? (
-                          <Image
-                            source={{ uri: imageUri }}
-                            contentFit="contain"
-                            style={{ width: '100%', height: '100%' }}
-                            onError={() => {
-                              setFailedImageKeys((prev) => ({ ...prev, [placementKey]: true }));
-                            }}
-                          />
-                        ) : (
-                          <View style={{ width: '100%', height: '100%' }}>
-                            <Svg width="100%" height="100%" viewBox="0 0 100 120">
-                              <Polygon
-                                points="50,3 97,30 83,117 17,117 3,30"
-                                fill={fallbackPiecePalette(placement.side).fill}
-                                stroke={fallbackPiecePalette(placement.side).stroke}
-                                strokeWidth={5}
-                              />
-                            </Svg>
-                            <View
-                              style={{
-                                position: 'absolute',
-                                inset: 0,
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                gap: 2,
-                              }}
-                            >
-                              {king ? (
-                                <Crown
-                                  size={16}
-                                  color={fallbackPiecePalette(placement.side).icon}
-                                />
-                              ) : (
-                                <Shield
-                                  size={16}
-                                  color={fallbackPiecePalette(placement.side).icon}
-                                />
-                              )}
-                              <Text
-                                className="text-sm font-black"
-                                style={{ color: fallbackPiecePalette(placement.side).text }}
-                              >
-                                {getDisplayChar(placement)}
-                              </Text>
-                            </View>
-                          </View>
-                        )}
-                      </View>
-                    </View>
+                    />
                   );
                 })}
               </View>

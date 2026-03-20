@@ -66,7 +66,7 @@ jest.mock('@/infra/http/api-client', () => ({
   postJson: (...args: unknown[]) => mockPostJson(...args),
 }));
 
-jest.mock('@/infra/di/usecase-factory', () => ({
+jest.mock('@/usecases/piece-info/create-piece-info-usecases', () => ({
   createLoadPieceCatalogUseCase: () => ({
     execute: (...args: unknown[]) => mockExecutePieceCatalog(...args),
   }),
@@ -111,6 +111,9 @@ describe('StageShogiScreen ai call', () => {
 
     mockExecutePieceCatalog.mockResolvedValue([
       {
+        pieceCode: 'KA',
+        sfenCode: 'B',
+        isPromoted: false,
         char: '角',
         name: '角行',
         unlock: '初期',
@@ -121,6 +124,9 @@ describe('StageShogiScreen ai call', () => {
         isRepeatable: false,
       },
       {
+        pieceCode: 'OU',
+        sfenCode: 'K',
+        isPromoted: false,
         char: '王',
         name: '王将',
         unlock: '初期',
@@ -131,6 +137,9 @@ describe('StageShogiScreen ai call', () => {
         isRepeatable: false,
       },
       {
+        pieceCode: 'OU',
+        sfenCode: 'K',
+        isPromoted: false,
         char: '玉',
         name: '玉将',
         unlock: '初期',
