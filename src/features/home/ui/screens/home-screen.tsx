@@ -35,6 +35,8 @@ export function HomeScreen() {
         playerExp={snapshot.playerExp}
         pawnCurrency={snapshot.pawnCurrency}
         goldCurrency={snapshot.goldCurrency}
+        stamina={snapshot.stamina}
+        maxStamina={snapshot.maxStamina}
       />
       <ImageBackground source={homeAssets.background} resizeMode="stretch" className="flex-1">
         <SafeAreaView edges={['left', 'right', 'bottom']} className="flex-1 bg-black/10">

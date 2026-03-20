@@ -12,6 +12,8 @@ describe('MockLoadHomeSnapshotUseCase', () => {
       goldCurrency: homeMock.goldCurrency,
       playerRank: homeMock.playerRank,
       playerExp: homeMock.playerExp,
+      stamina: homeMock.stamina,
+      maxStamina: homeMock.maxStamina,
     });
   });
 });

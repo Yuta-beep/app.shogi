@@ -10,6 +10,8 @@ export class MockLoadHomeSnapshotUseCase implements LoadHomeSnapshotUseCase {
       goldCurrency: homeMock.goldCurrency,
       playerRank: homeMock.playerRank,
       playerExp: homeMock.playerExp,
+      stamina: homeMock.stamina,
+      maxStamina: homeMock.maxStamina,
     };
   }
 }

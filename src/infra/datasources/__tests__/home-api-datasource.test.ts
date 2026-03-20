@@ -28,6 +28,8 @@ describe('HomeApiDataSource', () => {
       goldCurrency: 0,
       playerRank: 1,
       playerExp: 0,
+      stamina: 50,
+      maxStamina: 50,
     });
 
     const result = await ds.getSnapshot();

@@ -5,4 +5,6 @@ export type HomeSnapshot = {
   goldCurrency: number;
   playerRank: number;
   playerExp: number;
+  stamina: number;
+  maxStamina: number;
 };
