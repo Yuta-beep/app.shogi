@@ -9,7 +9,19 @@ const mockGetJson = jest.fn();
 const mockExecutePieceCatalog = jest.fn();
 const MockView = View;
 const MockText = Text;
-const mockDefaultPlacements = [
+type MockPlacement = {
+  side: 'player' | 'enemy';
+  row: number;
+  col: number;
+  pieceId: number;
+  pieceCode: string;
+  char: string;
+  imageBucket: string | null;
+  imageKey: string | null;
+  imageSignedUrl: string | null;
+};
+
+const mockDefaultPlacements: MockPlacement[] = [
   {
     side: 'player',
     row: 4,
@@ -43,9 +55,15 @@ const mockDefaultPlacements = [
     imageKey: null,
     imageSignedUrl: null,
   },
-] as const;
+];
 
-const mockStageBattleSnapshot = {
+const mockStageBattleSnapshot: {
+  stageLabel: string;
+  turnLabel: string;
+  handLabel: string;
+  boardSize: number;
+  placements: MockPlacement[];
+} = {
   stageLabel: 'STAGE 1',
   turnLabel: 'TURN 1',
   handLabel: '持ち駒',
