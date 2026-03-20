@@ -12,6 +12,7 @@ export class MockLoadHomeSnapshotUseCase implements LoadHomeSnapshotUseCase {
       playerExp: homeMock.playerExp,
       stamina: homeMock.stamina,
       maxStamina: homeMock.maxStamina,
+      nextRecoveryAt: homeMock.nextRecoveryAt,
     };
   }
 }

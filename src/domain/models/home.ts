@@ -7,4 +7,5 @@ export type HomeSnapshot = {
   playerExp: number;
   stamina: number;
   maxStamina: number;
+  nextRecoveryAt: string | null;
 };

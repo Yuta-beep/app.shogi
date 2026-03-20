@@ -13,6 +13,7 @@ const emptySnapshot: HomeSnapshot = {
   playerExp: 0,
   stamina: 50,
   maxStamina: 50,
+  nextRecoveryAt: null,
 };
 
 export function useHomeHudSnapshot() {

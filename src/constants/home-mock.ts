@@ -7,4 +7,5 @@ export const homeMock = {
   playerExp: 0,
   stamina: 50,
   maxStamina: 50,
+  nextRecoveryAt: null,
 } as const;
