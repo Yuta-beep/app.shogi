@@ -11,6 +11,8 @@ type HomeHeaderSectionProps = {
   playerExp: number;
   pawnCurrency: number;
   goldCurrency: number;
+  stamina?: number;
+  maxStamina?: number;
 };
 
 export function HomeHeaderSection({
@@ -20,6 +22,8 @@ export function HomeHeaderSection({
   playerExp,
   pawnCurrency,
   goldCurrency,
+  stamina,
+  maxStamina,
 }: HomeHeaderSectionProps) {
   return (
     <View>
@@ -29,6 +33,8 @@ export function HomeHeaderSection({
         exp={playerExp}
         pawnCurrency={pawnCurrency}
         goldCurrency={goldCurrency}
+        stamina={stamina}
+        maxStamina={maxStamina}
       />
 
       <Pressable

@@ -20,6 +20,8 @@ export function GlobalHomeHud({ pawnCurrency, goldCurrency }: GlobalHomeHudProps
         exp={snapshot.playerExp}
         pawnCurrency={pawnCurrency ?? snapshot.pawnCurrency}
         goldCurrency={goldCurrency ?? snapshot.goldCurrency}
+        stamina={snapshot.stamina}
+        maxStamina={snapshot.maxStamina}
       />
     </>
   );

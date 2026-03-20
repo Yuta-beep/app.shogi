@@ -16,6 +16,8 @@ const emptySnapshot: HomeSnapshot = {
   goldCurrency: 0,
   playerRank: 1,
   playerExp: 0,
+  stamina: 50,
+  maxStamina: 50,
 };
 
 export function useHomeScreen(): HomeScreenVM {

@@ -8,14 +8,23 @@ type PlayerStatusProps = {
   rank: number;
   exp: number;
   expPerLevel: number;
+  stamina?: number;
+  maxStamina?: number;
 };
 
-export function PlayerStatus({ userName, rank, exp, expPerLevel }: PlayerStatusProps) {
+export function PlayerStatus({
+  userName,
+  rank,
+  exp,
+  expPerLevel,
+  stamina = 50,
+  maxStamina = 50,
+}: PlayerStatusProps) {
   const normalizedExp = Math.max(0, exp);
   const progress = expPerLevel > 0 ? normalizedExp / expPerLevel : 0;
-  const staminaCurrent = 50;
-  const staminaMax = 50;
-  const staminaProgress = staminaMax > 0 ? staminaCurrent / staminaMax : 0;
+  const staminaCurrent = Math.max(0, stamina);
+  const staminaMax = Math.max(1, maxStamina);
+  const staminaProgress = staminaCurrent / staminaMax;
 
   return (
     <View className="mr-3 flex-1 pr-2">
