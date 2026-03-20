@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import { useLocalSearchParams } from 'expo-router';
 import { Crown, Shield } from 'lucide-react-native';
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import Svg, { Line, Polygon, Rect } from 'react-native-svg';
 
@@ -692,6 +692,109 @@ const StaticBoardBackground = memo(function StaticBoardBackground() {
   );
 });
 
+type BoardHighlightsLayerProps = {
+  selectedCell: BoardCell | null;
+  legalTargets: BoardCell[];
+};
+
+const BoardHighlightsLayer = memo(function BoardHighlightsLayer({
+  selectedCell,
+  legalTargets,
+}: BoardHighlightsLayerProps) {
+  return (
+    <Svg
+      width="100%"
+      height="100%"
+      viewBox={`0 0 ${BOARD_INNER} ${BOARD_INNER}`}
+      style={{ position: 'absolute', top: 0, left: 0 }}
+      pointerEvents="none"
+    >
+      {selectedCell ? (
+        <Rect
+          x={selectedCell.col * BOARD_CELL}
+          y={selectedCell.row * BOARD_CELL}
+          width={BOARD_CELL}
+          height={BOARD_CELL}
+          fill="none"
+          stroke="#2563eb"
+          strokeWidth={4}
+        />
+      ) : null}
+      {legalTargets.map((target) => (
+        <Rect
+          key={`legal-${target.row}-${target.col}`}
+          x={target.col * BOARD_CELL}
+          y={target.row * BOARD_CELL}
+          width={BOARD_CELL}
+          height={BOARD_CELL}
+          fill="none"
+          stroke="#16a34a"
+          strokeWidth={4}
+        />
+      ))}
+    </Svg>
+  );
+});
+
+type BoardTouchLayerProps = {
+  onCellPress: (row: number, col: number) => void;
+};
+
+const BoardTouchLayer = memo(function BoardTouchLayer({ onCellPress }: BoardTouchLayerProps) {
+  return (
+    <>
+      {Array.from({ length: BOARD_SIZE }).map((_, rowIndex) =>
+        Array.from({ length: BOARD_SIZE }).map((__, colIndex) => (
+          <Pressable
+            key={`cell-${rowIndex}-${colIndex}`}
+            testID={`board-cell-${rowIndex}-${colIndex}`}
+            className="absolute items-center justify-center"
+            style={{
+              top: `${rowIndex * BOARD_CELL_INNER_RATIO * 100}%`,
+              left: `${colIndex * BOARD_CELL_INNER_RATIO * 100}%`,
+              width: `${BOARD_CELL_INNER_RATIO * 100}%`,
+              height: `${BOARD_CELL_INNER_RATIO * 100}%`,
+            }}
+            onPress={() => {
+              onCellPress(rowIndex, colIndex);
+            }}
+          />
+        )),
+      )}
+    </>
+  );
+});
+
+type BoardPiecesLayerProps = {
+  pieces: BoardPiece[];
+  failedImageKeys: Record<string, true>;
+  onPieceImageError: (pieceKey: string) => void;
+};
+
+const BoardPiecesLayer = memo(function BoardPiecesLayer({
+  pieces,
+  failedImageKeys,
+  onPieceImageError,
+}: BoardPiecesLayerProps) {
+  return (
+    <View pointerEvents="none" style={{ position: 'absolute', inset: 0 }}>
+      {pieces.map((placement) => {
+        const placementKey = `${placement.side}-${placement.pieceCode ?? 'X'}-${placement.promoted ? 'P' : 'N'}-${placement.row}-${placement.col}`;
+        return (
+          <BoardPieceSprite
+            key={placementKey}
+            piece={placement}
+            failed={Boolean(failedImageKeys[placementKey])}
+            onImageError={() => {
+              onPieceImageError(placementKey);
+            }}
+          />
+        );
+      })}
+    </View>
+  );
+});
+
 function normalizeSkillName(skill: string | undefined): string | null {
   if (!skill) return null;
   const normalized = skill.trim();
@@ -740,6 +843,7 @@ export function StageShogiScreen() {
   const isMountedRef = useRef(true);
   const piecesRef = useRef<BoardPiece[]>([]);
   const stateHashRef = useRef<string | null>(null);
+  const handleCellPressRef = useRef<(row: number, col: number) => void>(() => undefined);
   const hasEnteredBattleRef = useRef(false);
   const prevStageRef = useRef<string | undefined>(undefined);
   const aiThinkingRef = useRef(false);
@@ -1103,6 +1207,11 @@ export function StageShogiScreen() {
         }
       }
 
+      if (selectedMove) {
+        applyOptimisticMove('enemy', selectedMove);
+        await waitForAiMoveVisualCommit();
+      }
+
       const nextWinner = syncFromCanonicalPosition(
         response.position,
         response.game,
@@ -1144,27 +1253,27 @@ export function StageShogiScreen() {
     }
   }
 
-  function applyOptimisticMove(move: BattleMove) {
+  function applyOptimisticMove(actorSide: Side, move: BattleMove) {
     if (move.dropPieceCode) {
       const pieceCode = move.dropPieceCode;
       const pieceDef = pieceDefsByCode[pieceCode];
       setPieces((prev) => [
         ...prev,
         {
-          side: 'player' as Side,
+          side: actorSide,
           row: move.toRow,
           col: move.toCol,
           pieceCode,
-          char: pieceCharFromCode(pieceCode, 'player', false),
+          char: pieceCharFromCode(pieceCode, actorSide, false),
           promoted: false,
           imageSignedUrl: pieceDef?.imageSignedUrl ?? null,
         },
       ]);
       setHands((prev) => ({
         ...prev,
-        player: {
-          ...prev.player,
-          [pieceCode]: Math.max(0, (prev.player[pieceCode] ?? 1) - 1),
+        [actorSide]: {
+          ...prev[actorSide],
+          [pieceCode]: Math.max(0, (prev[actorSide][pieceCode] ?? 1) - 1),
         },
       }));
     } else if (move.fromRow !== null && move.fromCol !== null) {
@@ -1188,6 +1297,19 @@ export function StageShogiScreen() {
           );
       });
     }
+  }
+
+  async function waitForNextFrame() {
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => resolve());
+    });
+  }
+
+  async function waitForAiMoveVisualCommit() {
+    await waitForNextFrame();
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 120);
+    });
   }
 
   async function commitPlayerMove(move: BattleMove) {
@@ -1215,7 +1337,7 @@ export function StageShogiScreen() {
     setPlayerLegalMoves([]);
     setPendingPromotion(null);
     setAiError(null);
-    applyOptimisticMove(move);
+    applyOptimisticMove('player', move);
 
     try {
       const result = await commitGameMoveUseCase.execute({
@@ -1316,6 +1438,16 @@ export function StageShogiScreen() {
     setSelectedDropPieceCode(pieceCode);
     setLegalTargets(targets);
   }
+
+  handleCellPressRef.current = handleCellPress;
+
+  const handleBoardCellPress = useCallback((row: number, col: number) => {
+    handleCellPressRef.current(row, col);
+  }, []);
+
+  const handlePieceImageError = useCallback((placementKey: string) => {
+    setFailedImageKeys((prev) => (prev[placementKey] ? prev : { ...prev, [placementKey]: true }));
+  }, []);
 
   function renderHandsRow(side: Side, compact = false) {
     const orderedCodes = [
@@ -1473,72 +1605,13 @@ export function StageShogiScreen() {
                 height: `${(BOARD_INNER / BOARD_VIEWBOX) * 100}%`,
               }}
             >
-              <Svg
-                width="100%"
-                height="100%"
-                viewBox={`0 0 ${BOARD_INNER} ${BOARD_INNER}`}
-                style={{ position: 'absolute', top: 0, left: 0 }}
-                pointerEvents="none"
-              >
-                {selectedCell ? (
-                  <Rect
-                    x={selectedCell.col * BOARD_CELL}
-                    y={selectedCell.row * BOARD_CELL}
-                    width={BOARD_CELL}
-                    height={BOARD_CELL}
-                    fill="none"
-                    stroke="#2563eb"
-                    strokeWidth={4}
-                  />
-                ) : null}
-                {legalTargets.map((target) => (
-                  <Rect
-                    key={`legal-${target.row}-${target.col}`}
-                    x={target.col * BOARD_CELL}
-                    y={target.row * BOARD_CELL}
-                    width={BOARD_CELL}
-                    height={BOARD_CELL}
-                    fill="none"
-                    stroke="#16a34a"
-                    strokeWidth={4}
-                  />
-                ))}
-              </Svg>
-
-              {Array.from({ length: BOARD_SIZE }).map((_, rowIndex) =>
-                Array.from({ length: BOARD_SIZE }).map((__, colIndex) => (
-                  <Pressable
-                    key={`cell-${rowIndex}-${colIndex}`}
-                    testID={`board-cell-${rowIndex}-${colIndex}`}
-                    className="absolute items-center justify-center"
-                    style={{
-                      top: `${rowIndex * BOARD_CELL_INNER_RATIO * 100}%`,
-                      left: `${colIndex * BOARD_CELL_INNER_RATIO * 100}%`,
-                      width: `${BOARD_CELL_INNER_RATIO * 100}%`,
-                      height: `${BOARD_CELL_INNER_RATIO * 100}%`,
-                    }}
-                    onPress={() => {
-                      handleCellPress(rowIndex, colIndex);
-                    }}
-                  />
-                )),
-              )}
-
-              <View pointerEvents="none" style={{ position: 'absolute', inset: 0 }}>
-                {pieces.map((placement) => {
-                  const placementKey = `${placement.side}-${placement.pieceCode ?? 'X'}-${placement.promoted ? 'P' : 'N'}-${placement.row}-${placement.col}`;
-                  return (
-                    <BoardPieceSprite
-                      key={placementKey}
-                      piece={placement}
-                      failed={Boolean(failedImageKeys[placementKey])}
-                      onImageError={() => {
-                        setFailedImageKeys((prev) => ({ ...prev, [placementKey]: true }));
-                      }}
-                    />
-                  );
-                })}
-              </View>
+              <BoardHighlightsLayer selectedCell={selectedCell} legalTargets={legalTargets} />
+              <BoardTouchLayer onCellPress={handleBoardCellPress} />
+              <BoardPiecesLayer
+                pieces={pieces}
+                failedImageKeys={failedImageKeys}
+                onPieceImageError={handlePieceImageError}
+              />
             </View>
           </View>
         </View>
