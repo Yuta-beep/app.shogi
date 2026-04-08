@@ -11,7 +11,7 @@ import { useAssetPreload } from '@/hooks/common/use-asset-preload';
 import { useScreenBgm } from '@/hooks/common/use-screen-bgm';
 import { playSe } from '@/lib/audio/audio-manager';
 
-const matchingBg = require('../../../../assets/matching/matching-bg.png');
+const matchingBg = require('../../../../assets/online-battle/マッチング中.png');
 
 export function MatchingScreen() {
   const router = useRouter();

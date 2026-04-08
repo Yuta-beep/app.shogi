@@ -8,6 +8,7 @@ import {
 } from '@/usecases/deck-builder/create-deck-builder-usecases';
 import { isApiDataSource } from '@/lib/config/data-source';
 import { supabase } from '@/lib/supabase/supabase-client';
+import { CHAR_TO_CODE } from '@/features/stage-shogi/domain/piece-conversion';
 
 type BoardPlacement = {
   row: number;
@@ -18,7 +19,75 @@ type BoardPlacement = {
 const BOARD_ROWS = 9;
 const DECK_ROWS = 3;
 const DECK_ROW_OFFSET = BOARD_ROWS - DECK_ROWS;
-const MAX_DECK_PIECES = 20;
+const DECK_COST_LIMIT = 70;
+
+const DEFAULT_DECK_PIECE_COST = 8;
+// HTML版 deck_builder.html の PIECE_COST_OVERRIDES から、現状の deck-builder で使われる想定の文字だけ抜粋
+// （未定義は DEFAULT_DECK_PIECE_COST）
+const PIECE_COST_OVERRIDES: Partial<Record<string, number>> = {
+  王: 0,
+  玉: 0,
+  歩: 1,
+  香: 2,
+  桂: 2,
+  銀: 3,
+  金: 4,
+  飛: 6,
+  角: 6,
+  // 駒ショップ由来（deck_builder.html の PIECE_COST_OVERRIDES から）
+  走: 2,
+  種: 8,
+  麒: 12,
+  舞: 8,
+  P: 7,
+  鳴: 5,
+  忍: 5,
+  影: 5,
+  砲: 7,
+  竜: 7,
+  鳳: 7,
+  炎: 7,
+  火: 7,
+  水: 7,
+  波: 7,
+  木: 8,
+  葉: 7,
+  光: 8,
+  星: 7,
+  闇: 5,
+  魔: 8,
+};
+
+const STANDARD_PIECE_CODES = new Set(['FU', 'KY', 'KE', 'GI', 'KI', 'KA', 'HI', 'OU']);
+
+function deckBuilderPieceCost(char: string | null | undefined): number {
+  if (!char) return 0;
+  if (char === '王' || char === '玉') return 0;
+  return PIECE_COST_OVERRIDES[char] ?? DEFAULT_DECK_PIECE_COST;
+}
+
+function isDeckBuilderSpecialChar(char: string | null | undefined): boolean {
+  if (!char) return false;
+  // 標準駒は特殊に含めない（deck_builder.html の customCount 相当）
+  if (
+    char === '王' ||
+    char === '玉' ||
+    char === '歩' ||
+    char === '香' ||
+    char === '桂' ||
+    char === '銀' ||
+    char === '金' ||
+    char === '飛' ||
+    char === '角'
+  ) {
+    return false;
+  }
+
+  // 標準コードに該当するなら特殊ではない。それ以外は特殊扱い。
+  const code = CHAR_TO_CODE[char];
+  if (!code) return true;
+  return !STANDARD_PIECE_CODES.has(code);
+}
 
 function toUiRow(rowNo: number): number {
   if (rowNo >= 0 && rowNo < DECK_ROWS) {
@@ -74,7 +143,7 @@ function initialBoardPlacementsFromDecks(
       piece: ownedByPieceId.get(placement.pieceId) ?? toOwnedPieceFromPlacement(placement),
     }))
     .filter((placement) => isDeckAreaRow(placement.row))
-    .slice(0, MAX_DECK_PIECES);
+    ;
 }
 
 function pieceStock(piece: OwnedPiece): number {
@@ -83,10 +152,6 @@ function pieceStock(piece: OwnedPiece): number {
 
 function isDeckAreaRow(row: number): boolean {
   return row >= DECK_ROW_OFFSET && row < BOARD_ROWS;
-}
-
-function countDeckPlacements(placements: BoardPlacement[]): number {
-  return placements.filter((placement) => isDeckAreaRow(placement.row)).length;
 }
 
 export function useDeckBuilderScreen() {
@@ -161,8 +226,10 @@ export function useDeckBuilderScreen() {
 
   function saveDeck() {
     if (!deckName.trim()) return;
+    if (deckTotalCost > DECK_COST_LIMIT) return;
 
     const apiPlacements = boardPlacements
+      .filter((placement) => isDeckAreaRow(placement.row))
       .filter((placement) => typeof placement.piece.pieceId === 'number')
       .map((placement) => ({
         rowNo: toApiRow(placement.row),
@@ -170,10 +237,6 @@ export function useDeckBuilderScreen() {
         pieceId: placement.piece.pieceId as number,
       }))
       .filter((placement) => placement.rowNo >= 0 && placement.rowNo < DECK_ROWS);
-
-    if (apiPlacements.length > MAX_DECK_PIECES) {
-      return;
-    }
 
     const newDeck: SavedDeck = {
       id: `deck-${Date.now()}`,
@@ -217,8 +280,15 @@ export function useDeckBuilderScreen() {
     return Math.max(pieceStock(piece) - getPlacedCount(piece), 0);
   }
 
-  const deckPieceCount = countDeckPlacements(boardPlacements);
-  const isDeckFull = deckPieceCount >= MAX_DECK_PIECES;
+  const deckAreaPlacements = boardPlacements.filter((placement) => isDeckAreaRow(placement.row));
+  const deckTotalCost = deckAreaPlacements.reduce(
+    (sum, placement) => sum + deckBuilderPieceCost(placement.piece.char),
+    0,
+  );
+  const deckSpecialPieceCount = deckAreaPlacements.filter((placement) =>
+    isDeckBuilderSpecialChar(placement.piece.char),
+  ).length;
+  const isDeckCostOverLimit = deckTotalCost > DECK_COST_LIMIT;
 
   return {
     ownedPieces,
@@ -252,7 +322,10 @@ export function useDeckBuilderScreen() {
           (placement) => !(placement.row === row && placement.col === col),
         );
         const nextPlacements = [...withoutCell, { row, col, piece: selectedPieceForPlacement }];
-        if (countDeckPlacements(nextPlacements) > MAX_DECK_PIECES) {
+        const nextDeckCost = nextPlacements
+          .filter((placement) => isDeckAreaRow(placement.row))
+          .reduce((sum, placement) => sum + deckBuilderPieceCost(placement.piece.char), 0);
+        if (nextDeckCost > DECK_COST_LIMIT) {
           return prev;
         }
         return nextPlacements;
@@ -269,9 +342,10 @@ export function useDeckBuilderScreen() {
     deckName,
     setDeckName,
     saveDeck,
-    deckPieceCount,
-    maxDeckPieces: MAX_DECK_PIECES,
-    isDeckFull,
+    deckTotalCost,
+    deckCostLimit: DECK_COST_LIMIT,
+    isDeckCostOverLimit,
+    deckSpecialPieceCount,
     loadModalOpen,
     openLoadModal: () => setLoadModalOpen(true),
     closeLoadModal: () => setLoadModalOpen(false),

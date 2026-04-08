@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ImageBackground, View } from 'react-native';
+import { ImageBackground, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppLoadingScreen } from '@/components/organism/app-loading-screen';
@@ -45,6 +45,14 @@ export function TitleScreen() {
     }, TITLE_TO_HOME_LOADING_MS);
   }
 
+  function openTutorial() {
+    if (isTransitioning) {
+      return;
+    }
+    void playSe('tap');
+    router.push('/tutorial');
+  }
+
   if (!isReady || isTransitioning) {
     return <AppLoadingScreen />;
   }
@@ -54,6 +62,14 @@ export function TitleScreen() {
       <SafeAreaView className="flex-1">
         <View className="flex-1 bg-black/20">
           <TapToStartScreen onPressStart={startHomeTransition} />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="チュートリアル画面を開く"
+            onPress={openTutorial}
+            className="absolute bottom-6 right-5 z-10 rounded-lg border border-[#8e6428] bg-[#d2a860] px-3 py-2 active:opacity-80"
+          >
+            <Text className="text-center text-xs font-black text-[#4b2e1f]">チュートリアル</Text>
+          </Pressable>
         </View>
       </SafeAreaView>
     </ImageBackground>

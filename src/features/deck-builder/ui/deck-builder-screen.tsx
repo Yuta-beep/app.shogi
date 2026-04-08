@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
-import { Modal, Pressable, Text, TextInput, View, ScrollView } from 'react-native';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { Modal, Pressable, Text, TextInput, View, ScrollView, PanResponder } from 'react-native';
 import Svg, { Line, Rect } from 'react-native-svg';
 
 import { AppLoadingScreen } from '@/components/organism/app-loading-screen';
@@ -30,6 +30,11 @@ export function DeckBuilderScreen() {
   const router = useRouter();
   const vm = useDeckBuilderScreen();
   const [activeCell, setActiveCell] = useState<{ row: number; col: number } | null>(null);
+  const [boardTouchArea, setBoardTouchArea] = useState({ width: 0, height: 0 });
+  const dragLastCellKeyRef = useRef<string | null>(null);
+  const longPressTriggeredRef = useRef(false);
+  const startTouchRef = useRef({ x: 0, y: 0 });
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const remotePieceUrls = useMemo(
     () =>
       vm.ownedPieces
@@ -42,6 +47,97 @@ export function DeckBuilderScreen() {
   });
   useScreenBgm('deckBuilder');
 
+  const getCellFromTouch = useCallback(
+    (x: number, y: number): { row: number; col: number } | null => {
+      if (boardTouchArea.width <= 0 || boardTouchArea.height <= 0) return null;
+      if (x < 0 || y < 0 || x >= boardTouchArea.width || y >= boardTouchArea.height) return null;
+      const col = Math.floor((x / boardTouchArea.width) * BOARD_SIZE);
+      const row = Math.floor((y / boardTouchArea.height) * BOARD_SIZE);
+      if (row < 0 || row >= BOARD_SIZE || col < 0 || col >= BOARD_SIZE) return null;
+      return { row, col };
+    },
+    [boardTouchArea.height, boardTouchArea.width],
+  );
+
+  const getPlacementAt = useCallback(
+    (row: number, col: number) =>
+      vm.boardPlacements.find((placement) => placement.row === row && placement.col === col) ?? null,
+    [vm.boardPlacements],
+  );
+
+  const applyCellAction = useCallback(
+    (row: number, col: number) => {
+      setActiveCell({ row, col });
+      vm.placeSelectedPieceAt(row, col);
+    },
+    [vm],
+  );
+
+  const clearLongPressTimer = useCallback(() => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  }, []);
+
+  const beginLongPressDetection = useCallback(
+    (row: number, col: number) => {
+      const placement = getPlacementAt(row, col);
+      if (!placement) return;
+      clearLongPressTimer();
+      longPressTimerRef.current = setTimeout(() => {
+        longPressTriggeredRef.current = true;
+        vm.openPieceDetail(placement.piece);
+      }, 420);
+    },
+    [clearLongPressTimer, getPlacementAt, vm],
+  );
+
+  const boardPanResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onStartShouldSetPanResponderCapture: () => true,
+        onMoveShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponderCapture: () => true,
+        onPanResponderGrant: (event) => {
+          longPressTriggeredRef.current = false;
+          const { locationX, locationY } = event.nativeEvent;
+          startTouchRef.current = { x: locationX, y: locationY };
+          const cell = getCellFromTouch(locationX, locationY);
+          dragLastCellKeyRef.current = cell ? `${cell.row}-${cell.col}` : null;
+          if (cell) beginLongPressDetection(cell.row, cell.col);
+        },
+        onPanResponderMove: (event) => {
+          const { locationX, locationY } = event.nativeEvent;
+          const dx = locationX - startTouchRef.current.x;
+          const dy = locationY - startTouchRef.current.y;
+          if (Math.hypot(dx, dy) > 6) {
+            clearLongPressTimer();
+          }
+          const cell = getCellFromTouch(locationX, locationY);
+          if (!cell) return;
+          const key = `${cell.row}-${cell.col}`;
+          if (dragLastCellKeyRef.current === key) return;
+          dragLastCellKeyRef.current = key;
+          applyCellAction(cell.row, cell.col);
+        },
+        onPanResponderRelease: (event) => {
+          clearLongPressTimer();
+          const { locationX, locationY } = event.nativeEvent;
+          const cell = getCellFromTouch(locationX, locationY);
+          if (!cell) return;
+          if (!longPressTriggeredRef.current) {
+            applyCellAction(cell.row, cell.col);
+          }
+        },
+        onPanResponderTerminate: () => {
+          clearLongPressTimer();
+        },
+      }),
+    [applyCellAction, beginLongPressDetection, clearLongPressTimer, getCellFromTouch],
+  );
+
   if (vm.isLoading || !areAssetsReady) {
     return <AppLoadingScreen imageSource={homeAssets.loadingImage} />;
   }
@@ -51,6 +147,7 @@ export function DeckBuilderScreen() {
       title="マイデッキ作成"
       subtitle="将棋盤に駒を配置して保存"
       hideBackButton
+      fullBleedBackgroundSource={deckAssets.bg}
       rightAction={
         <BackButton
           onPress={() => {
@@ -60,11 +157,7 @@ export function DeckBuilderScreen() {
         />
       }
     >
-      <View className="overflow-hidden rounded-2xl border border-[#8b0000]/50">
-        <Image source={deckAssets.bg} contentFit="cover" style={{ width: '100%', height: 180 }} />
-      </View>
-
-      <View className="mt-3">
+      <View>
         <View className="relative w-full self-center" style={{ aspectRatio: 1 }}>
           <Svg width="100%" height="100%" viewBox={`0 0 ${BOARD_VIEWBOX} ${BOARD_VIEWBOX}`}>
             <Rect x={0} y={0} width={BOARD_VIEWBOX} height={BOARD_VIEWBOX} fill="#deb887" />
@@ -114,6 +207,11 @@ export function DeckBuilderScreen() {
               width: `${(BOARD_INNER / BOARD_VIEWBOX) * 100}%`,
               height: `${(BOARD_INNER / BOARD_VIEWBOX) * 100}%`,
             }}
+            onLayout={(event) => {
+              const { width, height } = event.nativeEvent.layout;
+              setBoardTouchArea({ width, height });
+            }}
+            {...boardPanResponder.panHandlers}
           >
             <Svg
               width="100%"
@@ -148,10 +246,6 @@ export function DeckBuilderScreen() {
                       width: `${BOARD_CELL_INNER_RATIO * 100}%`,
                       height: `${BOARD_CELL_INNER_RATIO * 100}%`,
                     }}
-                    onPress={() => {
-                      setActiveCell({ row, col });
-                      vm.placeSelectedPieceAt(row, col);
-                    }}
                   >
                     {placement ? (
                       placement.piece.imageSignedUrl ? (
@@ -179,13 +273,12 @@ export function DeckBuilderScreen() {
             )}
           </View>
         </View>
-        <Text
-          className={`mt-2 text-right text-xs font-black ${
-            vm.isDeckFull ? 'text-[#b91c1c]' : 'text-[#6b4532]'
-          }`}
-        >
-          {`デッキ枚数 ${vm.deckPieceCount} / ${vm.maxDeckPieces}`}
-        </Text>
+        <View className="mt-2 items-end">
+          <Text className="text-right text-xs font-black text-white">{`合計コスト ${vm.deckTotalCost} / ${vm.deckCostLimit}`}</Text>
+          <Text className="mt-0.5 text-right text-xs font-black text-white">
+            {`特殊駒 ${vm.deckSpecialPieceCount}個`}
+          </Text>
+        </View>
       </View>
 
       {/* 所持駒パレット */}

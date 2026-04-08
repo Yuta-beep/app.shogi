@@ -181,7 +181,7 @@ describe('useDeckBuilderScreen', () => {
     expect(result.current.getRemainingCount(pawn)).toBe(0);
   });
 
-  it('デッキ配置は20枚を超えて配置できない', async () => {
+  it('コスト上限70を超える配置はできない', async () => {
     const piece = {
       pieceId: 401,
       char: '竜',
@@ -212,17 +212,12 @@ describe('useDeckBuilderScreen', () => {
       }
     });
 
-    expect(result.current.deckPieceCount).toBe(20);
-    expect(result.current.boardPlacements).toHaveLength(20);
-    expect(result.current.isDeckFull).toBe(true);
-    expect(
-      result.current.boardPlacements.some(
-        (placement) => placement.row === 8 && placement.col === 2,
-      ),
-    ).toBe(false);
+    expect(result.current.boardPlacements).toHaveLength(10);
+    expect(result.current.deckTotalCost).toBe(70);
+    expect(result.current.deckSpecialPieceCount).toBe(10);
   });
 
-  it('読み込み時に20枚を超えるデッキ配置は20枚に制限される', async () => {
+  it('読み込み時も上限なしで反映される', async () => {
     const placements = Array.from({ length: 21 }, (_, i) => ({
       rowNo: Math.floor(i / 9),
       colNo: i % 9,
@@ -247,12 +242,8 @@ describe('useDeckBuilderScreen', () => {
     const { result } = renderHook(() => useDeckBuilderScreen());
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
-    expect(result.current.deckPieceCount).toBe(20);
-    expect(result.current.boardPlacements).toHaveLength(20);
-    expect(
-      result.current.boardPlacements.some(
-        (placement) => placement.row === 8 && placement.col === 2,
-      ),
-    ).toBe(false);
+    expect(result.current.boardPlacements).toHaveLength(21);
+    expect(result.current.deckTotalCost).toBe(21);
+    expect(result.current.deckSpecialPieceCount).toBe(0);
   });
 });

@@ -1,30 +1,40 @@
+import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import { useEffect, useMemo, useRef } from 'react';
-import { ImageBackground, Pressable, ScrollView, Text, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ImageBackground,
+  Pressable,
+  ScrollView,
+  Text,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Svg, { Path } from 'react-native-svg';
+import Animated, { FadeIn } from 'react-native-reanimated';
 
 import { AppLoadingScreen } from '@/components/organism/app-loading-screen';
 import { GlobalHomeHud } from '@/components/organism/global-home-hud';
 import { homeAssets } from '@/constants/home-assets';
+import {
+  getNormalDungeonStagePreviewSource,
+  normalDungeonStagePreviewPreloadTargets,
+} from '@/constants/normal-dungeon-stage-previews';
 import { stageSelectBackgrounds } from '@/constants/stage-select-data';
 import { useAssetPreload } from '@/hooks/common/use-asset-preload';
 import { useStageSelectScreen } from '@/features/stage-select/ui/use-stage-select-screen';
 import { useScreenBgm } from '@/hooks/common/use-screen-bgm';
 import { playSe } from '@/lib/audio/audio-manager';
 
-const pagePaths: Record<number, string> = {
-  1: 'M 350 2350 C 375 2300, 425 2250, 500 2150 C 575 2100, 625 2050, 700 2000 C 750 1900, 775 1850, 800 1800 C 800 1700, 775 1650, 700 1600 C 625 1500, 575 1450, 500 1400 C 425 1300, 375 1250, 350 1200 C 375 1100, 425 1050, 500 1000 C 575 900, 625 850, 700 800 C 750 700, 775 650, 800 600 C 800 500, 775 450, 700 400 C 625 300, 575 250, 500 200',
-  2: 'M 500 200 C 620 300, 700 450, 680 650 C 650 800, 560 950, 500 1100 C 440 1250, 350 1400, 320 1600 C 300 1800, 380 2000, 500 2350',
-  3: 'M 450 100 C 650 300, 700 600, 500 850 C 320 1100, 300 1400, 500 1650 C 680 1900, 620 2200, 300 2450',
-  4: 'M 300 1900 C 450 1700, 650 1500, 750 1300 C 700 1100, 600 950, 450 800 C 350 700, 300 600, 250 450',
-  5: 'M 220 1800 C 230 1600, 470 1500, 510 1200 C 600 1000, 380 850, 260 650 C 300 500, 330 420, 330 360',
-};
+/** マップをこの px 以上スクロールしたらステージイメージを隠す（ユーザー操作時のみ） */
+const MAP_SCROLL_HIDE_PREVIEW_PX = 36;
 
 export function StageSelectScreen() {
   const router = useRouter();
+  const { height: windowHeight } = useWindowDimensions();
   const mapScrollRef = useRef<ScrollView | null>(null);
   const hasAutoScrolledRef = useRef(false);
+  const [mapScrollY, setMapScrollY] = useState(0);
+  const [userInteractedWithMapScroll, setUserInteractedWithMapScroll] = useState(false);
   const {
     isLoading,
     currentPage,
@@ -37,7 +47,10 @@ export function StageSelectScreen() {
   } = useStageSelectScreen();
   useScreenBgm('dungeonSelect');
 
-  const preloadTargets = useMemo(() => Object.values(stageSelectBackgrounds), []);
+  const preloadTargets = useMemo(
+    () => [...Object.values(stageSelectBackgrounds), ...normalDungeonStagePreviewPreloadTargets],
+    [],
+  );
   const { isReady } = useAssetPreload(preloadTargets);
 
   const currentRange = ranges.find((range) => range.page === currentPage) ?? ranges[0];
@@ -45,6 +58,11 @@ export function StageSelectScreen() {
   useEffect(() => {
     hasAutoScrolledRef.current = false;
   }, [currentPage]);
+
+  useEffect(() => {
+    setUserInteractedWithMapScroll(false);
+    setMapScrollY(0);
+  }, [selectedStageId]);
 
   useEffect(() => {
     if (!isReady || isLoading) return;
@@ -64,6 +82,17 @@ export function StageSelectScreen() {
   if (!isReady || isLoading) {
     return <AppLoadingScreen imageSource={homeAssets.loadingImage} />;
   }
+
+  const showStagePreviewImage =
+    selectedStage &&
+    (!userInteractedWithMapScroll || mapScrollY < MAP_SCROLL_HIDE_PREVIEW_PX);
+
+  const previewImageMaxHeight = Math.min(420, Math.round(windowHeight * 0.42));
+
+  const stagePreviewSource = useMemo(
+    () => (selectedStage ? getNormalDungeonStagePreviewSource(selectedStage.id) : null),
+    [selectedStage],
+  );
 
   return (
     <SafeAreaView className="flex-1" edges={['left', 'right', 'bottom']}>
@@ -102,28 +131,15 @@ export function StageSelectScreen() {
             </ScrollView>
           </View>
 
-          <ScrollView ref={mapScrollRef} className="flex-1" contentContainerClassName="pb-44">
+          <ScrollView
+            ref={mapScrollRef}
+            className="flex-1"
+            contentContainerClassName="pb-44"
+            scrollEventThrottle={16}
+            onScrollBeginDrag={() => setUserInteractedWithMapScroll(true)}
+            onScroll={(e) => setMapScrollY(e.nativeEvent.contentOffset.y)}
+          >
             <View style={{ height: currentRange.height, position: 'relative' }}>
-              <Svg
-                viewBox={`0 0 1000 ${currentRange.height + 150}`}
-                style={{ position: 'absolute', width: '100%', height: '100%' }}
-              >
-                <Path
-                  d={pagePaths[currentPage]}
-                  fill="none"
-                  stroke="rgba(0,0,0,0.22)"
-                  strokeWidth={14}
-                  strokeLinecap="round"
-                />
-                <Path
-                  d={pagePaths[currentPage]}
-                  fill="none"
-                  stroke="#ffb300"
-                  strokeWidth={9}
-                  strokeLinecap="round"
-                />
-              </Svg>
-
               {nodesInPage.map((node) => (
                 <View
                   key={node.id}
@@ -155,6 +171,9 @@ export function StageSelectScreen() {
                   <Pressable
                     onPress={() => {
                       void playSe('tap');
+                      // 同じステージを再タップしたときもイメージを再度見られるようにする
+                      setUserInteractedWithMapScroll(false);
+                      setMapScrollY(0);
                       void selectStage(node.id);
                     }}
                     disabled={!node.isUnlocked}
@@ -184,6 +203,22 @@ export function StageSelectScreen() {
               {selectedStage ? (
                 <>
                   <Text className="text-lg font-black text-[#111]">{`ステージ${selectedStage.id}: ${selectedStage.name}`}</Text>
+                  {showStagePreviewImage && stagePreviewSource !== null ? (
+                    <Animated.View
+                      key={`stage-preview-${selectedStage.id}`}
+                      entering={FadeIn.duration(380)}
+                      className="mt-2 w-full overflow-hidden rounded-lg bg-black/5"
+                      style={{ height: previewImageMaxHeight }}
+                    >
+                      <Image
+                        source={stagePreviewSource}
+                        accessibilityIgnoresInvertColors
+                        accessibilityLabel={`ステージ${selectedStage.id}のイメージ`}
+                        contentFit="contain"
+                        style={{ width: '100%', height: '100%' }}
+                      />
+                    </Animated.View>
+                  ) : null}
                   <Pressable
                     onPress={() => {
                       void playSe('confirm');

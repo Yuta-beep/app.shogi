@@ -56,13 +56,9 @@ export function useStageSelectScreen(): StageSelectScreenVM {
         if (active) {
           setNodes(computedNodes);
           const focusedNode = resolveInitialFocusStage(computedNodes);
-          if (focusedNode) {
-            setCurrentPage(focusedNode.page);
-            setSelectedStageId(focusedNode.id);
-          } else {
-            setCurrentPage(1);
-            setSelectedStageId(null);
-          }
+          setCurrentPage(focusedNode?.page ?? 1);
+          /** 初回は未選択（イメージはステージボタンタップまで出さない） */
+          setSelectedStageId(null);
         }
       } finally {
         if (active) {
@@ -95,14 +91,14 @@ export function useStageSelectScreen(): StageSelectScreenVM {
       return;
     }
 
-    setIsLoading(true);
+    /** タップのたびに全画面ローディングにすると画面が切り替わって見えるため使わない */
     try {
       const result = await selectStageUseCase.execute({ stageId });
       if (result.canStart) {
         setSelectedStageId(stageId);
       }
-    } finally {
-      setIsLoading(false);
+    } catch {
+      // API 失敗時は選択を変えない
     }
   }
 
