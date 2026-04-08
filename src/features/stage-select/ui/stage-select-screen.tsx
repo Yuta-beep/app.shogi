@@ -35,6 +35,7 @@ export function StageSelectScreen() {
   const hasAutoScrolledRef = useRef(false);
   const [mapScrollY, setMapScrollY] = useState(0);
   const [userInteractedWithMapScroll, setUserInteractedWithMapScroll] = useState(false);
+
   const {
     isLoading,
     currentPage,
@@ -45,15 +46,22 @@ export function StageSelectScreen() {
     selectedStage,
     selectStage,
   } = useStageSelectScreen();
+
   useScreenBgm('dungeonSelect');
 
   const preloadTargets = useMemo(
     () => [...Object.values(stageSelectBackgrounds), ...normalDungeonStagePreviewPreloadTargets],
     [],
   );
+
   const { isReady } = useAssetPreload(preloadTargets);
 
   const currentRange = ranges.find((range) => range.page === currentPage) ?? ranges[0];
+
+  const stagePreviewSource = useMemo(
+    () => (selectedStage ? getNormalDungeonStagePreviewSource(selectedStage.id) : null),
+    [selectedStage],
+  );
 
   useEffect(() => {
     hasAutoScrolledRef.current = false;
@@ -88,11 +96,6 @@ export function StageSelectScreen() {
     (!userInteractedWithMapScroll || mapScrollY < MAP_SCROLL_HIDE_PREVIEW_PX);
 
   const previewImageMaxHeight = Math.min(420, Math.round(windowHeight * 0.42));
-
-  const stagePreviewSource = useMemo(
-    () => (selectedStage ? getNormalDungeonStagePreviewSource(selectedStage.id) : null),
-    [selectedStage],
-  );
 
   return (
     <SafeAreaView className="flex-1" edges={['left', 'right', 'bottom']}>
@@ -171,7 +174,6 @@ export function StageSelectScreen() {
                   <Pressable
                     onPress={() => {
                       void playSe('tap');
-                      // 同じステージを再タップしたときもイメージを再度見られるようにする
                       setUserInteractedWithMapScroll(false);
                       setMapScrollY(0);
                       void selectStage(node.id);
