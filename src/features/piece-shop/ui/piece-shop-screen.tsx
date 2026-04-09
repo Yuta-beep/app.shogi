@@ -97,7 +97,7 @@ export function PieceShopScreen() {
                         void playSe('tap');
                         vm.openDetail(piece);
                       }}
-                      className="h-[290px] items-center active:scale-95"
+                      className="h-[248px] items-center active:scale-95"
                     >
                       <Image
                         source={shopAssets.pieces[piece.key]}
@@ -117,7 +117,7 @@ export function PieceShopScreen() {
                     <Pressable
                       onPress={() => openPurchase(piece)}
                       disabled={isOwned}
-                      className={`${isTopRow ? 'mt-[-12px]' : 'mt-[-30px]'} rounded-md border border-[#8B0000] px-2 py-2 ${isOwned ? 'bg-[#4b3a2f]' : 'bg-[#8f2a1a]'}`}
+                      className={`${isTopRow ? 'mt-[-36px]' : 'mt-[-54px]'} rounded-md border border-[#8B0000] px-2 py-2 ${isOwned ? 'bg-[#4b3a2f]' : 'bg-[#8f2a1a]'}`}
                     >
                       <Text
                         className={`text-center text-xs font-black ${isOwned ? 'text-[#d9c8b3]' : 'text-[#ffe1a3]'}`}
