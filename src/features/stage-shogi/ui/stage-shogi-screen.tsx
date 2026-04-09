@@ -7,6 +7,7 @@ import Svg, { Line, Polygon, Rect } from 'react-native-svg';
 
 import { AppLoadingScreen } from '@/components/organism/app-loading-screen';
 import { homeAssets } from '@/constants/home-assets';
+import { getNormalDungeonStagePreviewSource } from '@/constants/normal-dungeon-stage-previews';
 import { UiScreenShell } from '@/components/organism/ui-screen-shell';
 import {
   BoardCell,
@@ -1554,8 +1555,18 @@ export function StageShogiScreen() {
     return <AppLoadingScreen imageSource={homeAssets.loadingImage} />;
   }
 
+  const stageNo = Number(stageParam);
+  const stageBattleBackgroundSource =
+    Number.isFinite(stageNo) && stageNo > 0 ? getNormalDungeonStagePreviewSource(stageNo) : null;
+
   return (
-    <UiScreenShell title="Stage Shogi" subtitle="バトル画面（AI接続）" hideTitleText plainHeader>
+    <UiScreenShell
+      title="Stage Shogi"
+      subtitle="バトル画面（AI接続）"
+      hideTitleText
+      plainHeader
+      fullBleedBackgroundSource={stageBattleBackgroundSource ?? undefined}
+    >
       <View className="rounded-xl border-2 border-accent bg-[#f3ead3] p-3">
         <Text className="text-sm font-bold text-[#6b4532]">{`TURN ${moveNo}`}</Text>
         <Text className="text-base font-black text-ink">{`${snapshot.stageLabel}  手番: ${sideToMove === 'player' ? 'あなた' : 'CPU'}`}</Text>
