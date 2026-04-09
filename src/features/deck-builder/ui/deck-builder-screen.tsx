@@ -8,6 +8,7 @@ import { AppLoadingScreen } from '@/components/organism/app-loading-screen';
 import { BackButton } from '@/components/atom/back-button';
 import { homeAssets } from '@/constants/home-assets';
 import { UiScreenShell } from '@/components/organism/ui-screen-shell';
+import { getDeckBuilderPieceCost } from '@/features/deck-builder/lib/deck-builder-piece-cost';
 import { useDeckBuilderScreen } from '@/features/deck-builder/ui/use-deck-builder-screen';
 import { useAssetPreload } from '@/hooks/common/use-asset-preload';
 import { useScreenBgm } from '@/hooks/common/use-screen-bgm';
@@ -61,7 +62,8 @@ export function DeckBuilderScreen() {
 
   const getPlacementAt = useCallback(
     (row: number, col: number) =>
-      vm.boardPlacements.find((placement) => placement.row === row && placement.col === col) ?? null,
+      vm.boardPlacements.find((placement) => placement.row === row && placement.col === col) ??
+      null,
     [vm.boardPlacements],
   );
 
@@ -286,39 +288,45 @@ export function DeckBuilderScreen() {
         <Text className="text-sm font-black text-[#2f1b14]">
           所持駒（駒を選択して盤面マスをタップで配置・未選択ならマスの駒を削除）
         </Text>
-        <View className="mt-2 flex-row flex-wrap gap-2">
+        <View className="mt-2 flex-row flex-wrap gap-x-2 gap-y-1">
           {vm.ownedPieces.map((piece) => {
             const remaining = vm.getRemainingCount(piece);
             const outOfStock = remaining <= 0;
+            const paletteKey =
+              typeof piece.pieceId === 'number' ? `piece-${piece.pieceId}` : `char-${piece.char}`;
             return (
-              <Pressable
-                key={piece.char}
-                onPress={() => {
-                  void playSe('tap');
-                  vm.selectPieceForPlacement(piece);
-                }}
-                onLongPress={() => {
-                  vm.openPieceDetail(piece);
-                }}
-                className={`relative h-16 w-16 items-center justify-center active:scale-95 ${
-                  vm.selectedPieceForPlacement?.pieceId === piece.pieceId
-                    ? 'rounded-md border border-[#8b0000]/50 bg-[#fff7e6]'
-                    : ''
-                } ${outOfStock ? 'opacity-45' : ''}`}
-              >
-                {piece.imageSignedUrl ? (
-                  <Image
-                    source={{ uri: piece.imageSignedUrl }}
-                    contentFit="contain"
-                    style={{ width: 60, height: 60 }}
-                  />
-                ) : (
-                  <Text className="text-lg font-black text-[#2f1b14]">{piece.char}</Text>
-                )}
-                <View className="absolute -right-1 -top-1 rounded-full bg-black/75 px-1.5 py-0.5">
-                  <Text className="text-[10px] font-black text-white">{`×${remaining}`}</Text>
-                </View>
-              </Pressable>
+              <View key={paletteKey} className="mb-1 items-center">
+                <Pressable
+                  onPress={() => {
+                    void playSe('tap');
+                    vm.selectPieceForPlacement(piece);
+                  }}
+                  onLongPress={() => {
+                    vm.openPieceDetail(piece);
+                  }}
+                  className={`relative h-16 w-16 items-center justify-center active:scale-95 ${
+                    vm.selectedPieceForPlacement?.pieceId === piece.pieceId
+                      ? 'rounded-md border border-[#8b0000]/50 bg-[#fff7e6]'
+                      : ''
+                  } ${outOfStock ? 'opacity-45' : ''}`}
+                >
+                  {piece.imageSignedUrl ? (
+                    <Image
+                      source={{ uri: piece.imageSignedUrl }}
+                      contentFit="contain"
+                      style={{ width: 60, height: 60 }}
+                    />
+                  ) : (
+                    <Text className="text-lg font-black text-[#2f1b14]">{piece.char}</Text>
+                  )}
+                  <View className="absolute -right-1 -top-1 rounded-full bg-black/75 px-1.5 py-0.5">
+                    <Text className="text-[10px] font-black text-white">{`×${remaining}`}</Text>
+                  </View>
+                </Pressable>
+                <Text className="mt-0.5 text-[10px] font-black text-[#6b4532]">
+                  {`コスト ${getDeckBuilderPieceCost(piece.char)}`}
+                </Text>
+              </View>
             );
           })}
         </View>

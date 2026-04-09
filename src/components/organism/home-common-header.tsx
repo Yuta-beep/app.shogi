@@ -17,7 +17,7 @@ type HomeCommonHeaderProps = {
 
 const MOCK_EXP_PER_LEVEL = 1000;
 /** ユーザーバー.png のみ（ヘッダー枠とは別指定） */
-const USER_BAR_IMAGE_SCALE_X = 1.40;
+const USER_BAR_IMAGE_SCALE_X = 1.4;
 const USER_BAR_IMAGE_SCALE_Y = 4.0;
 const USER_BAR_IMAGE_OFFSET_X = -20;
 const USER_BAR_IMAGE_OFFSET_Y = 4;

@@ -92,8 +92,7 @@ export function StageSelectScreen() {
   }
 
   const showStagePreviewImage =
-    selectedStage &&
-    (!userInteractedWithMapScroll || mapScrollY < MAP_SCROLL_HIDE_PREVIEW_PX);
+    selectedStage && (!userInteractedWithMapScroll || mapScrollY < MAP_SCROLL_HIDE_PREVIEW_PX);
 
   const previewImageMaxHeight = Math.min(420, Math.round(windowHeight * 0.42));
 

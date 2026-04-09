@@ -36,7 +36,9 @@ export function UsernameSetupScreen() {
             autoFocus
           />
 
-          {error ? <Text className="mb-4 text-center text-sm font-bold text-red-200">{error}</Text> : null}
+          {error ? (
+            <Text className="mb-4 text-center text-sm font-bold text-red-200">{error}</Text>
+          ) : null}
 
           <Pressable
             className="items-center rounded-lg bg-yellow-400 py-4 active:opacity-70 disabled:opacity-40"

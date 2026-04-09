@@ -1,6 +1,13 @@
 import { useRouter } from 'expo-router';
 import { ReactNode } from 'react';
-import { ImageBackground, ImageSourcePropType, Pressable, ScrollView, Text, View } from 'react-native';
+import {
+  ImageBackground,
+  ImageSourcePropType,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/atom/back-button';

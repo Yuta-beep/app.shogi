@@ -106,7 +106,7 @@ export function TutorialScreen() {
     setCurrentIndex((i) => Math.max(i - 1, 0));
   }, [isFirst]);
 
-  const charSize = Math.min(winW * 1.60, 920);
+  const charSize = Math.min(winW * 1.6, 920);
 
   return (
     <ImageBackground

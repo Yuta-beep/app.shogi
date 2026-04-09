@@ -8,6 +8,7 @@ import {
 } from '@/usecases/deck-builder/create-deck-builder-usecases';
 import { isApiDataSource } from '@/lib/config/data-source';
 import { supabase } from '@/lib/supabase/supabase-client';
+import { getDeckBuilderPieceCost } from '@/features/deck-builder/lib/deck-builder-piece-cost';
 import { CHAR_TO_CODE } from '@/features/stage-shogi/domain/piece-conversion';
 
 type BoardPlacement = {
@@ -21,50 +22,7 @@ const DECK_ROWS = 3;
 const DECK_ROW_OFFSET = BOARD_ROWS - DECK_ROWS;
 const DECK_COST_LIMIT = 70;
 
-const DEFAULT_DECK_PIECE_COST = 8;
-// HTML版 deck_builder.html の PIECE_COST_OVERRIDES から、現状の deck-builder で使われる想定の文字だけ抜粋
-// （未定義は DEFAULT_DECK_PIECE_COST）
-const PIECE_COST_OVERRIDES: Partial<Record<string, number>> = {
-  王: 0,
-  玉: 0,
-  歩: 1,
-  香: 2,
-  桂: 2,
-  銀: 3,
-  金: 4,
-  飛: 6,
-  角: 6,
-  // 駒ショップ由来（deck_builder.html の PIECE_COST_OVERRIDES から）
-  走: 2,
-  種: 8,
-  麒: 12,
-  舞: 8,
-  P: 7,
-  鳴: 5,
-  忍: 5,
-  影: 5,
-  砲: 7,
-  竜: 7,
-  鳳: 7,
-  炎: 7,
-  火: 7,
-  水: 7,
-  波: 7,
-  木: 8,
-  葉: 7,
-  光: 8,
-  星: 7,
-  闇: 5,
-  魔: 8,
-};
-
 const STANDARD_PIECE_CODES = new Set(['FU', 'KY', 'KE', 'GI', 'KI', 'KA', 'HI', 'OU']);
-
-function deckBuilderPieceCost(char: string | null | undefined): number {
-  if (!char) return 0;
-  if (char === '王' || char === '玉') return 0;
-  return PIECE_COST_OVERRIDES[char] ?? DEFAULT_DECK_PIECE_COST;
-}
 
 function isDeckBuilderSpecialChar(char: string | null | undefined): boolean {
   if (!char) return false;
@@ -142,8 +100,7 @@ function initialBoardPlacementsFromDecks(
       col: placement.colNo,
       piece: ownedByPieceId.get(placement.pieceId) ?? toOwnedPieceFromPlacement(placement),
     }))
-    .filter((placement) => isDeckAreaRow(placement.row))
-    ;
+    .filter((placement) => isDeckAreaRow(placement.row));
 }
 
 function pieceStock(piece: OwnedPiece): number {
@@ -282,7 +239,7 @@ export function useDeckBuilderScreen() {
 
   const deckAreaPlacements = boardPlacements.filter((placement) => isDeckAreaRow(placement.row));
   const deckTotalCost = deckAreaPlacements.reduce(
-    (sum, placement) => sum + deckBuilderPieceCost(placement.piece.char),
+    (sum, placement) => sum + getDeckBuilderPieceCost(placement.piece.char),
     0,
   );
   const deckSpecialPieceCount = deckAreaPlacements.filter((placement) =>
@@ -324,7 +281,7 @@ export function useDeckBuilderScreen() {
         const nextPlacements = [...withoutCell, { row, col, piece: selectedPieceForPlacement }];
         const nextDeckCost = nextPlacements
           .filter((placement) => isDeckAreaRow(placement.row))
-          .reduce((sum, placement) => sum + deckBuilderPieceCost(placement.piece.char), 0);
+          .reduce((sum, placement) => sum + getDeckBuilderPieceCost(placement.piece.char), 0);
         if (nextDeckCost > DECK_COST_LIMIT) {
           return prev;
         }

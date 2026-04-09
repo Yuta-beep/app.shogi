@@ -15,7 +15,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppLoadingScreen } from '@/components/organism/app-loading-screen';
-import { onlineBattleHtmlAssets, onlineBattleHtmlPreloadTargets } from '@/constants/online-battle-html-assets';
+import {
+  onlineBattleHtmlAssets,
+  onlineBattleHtmlPreloadTargets,
+} from '@/constants/online-battle-html-assets';
 import { homeAssets } from '@/constants/home-assets';
 import { parseOnlineBattleDisplay } from '@/features/online-battle/lib/parse-session-labels';
 import { useOnlineBattleScreen } from '@/features/online-battle/ui/use-online-battle-screen';
@@ -48,13 +51,16 @@ export function OnlineBattleScreen() {
     router.replace('/home');
   }, [router]);
 
-  const onLanConnect = useCallback((role: 'first' | 'second') => {
-    void playSe('tap');
-    const label = role === 'first' ? '先手' : '後手';
-    setLanStatusLine(
-      `${label}で入室リクエスト（モック: 実際の WebSocket 接続は未実装） — ${lanServerUrl} / ${lanRoomId}`,
-    );
-  }, [lanRoomId, lanServerUrl]);
+  const onLanConnect = useCallback(
+    (role: 'first' | 'second') => {
+      void playSe('tap');
+      const label = role === 'first' ? '先手' : '後手';
+      setLanStatusLine(
+        `${label}で入室リクエスト（モック: 実際の WebSocket 接続は未実装） — ${lanServerUrl} / ${lanRoomId}`,
+      );
+    },
+    [lanRoomId, lanServerUrl],
+  );
 
   if (isLoading || !areAssetsReady) {
     return <AppLoadingScreen imageSource={homeAssets.loadingImage} />;
@@ -71,7 +77,12 @@ export function OnlineBattleScreen() {
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={[styles.scrollContent, { paddingBottom: 32 }]}
         >
-          <View style={[styles.appColumn, { maxWidth: HTML_APP_MAX_WIDTH, width: '100%', alignSelf: 'center' }]}>
+          <View
+            style={[
+              styles.appColumn,
+              { maxWidth: HTML_APP_MAX_WIDTH, width: '100%', alignSelf: 'center' },
+            ]}
+          >
             {/* HTML .header */}
             <View style={styles.headerRow}>
               <View style={styles.headerLeft}>
@@ -145,23 +156,30 @@ export function OnlineBattleScreen() {
               <View style={styles.lanButtons}>
                 <Pressable
                   onPress={() => onLanConnect('first')}
-                  style={({ pressed }) => [styles.lanBtn, styles.lanBtnGreen, pressed && { opacity: 0.85 }]}
+                  style={({ pressed }) => [
+                    styles.lanBtn,
+                    styles.lanBtnGreen,
+                    pressed && { opacity: 0.85 },
+                  ]}
                 >
                   <Text style={styles.lanBtnText}>先手で入室</Text>
                 </Pressable>
                 <Pressable
                   onPress={() => onLanConnect('second')}
-                  style={({ pressed }) => [styles.lanBtn, styles.lanBtnBlue, pressed && { opacity: 0.85 }]}
+                  style={({ pressed }) => [
+                    styles.lanBtn,
+                    styles.lanBtnBlue,
+                    pressed && { opacity: 0.85 },
+                  ]}
                 >
                   <Text style={styles.lanBtnText}>後手で入室</Text>
                 </Pressable>
               </View>
-              {lanStatusLine ? (
-                <Text style={styles.lanStatus}>{lanStatusLine}</Text>
-              ) : null}
+              {lanStatusLine ? <Text style={styles.lanStatus}>{lanStatusLine}</Text> : null}
               <Text style={styles.lanFootnote}>
-                ※スマホから接続する場合: サーバーURLに <Text style={{ fontWeight: '800' }}>ws://（PCのIPアドレス）:8080</Text>{' '}
-                を入力（例: ws://192.168.1.5:8080）。同じWi-Fiにし、接続できない場合はPCのWindowsファイアウォールでポート8080を許可してください。
+                ※スマホから接続する場合: サーバーURLに{' '}
+                <Text style={{ fontWeight: '800' }}>ws://（PCのIPアドレス）:8080</Text> を入力（例:
+                ws://192.168.1.5:8080）。同じWi-Fiにし、接続できない場合はPCのWindowsファイアウォールでポート8080を許可してください。
               </Text>
             </View>
 
@@ -202,7 +220,8 @@ export function OnlineBattleScreen() {
                 <Text style={[styles.sideHeading, { marginTop: 12 }]}>対戦ログ</Text>
                 <View style={styles.logPanel}>
                   <Text style={styles.logLine}>
-                    <Text style={styles.logStrong}>システム</Text> 対戦準備中（盤面・駒操作は今後接続されます）
+                    <Text style={styles.logStrong}>システム</Text>{' '}
+                    対戦準備中（盤面・駒操作は今後接続されます）
                   </Text>
                 </View>
               </View>

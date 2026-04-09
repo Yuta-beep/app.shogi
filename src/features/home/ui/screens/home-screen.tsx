@@ -165,7 +165,10 @@ export function HomeScreen() {
             ) : null}
 
             {gachaModalPanel === 'help' ? (
-              <View className="z-30 justify-center bg-black/55 px-5" style={StyleSheet.absoluteFillObject}>
+              <View
+                className="z-30 justify-center bg-black/55 px-5"
+                style={StyleSheet.absoluteFillObject}
+              >
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="ヘルプを閉じてガチャ玉に戻る"
@@ -178,7 +181,8 @@ export function HomeScreen() {
                   >
                     <Text className="mb-3 text-lg font-black text-[#4b2e1f]">ガチャ玉の色</Text>
                     <Text className="mb-4 text-sm font-semibold leading-6 text-[#4b2e1f]">
-                      ガチャにおける当たり駒の出やすさは、ガチャ玉の色で確認できます。当たる確率が低い色から、白 → 青 → 赤 → 金 → 黒 の順です。
+                      ガチャにおける当たり駒の出やすさは、ガチャ玉の色で確認できます。当たる確率が低い色から、白
+                      → 青 → 赤 → 金 → 黒 の順です。
                     </Text>
                     <ScrollView className="mb-2" showsVerticalScrollIndicator={false}>
                       <View className="flex-row flex-wrap justify-center gap-x-3 gap-y-4">
