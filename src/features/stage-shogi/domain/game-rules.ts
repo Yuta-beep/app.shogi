@@ -85,7 +85,30 @@ export function mustPromoteByMove(piece: BoardPiece, to: BoardCell, boardSize = 
 }
 
 export function getHandCount(hands: HandsState, side: Side, pieceCode: string) {
-  return hands[side][pieceCode] ?? 0;
+  const want = pieceCode.toUpperCase();
+  let sum = 0;
+  for (const [k, v] of Object.entries(hands[side])) {
+    if (k.toUpperCase() === want && typeof v === 'number' && Number.isFinite(v)) {
+      sum += Math.max(0, Math.floor(v));
+    }
+  }
+  return sum;
+}
+
+/** API／SFEN マージで混在しうる駒コードの大文字小文字をまとめる */
+export function normalizeHandsStateKeys(hands: HandsState): HandsState {
+  function normBag(bag: Record<string, number>): Record<string, number> {
+    const out: Record<string, number> = {};
+    for (const [k, v] of Object.entries(bag)) {
+      if (typeof v !== 'number' || !Number.isFinite(v)) continue;
+      const n = Math.max(0, Math.floor(v));
+      if (n <= 0) continue;
+      const u = k.toUpperCase();
+      out[u] = (out[u] ?? 0) + n;
+    }
+    return out;
+  }
+  return { player: normBag(hands.player), enemy: normBag(hands.enemy) };
 }
 
 export function addHandPiece(
@@ -94,17 +117,31 @@ export function addHandPiece(
   pieceCode: string,
   delta = 1,
 ): HandsState {
+  const key = pieceCode.toUpperCase();
   const next: HandsState = {
     player: { ...hands.player },
     enemy: { ...hands.enemy },
   };
-  const current = next[side][pieceCode] ?? 0;
+  const bag = next[side];
+  let current = 0;
+  const toDelete: string[] = [];
+  for (const k of Object.keys(bag)) {
+    if (k.toUpperCase() === key) {
+      const v = bag[k];
+      if (typeof v === 'number' && Number.isFinite(v)) {
+        current += Math.max(0, Math.floor(v));
+      }
+      toDelete.push(k);
+    }
+  }
+  for (const k of toDelete) {
+    delete bag[k];
+  }
   const updated = current + delta;
   if (updated <= 0) {
-    delete next[side][pieceCode];
-  } else {
-    next[side][pieceCode] = updated;
+    return next;
   }
+  bag[key] = updated;
   return next;
 }
 

@@ -8,7 +8,7 @@
  * フロントハードコードへ逆流させない。
  */
 
-import type { HandsState } from '@/features/stage-shogi/domain/game-rules';
+import { createEmptyHandsState, type HandsState } from '@/features/stage-shogi/domain/game-rules';
 import type { PieceCatalogItem } from '@/domain/models/piece';
 
 export type PieceSfenMapping = {
@@ -219,4 +219,204 @@ export function toSfenHandsPure(hands: HandsState, mapping: PieceSfenMapping): s
       chunks.push(`${enemyCount > 1 ? String(enemyCount) : ''}${sfen.toLowerCase()}`);
   }
   return chunks.length > 0 ? chunks.join('') : '-';
+}
+
+// ── parseSfenHandsPart / handsFromCanonicalSfen ───────────────────────────────
+
+function handTokenSideIsPlayer(token: string): boolean {
+  const idx = token.search(/[a-zA-Z]/);
+  if (idx < 0) return true;
+  const c = token[idx]!;
+  return c >= 'A' && c <= 'Z';
+}
+
+type HandsPattern = { code: string; upper: string; len: number };
+
+function buildHandsPatterns(mapping: PieceSfenMapping): HandsPattern[] {
+  const patterns: HandsPattern[] = [];
+  for (const [code, sfen] of Object.entries(mapping.codeToSfen)) {
+    if (!sfen) continue;
+    const upper = sfen.toUpperCase();
+    patterns.push({ code, upper, len: upper.length });
+  }
+  for (const [sfenLetter, code] of Object.entries(mapping.sfenToCode.promoted)) {
+    const upper = `+${sfenLetter.toUpperCase()}`;
+    patterns.push({ code, upper, len: upper.length });
+  }
+  patterns.sort((a, b) => b.len - a.len || a.upper.localeCompare(b.upper));
+  return patterns;
+}
+
+/**
+ * SFEN の持ち駒部分（例: 2PCe, -）を HandsState に戻す。toSfenHandsPure の逆。
+ * USI 慣例どおり、先手側は大文字・後手側は小文字の駒字で区別する。
+ */
+export function parseSfenHandsPart(handsPart: string, mapping: PieceSfenMapping): HandsState {
+  const empty = createEmptyHandsState();
+  if (!handsPart || handsPart === '-') return empty;
+
+  const patterns = buildHandsPatterns(mapping);
+  const player: Record<string, number> = {};
+  const enemy: Record<string, number> = {};
+
+  let i = 0;
+  while (i < handsPart.length) {
+    let count = 1;
+    if (/\d/.test(handsPart[i]!)) {
+      let num = '';
+      while (i < handsPart.length && /\d/.test(handsPart[i]!)) {
+        num += handsPart[i]!;
+        i++;
+      }
+      count = Math.max(1, parseInt(num, 10) || 1);
+    }
+    if (i >= handsPart.length) break;
+
+    const rest = handsPart.slice(i);
+    let matched: { code: string; len: number; isPlayer: boolean } | null = null;
+    for (const { code, upper, len } of patterns) {
+      if (rest.length < len) continue;
+      const slice = rest.slice(0, len);
+      if (slice.toUpperCase() !== upper) continue;
+      matched = {
+        code,
+        len,
+        isPlayer: handTokenSideIsPlayer(slice),
+      };
+      break;
+    }
+
+    if (!matched) {
+      i += 1;
+      continue;
+    }
+
+    const bag = matched.isPlayer ? player : enemy;
+    bag[matched.code] = (bag[matched.code] ?? 0) + count;
+    i += matched.len;
+  }
+
+  return { player, enemy };
+}
+
+/**
+ * canonical position の SFEN 第3フィールドを持ち駒の真実とする。パース不能時は null。
+ */
+export function tryHandsStateFromCanonicalSfen(
+  sfen: string,
+  mapping: PieceSfenMapping,
+): HandsState | null {
+  if (!mapping.codeToSfen || Object.keys(mapping.codeToSfen).length === 0) return null;
+  const parts = sfen.trim().split(/\s+/);
+  const handsPart = parts[2];
+  if (handsPart === undefined) return null;
+  return parseSfenHandsPart(handsPart, mapping);
+}
+
+function totalHandPieceCount(h: HandsState): number {
+  let n = 0;
+  for (const v of Object.values(h.player)) {
+    if (typeof v === 'number' && Number.isFinite(v) && v > 0) n += Math.floor(v);
+  }
+  for (const v of Object.values(h.enemy)) {
+    if (typeof v === 'number' && Number.isFinite(v) && v > 0) n += Math.floor(v);
+  }
+  return n;
+}
+
+/** 持ち駒の「基本 8 種」（stage-shogi の reconcile と揃える） */
+const STANDARD_HAND_PIECE_CODES = new Set([
+  'FU',
+  'KY',
+  'KE',
+  'GI',
+  'KI',
+  'KA',
+  'HI',
+  'OU',
+]);
+
+function normalizedHandBagCounts(bag: Record<string, number>): Map<string, number> {
+  const m = new Map<string, number>();
+  for (const [k, v] of Object.entries(bag)) {
+    if (typeof v !== 'number' || !Number.isFinite(v)) continue;
+    const u = k.toUpperCase();
+    const n = Math.max(0, Math.floor(v));
+    m.set(u, (m.get(u) ?? 0) + n);
+  }
+  return m;
+}
+
+/**
+ * 総枚数が一致するとき: 歩香桂銀金角飛玉は JSON（取り駒が先に JSON に載るが SFEN が遅れるのを防ぐ）、
+ * それ以外の駒は SFEN（特殊駒の幽霊手持ちの是正）。
+ */
+function mergeStandardFromJsonExtendedFromSfen(jsonHands: HandsState, sfenHands: HandsState): HandsState {
+  const jp = normalizedHandBagCounts(jsonHands.player);
+  const je = normalizedHandBagCounts(jsonHands.enemy);
+  const sp = normalizedHandBagCounts(sfenHands.player);
+  const se = normalizedHandBagCounts(sfenHands.enemy);
+
+  const player: Record<string, number> = {};
+  const enemy: Record<string, number> = {};
+
+  const playerCodes = new Set<string>([...jp.keys(), ...sp.keys()]);
+  const enemyCodes = new Set<string>([...je.keys(), ...se.keys()]);
+
+  for (const code of playerCodes) {
+    if (STANDARD_HAND_PIECE_CODES.has(code)) {
+      const c = jp.get(code) ?? 0;
+      if (c > 0) player[code] = c;
+    } else {
+      const c = sp.get(code) ?? 0;
+      if (c > 0) player[code] = c;
+    }
+  }
+  for (const code of enemyCodes) {
+    if (STANDARD_HAND_PIECE_CODES.has(code)) {
+      const c = je.get(code) ?? 0;
+      if (c > 0) enemy[code] = c;
+    } else {
+      const c = se.get(code) ?? 0;
+      if (c > 0) enemy[code] = c;
+    }
+  }
+
+  return { player, enemy };
+}
+
+/**
+ * SFEN の持ち駒と API の hands を統合する。
+ * - 持ち駒が `-` や空なら JSON のみ。
+ * - JSON の総枚数が SFEN より多いときは JSON のみ（SFEN が取り駒より遅れている場合）。
+ * - JSON の方が少ないときは SFEN のみ（JSON が未更新のとき）。
+ * - 同数のときは標準駒は JSON、拡張駒は SFEN でマージ（幽霊の特殊駒を落としつつ歩などは JSON を信じる）。
+ */
+export function resolveHandsStateFromCanonicalSfenAndJson(
+  sfen: string,
+  mapping: PieceSfenMapping,
+  jsonHands: HandsState,
+): HandsState {
+  if (!mapping.codeToSfen || Object.keys(mapping.codeToSfen).length === 0) {
+    return jsonHands;
+  }
+  const parts = sfen.trim().split(/\s+/);
+  const handsPart = parts[2];
+  if (handsPart === undefined || handsPart === '' || handsPart === '-') {
+    return jsonHands;
+  }
+  const fromSfen = parseSfenHandsPart(handsPart, mapping);
+  const tj = totalHandPieceCount(jsonHands);
+  const ts = totalHandPieceCount(fromSfen);
+
+  if (ts === 0 && tj > 0) {
+    return jsonHands;
+  }
+  if (tj > ts) {
+    return jsonHands;
+  }
+  if (tj < ts) {
+    return fromSfen;
+  }
+  return mergeStandardFromJsonExtendedFromSfen(jsonHands, fromSfen);
 }

@@ -78,6 +78,11 @@ function asBoolean(value: unknown): boolean | null {
   return typeof value === 'boolean' ? value : null;
 }
 
+function normalizePieceMoveCode(value: unknown): string | null {
+  const s = asString(value);
+  return s ? s.toUpperCase() : null;
+}
+
 function parseMove(raw: unknown): BattleMove {
   const obj = asRecord(raw);
   if (!obj) {
@@ -86,7 +91,7 @@ function parseMove(raw: unknown): BattleMove {
 
   const toRow = asNumber(obj.toRow ?? obj.to_row);
   const toCol = asNumber(obj.toCol ?? obj.to_col);
-  const pieceCode = asString(obj.pieceCode ?? obj.piece_code);
+  const pieceCode = normalizePieceMoveCode(obj.pieceCode ?? obj.piece_code);
   const fromRow = obj.fromRow ?? obj.from_row ?? null;
   const fromCol = obj.fromCol ?? obj.from_col ?? null;
   if (
@@ -106,8 +111,8 @@ function parseMove(raw: unknown): BattleMove {
     toCol,
     pieceCode,
     promote: Boolean(obj.promote ?? false),
-    dropPieceCode: (obj.dropPieceCode ?? obj.drop_piece_code ?? null) as string | null,
-    capturedPieceCode: (obj.capturedPieceCode ?? obj.captured_piece_code ?? null) as string | null,
+    dropPieceCode: normalizePieceMoveCode(obj.dropPieceCode ?? obj.drop_piece_code),
+    capturedPieceCode: normalizePieceMoveCode(obj.capturedPieceCode ?? obj.captured_piece_code),
     notation: (obj.notation ?? null) as string | null,
   };
 }

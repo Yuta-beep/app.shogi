@@ -1,8 +1,11 @@
 import {
   createPieceSfenMapping,
+  parseSfenHandsPart,
+  resolveHandsStateFromCanonicalSfenAndJson,
   sfenCharToDisplayChar,
   toSfenBoardPure,
   toSfenHandsPure,
+  tryHandsStateFromCanonicalSfen,
 } from '@/features/stage-shogi/domain/piece-conversion';
 import type { HandsState } from '@/features/stage-shogi/domain/game-rules';
 
@@ -274,5 +277,62 @@ describe('piece conversion via DB-derived mapping', () => {
 
   it('returns - when no hands exist', () => {
     expect(toSfenHandsPure({ player: {}, enemy: {} }, pieceSfenMapping)).toBe('-');
+  });
+
+  it('round-trips hands SFEN with parseSfenHandsPart', () => {
+    const hands: HandsState = { player: { FU: 2, NIN: 1 }, enemy: { HOU: 1 } };
+    const sfenPart = toSfenHandsPure(hands, pieceSfenMapping);
+    expect(parseSfenHandsPart(sfenPart, pieceSfenMapping)).toEqual(hands);
+  });
+
+  it('parses enemy-only special piece from lowercase SFEN letter', () => {
+    expect(parseSfenHandsPart('e', pieceSfenMapping)).toEqual({
+      player: {},
+      enemy: { HOU: 1 },
+    });
+  });
+
+  it('tryHandsStateFromCanonicalSfen reads the third SFEN field', () => {
+    const sfen = '9/9/9/9/9/9/9/9/9 b 2PCe 1';
+    expect(tryHandsStateFromCanonicalSfen(sfen, pieceSfenMapping)).toEqual({
+      player: { FU: 2, NIN: 1 },
+      enemy: { HOU: 1 },
+    });
+  });
+
+  it('resolveHandsStateFromCanonicalSfenAndJson keeps JSON when SFEN hands is -', () => {
+    const json: HandsState = { player: { FU: 1 }, enemy: {} };
+    const sfen = '9/9/9/9/9/9/9/9/9 b - 1';
+    expect(resolveHandsStateFromCanonicalSfenAndJson(sfen, pieceSfenMapping, json)).toEqual(json);
+  });
+
+  it('resolveHandsStateFromCanonicalSfenAndJson prefers SFEN when it carries hands', () => {
+    const json: HandsState = { player: { HOU: 1 }, enemy: {} };
+    const sfen = '9/9/9/9/9/9/9/9/9 b e 1';
+    expect(resolveHandsStateFromCanonicalSfenAndJson(sfen, pieceSfenMapping, json)).toEqual({
+      player: {},
+      enemy: { HOU: 1 },
+    });
+  });
+
+  it('resolveHandsStateFromCanonicalSfenAndJson falls back to JSON when SFEN parses empty but JSON has pieces', () => {
+    const json: HandsState = { player: { FU: 1 }, enemy: {} };
+    const sfen = '9/9/9/9/9/9/9/9/9 b ??? 1';
+    expect(resolveHandsStateFromCanonicalSfenAndJson(sfen, pieceSfenMapping, json)).toEqual(json);
+  });
+
+  it('resolveHandsStateFromCanonicalSfenAndJson keeps JSON when it has more standard pieces than SFEN (stale SFEN after capture)', () => {
+    const json: HandsState = { player: { FU: 2 }, enemy: {} };
+    const sfen = '9/9/9/9/9/9/9/9/9 b P 1';
+    expect(resolveHandsStateFromCanonicalSfenAndJson(sfen, pieceSfenMapping, json)).toEqual(json);
+  });
+
+  it('resolveHandsStateFromCanonicalSfenAndJson uses full SFEN when JSON has fewer total pieces', () => {
+    const json: HandsState = { player: {}, enemy: {} };
+    const sfen = '9/9/9/9/9/9/9/9/9 b P 1';
+    expect(resolveHandsStateFromCanonicalSfenAndJson(sfen, pieceSfenMapping, json)).toEqual({
+      player: { FU: 1 },
+      enemy: {},
+    });
   });
 });

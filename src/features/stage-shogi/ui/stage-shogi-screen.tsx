@@ -16,6 +16,7 @@ import {
   createEmptyHandsState,
   getHandCount,
   getLegalTargetsFromVectors,
+  normalizeHandsStateKeys,
   Side,
   HandsState,
 } from '@/features/stage-shogi/domain/game-rules';
@@ -28,6 +29,7 @@ import {
   type PieceSfenMapping,
   toSfenBoardPure,
   toSfenHandsPure,
+  resolveHandsStateFromCanonicalSfenAndJson,
 } from '@/features/stage-shogi/domain/piece-conversion';
 import { useStageBattleScreen } from '@/features/stage-shogi/ui/use-stage-battle-screen';
 import { useAssetPreload } from '@/hooks/common/use-asset-preload';
@@ -45,7 +47,7 @@ import {
 } from '@/usecases/stage-battle/game-move-contract';
 import { LoadGameLegalMovesUseCase } from '@/usecases/stage-battle/load-game-legal-moves-usecase';
 import { RequestAiMoveUseCase } from '@/usecases/stage-battle/request-ai-move-usecase';
-import { PieceCatalogItem } from '@/usecases/piece-info/load-piece-catalog-usecase';
+import type { PieceCatalogItem } from '@/usecases/piece-info/load-piece-catalog-usecase';
 
 const BOARD_SIZE = 9;
 const BOARD_VIEWBOX = 900;
@@ -238,16 +240,74 @@ function uniqueTargetsFromMoves(moves: BattleMove[]): BoardCell[] {
   return out;
 }
 
+/**
+ * API／エンジンが返す駒キー（HOU / piece_… / canonical cannon 等）を、盤・手持ち・SFEN で共通の表示コードへ寄せる。
+ */
+function handKeyToDisplayPieceCode(rawKey: string, catalog: readonly PieceCatalogItem[]): string {
+  const trimmed = rawKey.trim();
+  if (!trimmed) return rawKey;
+  const upper = trimmed.toUpperCase();
+  if (Object.prototype.hasOwnProperty.call(CODE_TO_CHAR, upper)) return upper;
+
+  for (const it of catalog) {
+    const pc = it.pieceCode;
+    if (pc && pc.toUpperCase() === upper) {
+      const c = CHAR_TO_CODE[it.char];
+      return c ? c.toUpperCase() : upper;
+    }
+  }
+  const tl = trimmed.toLowerCase();
+  for (const it of catalog) {
+    const cc = it.canonicalCode;
+    if (cc && cc.toLowerCase() === tl) {
+      const c = CHAR_TO_CODE[it.char];
+      return c ? c.toUpperCase() : upper;
+    }
+  }
+  // 一部レスポンスで汎用プレースホルダのみ届く場合（砲＝HOU に寄せる）
+  if (upper === 'PIECE') {
+    const houItem = catalog.find((it) => CHAR_TO_CODE[it.char] === 'HOU');
+    if (houItem) return 'HOU';
+  }
+  return upper;
+}
+
+function remapHandsStateToDisplayPieceCodes(
+  hands: HandsState,
+  catalog: readonly PieceCatalogItem[],
+): HandsState {
+  function remapBag(bag: Record<string, number>): Record<string, number> {
+    const out: Record<string, number> = {};
+    for (const [k, v] of Object.entries(bag)) {
+      if (typeof v !== 'number' || !Number.isFinite(v)) continue;
+      const n = Math.max(0, Math.floor(v));
+      if (n <= 0) continue;
+      const display = handKeyToDisplayPieceCode(k, catalog).toUpperCase();
+      out[display] = (out[display] ?? 0) + n;
+    }
+    return out;
+  }
+  return { player: remapBag(hands.player), enemy: remapBag(hands.enemy) };
+}
+
 function legalMovesForBoardPiece(legalMoves: BattleMove[], row: number, col: number): BattleMove[] {
   return legalMoves.filter(
     (move) => move.dropPieceCode === null && move.fromRow === row && move.fromCol === col,
   );
 }
 
-function legalMovesForDropPiece(legalMoves: BattleMove[], pieceCode: string): BattleMove[] {
-  return legalMoves.filter(
-    (move) => move.fromRow === null && move.fromCol === null && move.dropPieceCode === pieceCode,
-  );
+function legalMovesForDropPiece(
+  legalMoves: BattleMove[],
+  pieceCode: string,
+  catalog: readonly PieceCatalogItem[],
+): BattleMove[] {
+  const want = handKeyToDisplayPieceCode(pieceCode, catalog).toUpperCase();
+  return legalMoves.filter((move) => {
+    if (move.fromRow !== null || move.fromCol !== null) return false;
+    const d = move.dropPieceCode;
+    if (d == null) return false;
+    return handKeyToDisplayPieceCode(d, catalog).toUpperCase() === want;
+  });
 }
 
 function legalMovesToTarget(legalMoves: BattleMove[], to: BoardCell): BattleMove[] {
@@ -280,16 +340,27 @@ function handsFromCanonical(position: BattleCanonicalPosition): HandsState {
 }
 
 function countPiecesOnBoardWithCode(pieces: BoardPiece[], side: Side, pieceCode: string): number {
+  const want = pieceCode.toUpperCase();
   let n = 0;
   for (const p of pieces) {
-    if (p.side === side && p.pieceCode === pieceCode) n += 1;
+    if (p.side !== side) continue;
+    const pc = p.pieceCode?.toUpperCase() ?? '';
+    if (pc === want) {
+      n += 1;
+      continue;
+    }
+    // SFEN 復元やマージで pieceCode が空でも、表示字から駒種を合わせられるようにする（特殊駒の二重計上防止）
+    if (!p.pieceCode && p.char) {
+      const fromChar = CHAR_TO_CODE[p.char]?.toUpperCase();
+      if (fromChar === want) n += 1;
+    }
   }
   return n;
 }
 
 /**
- * エンジン／永続化の不整合で、同一 pieceCode が盤上と手持ちに二重計上されることがある（主に標準外の特殊駒）。
- * 2 文字コード（FU / TO など標準・成り）と 8 種の基本駒は従来どおりサーバ値を信用する。
+ * エンジン／永続化の不整合で、同一駒が盤上と手持ちに二重計上されることがある（特殊駒・成り駒で顕在化しやすい）。
+ * 8 種の基本駒（未駒）はサーバの持ち駒カウントをそのまま使う。それ以外は盤上の枚数ぶん手持ちから減算する。
  */
 function reconcileExtendedPieceHandsAgainstBoard(
   hands: HandsState,
@@ -298,8 +369,7 @@ function reconcileExtendedPieceHandsAgainstBoard(
   function adjustBag(side: Side, bag: Record<string, number>): Record<string, number> {
     const next = { ...bag };
     for (const code of Object.keys(next)) {
-      if (STANDARD_PIECE_CODES.has(code)) continue;
-      if (code.length <= 2) continue;
+      if (STANDARD_PIECE_CODES.has(code.toUpperCase())) continue;
       const raw = next[code];
       const hc = typeof raw === 'number' && Number.isFinite(raw) ? Math.max(0, Math.floor(raw)) : 0;
       if (hc <= 0) {
@@ -967,15 +1037,29 @@ export function StageShogiScreen() {
       >,
     [pieceCatalog],
   );
-  const pieceDefsByCode = useMemo(
-    () =>
-      Object.fromEntries(
-        Object.entries(CODE_TO_CHAR)
-          .map(([code, char]) => [code, pieceDefsByChar[char]])
-          .filter((entry): entry is [string, PieceCatalogItem] => Boolean(entry[1])),
-      ),
-    [pieceDefsByChar],
-  );
+  const pieceDefsByCode = useMemo(() => {
+    const map: Record<string, PieceCatalogItem> = {};
+    for (const it of pieceCatalog) {
+      if (it.pieceCode) {
+        map[it.pieceCode.toUpperCase()] = it;
+      }
+      if (it.canonicalCode) {
+        map[it.canonicalCode.toUpperCase()] = it;
+        map[it.canonicalCode.toLowerCase()] = it;
+      }
+      const codeFromChar = CHAR_TO_CODE[it.char];
+      if (codeFromChar) {
+        map[codeFromChar.toUpperCase()] = it;
+      }
+    }
+    for (const [code, char] of Object.entries(CODE_TO_CHAR)) {
+      const item = pieceDefsByChar[char];
+      if (item) {
+        map[code] = item;
+      }
+    }
+    return map;
+  }, [pieceCatalog, pieceDefsByChar]);
   const promotedPieceDefsByCode = useMemo(
     () =>
       Object.fromEntries(
@@ -1025,9 +1109,17 @@ export function StageShogiScreen() {
     );
     const nextPieces = preserveMovedPieceIdentity(parsedPieces, preservedMovedPiece);
     const reconciledPieces = reconcilePieceIdentity(nextPieces, piecesRef.current);
-    const nextHands = reconcileExtendedPieceHandsAgainstBoard(
-      handsFromCanonical(position),
-      reconciledPieces,
+    const jsonHands = handsFromCanonical(position);
+    const baseHands = resolveHandsStateFromCanonicalSfenAndJson(
+      position.sfen,
+      pieceSfenMapping,
+      jsonHands,
+    );
+    const nextHands = remapHandsStateToDisplayPieceCodes(
+      normalizeHandsStateKeys(
+        reconcileExtendedPieceHandsAgainstBoard(baseHands, reconciledPieces),
+      ),
+      pieceCatalog,
     );
     setPieces(reconciledPieces);
     setHands(nextHands);
@@ -1474,7 +1566,7 @@ export function StageShogiScreen() {
     const tapped = { row, col };
     if (selectedDropPieceCode) {
       const dropMoves = legalMovesToTarget(
-        legalMovesForDropPiece(playerLegalMoves, selectedDropPieceCode),
+        legalMovesForDropPiece(playerLegalMoves, selectedDropPieceCode, pieceCatalog),
         tapped,
       );
       if (dropMoves.length > 0) {
@@ -1577,7 +1669,9 @@ export function StageShogiScreen() {
     if (pendingPromotion) return;
     if (getHandCount(hands, 'player', pieceCode) <= 0) return;
 
-    const targets = uniqueTargetsFromMoves(legalMovesForDropPiece(playerLegalMoves, pieceCode));
+    const targets = uniqueTargetsFromMoves(
+      legalMovesForDropPiece(playerLegalMoves, pieceCode, pieceCatalog),
+    );
     setSelectedCell(null);
     setSelectedDropPieceCode(pieceCode);
     setLegalTargets(targets);
@@ -1614,6 +1708,7 @@ export function StageShogiScreen() {
       <View className={`${compact ? 'mt-0' : 'mt-1'} flex-row flex-wrap gap-0`}>
         {entries.map((entry) => {
           const isPlayer = side === 'player';
+          const codeKey = entry.code.toUpperCase();
           const disabled =
             !isPlayer ||
             sideToMove !== 'player' ||
@@ -1621,17 +1716,18 @@ export function StageShogiScreen() {
             isCreatingGame ||
             isFinished ||
             pendingPromotion !== null;
-          const selected = isPlayer && selectedDropPieceCode === entry.code;
+          const selected =
+            isPlayer && selectedDropPieceCode != null && selectedDropPieceCode.toUpperCase() === codeKey;
           const handImageUri = getPieceImageUri(
-            pieceDefsByCode[entry.code]?.imageSignedUrl ?? null,
+            pieceDefsByCode[codeKey]?.imageSignedUrl ?? pieceDefsByCode[entry.code]?.imageSignedUrl ?? null,
           );
           return (
             <Pressable
-              key={`${side}-${entry.code}`}
-              testID={`hand-${side}-${entry.code}`}
+              key={`${side}-${codeKey}`}
+              testID={`hand-${side}-${codeKey}`}
               disabled={disabled}
               onPress={() => {
-                handleHandPiecePress(entry.code);
+                handleHandPiecePress(codeKey);
               }}
               className="px-0 py-0.5"
             >
@@ -1645,7 +1741,7 @@ export function StageShogiScreen() {
                     />
                   ) : (
                     <Text className="text-base font-black text-[#5d3b2e]">
-                      {CODE_TO_CHAR[entry.code] ?? entry.code}
+                      {CODE_TO_CHAR[codeKey] ?? entry.code}
                     </Text>
                   )}
                 </View>
