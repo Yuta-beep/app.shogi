@@ -1,28 +1,24 @@
+import { MaterialIcons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video';
-import { useEffect, useMemo } from 'react';
-import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useEffect, useMemo, useState } from 'react';
+import { ImageBackground, Modal, Pressable, ScrollView, Text, View } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppLoadingScreen } from '@/components/organism/app-loading-screen';
 import { BackButton } from '@/components/atom/back-button';
-import { GlobalHomeHud } from '@/components/organism/global-home-hud';
+import { mergeIntroBanners } from '@/constants/gacha-intro-banners';
+import {
+  bannerImageSource,
+  gachaRoomAssets,
+  resolveGachaBannerKey,
+} from '@/constants/gacha-room-assets';
 import { homeAssets } from '@/constants/home-assets';
 import { GachaRoomVM, useGachaRoomScreen } from '@/features/gacha-room/ui/use-gacha-room-screen';
-import { useAssetPreload } from '@/hooks/common/use-asset-preload';
 import { useScreenBgm } from '@/hooks/common/use-screen-bgm';
 import { playSe } from '@/lib/audio/audio-manager';
-
-const gachaAssets = {
-  draw1: require('../../../../assets/gacha/draw-1.png'),
-  draw0: require('../../../../assets/gacha/draw-0.png'),
-  drawGold: require('../../../../assets/gacha/draw-gold.png'),
-  videos: {
-    miss: require('../../../../assets/gacha/gacha-miss.mp4'),
-    hit: require('../../../../assets/gacha/gacha-hit.mp4'),
-  },
-} as const;
+import type { GachaBanner } from '@/usecases/gacha-room/load-gacha-lobby-usecase';
 
 function rarityColor(rarity: string): string {
   switch (rarity) {
@@ -39,15 +35,9 @@ function rarityColor(rarity: string): string {
   }
 }
 
-function ResultCard({ vm }: { vm: GachaRoomVM }) {
+function ResultBlock({ vm, selected }: { vm: GachaRoomVM; selected: GachaBanner | undefined }) {
   if (vm.phase === 'idle') {
-    return (
-      <View className="rounded-2xl border border-white/20 bg-white/10 p-4">
-        <Text className="text-sm text-slate-300">
-          上の各ガチャバナー右側のボタンからガチャを引けます。
-        </Text>
-      </View>
-    );
+    return <Text className="text-sm text-slate-100">まだガチャを引いていません。</Text>;
   }
 
   if (vm.phase === 'done' && vm.lastResult) {
@@ -55,14 +45,17 @@ function ResultCard({ vm }: { vm: GachaRoomVM }) {
     if (result.type === 'hit') {
       const pieceSource = result.piece.imageSignedUrl ? { uri: result.piece.imageSignedUrl } : null;
       return (
-        <View className="rounded-2xl border border-amber-300/50 bg-white/10 p-4">
-          <Text style={{ color: rarityColor(result.piece.rarity) }} className="text-lg font-black">
+        <View className="gap-2">
+          <Text
+            style={{ color: rarityColor(result.piece.rarity) }}
+            className="text-base font-black"
+          >
             {result.alreadyOwned
               ? `${result.piece.name}（${result.piece.rarity}）は既に所持！`
               : `${result.piece.name}（${result.piece.rarity}）を獲得！`}
           </Text>
           {pieceSource ? (
-            <View className="my-3 items-center">
+            <View className="items-center py-2">
               <Image
                 source={pieceSource}
                 contentFit="contain"
@@ -70,40 +63,33 @@ function ResultCard({ vm }: { vm: GachaRoomVM }) {
               />
             </View>
           ) : (
-            <Text className="my-3 text-center text-5xl text-white">{result.piece.char}</Text>
+            <Text className="py-2 text-center text-5xl text-white">{result.piece.char}</Text>
           )}
           <Text className="text-sm text-slate-200">{result.piece.description}</Text>
-          <Text className="mt-4 text-sm text-slate-300">
-            続けて引く場合は、上の各ガチャのボタンを押してください。
-          </Text>
-        </View>
-      );
-    } else {
-      const label = result.currency === 'gold' ? `金 x${result.amount}` : `歩 x${result.amount}`;
-      const currencyChar = result.currency === 'gold' ? '金' : '歩';
-      return (
-        <View className="rounded-2xl border border-white/20 bg-white/10 p-4">
-          <Text className="text-lg font-black text-slate-100">{`${currencyChar}を獲得！`}</Text>
-          <Text className="my-3 text-center text-5xl text-white">{currencyChar}</Text>
-          <Text className="text-sm text-slate-300">{`${label} の通貨が増えました。ショップで使いましょう。`}</Text>
-          <Text className="mt-4 text-sm text-slate-300">
-            続けて引く場合は、上の各ガチャのボタンを押してください。
+          <Text className="text-xs text-slate-400">
+            {selected
+              ? `続けて引く場合は「ガチャを引く」またはガチャ選択から${selected.name}を選んでください。`
+              : '続けて引く場合は「ガチャを引く」を押してください。'}
           </Text>
         </View>
       );
     }
+    const label = result.currency === 'gold' ? `金 x${result.amount}` : `歩 x${result.amount}`;
+    const currencyChar = result.currency === 'gold' ? '金' : '歩';
+    return (
+      <View className="gap-2">
+        <Text className="text-base font-black text-slate-100">{`${currencyChar}を獲得！`}</Text>
+        <Text className="py-2 text-center text-5xl text-white">{currencyChar}</Text>
+        <Text className="text-sm text-slate-300">{`${label} の通貨が増えました。ショップで使いましょう。`}</Text>
+      </View>
+    );
   }
 
-  // video / pieceOverlay 中は空カード
-  return (
-    <View className="rounded-2xl border border-white/20 bg-white/10 p-4">
-      <Text className="text-sm text-slate-300">抽選中…</Text>
-    </View>
-  );
+  return <Text className="text-sm text-slate-300">抽選中…</Text>;
 }
 
 function GachaVideoOverlay({ isHit, onEnd }: { isHit: boolean; onEnd: () => void }) {
-  const source = isHit ? gachaAssets.videos.hit : gachaAssets.videos.miss;
+  const source = isHit ? gachaRoomAssets.videos.hit : gachaRoomAssets.videos.miss;
   const player = useVideoPlayer(source, (p) => {
     p.play();
   });
@@ -178,22 +164,59 @@ function PieceOverlay({
   );
 }
 
+/** 一覧画面では常に draw-0 を使うガチャ（HTML 版の見た目に合わせる） */
+const INTRO_ALWAYS_DRAW0_KEYS = new Set<string>(['ukanmuri', 'hiHen']);
+
+function IntroDrawButton({
+  banner,
+  active,
+  onSelect,
+}: {
+  banner: GachaBanner;
+  active: boolean;
+  onSelect: () => void;
+}) {
+  const key = resolveGachaBannerKey(banner.key);
+  const alwaysDraw0 = INTRO_ALWAYS_DRAW0_KEYS.has(key);
+
+  let drawImage = gachaRoomAssets.draw1;
+  if (banner.usesGold) {
+    drawImage = gachaRoomAssets.drawGold;
+  } else if (alwaysDraw0 || active) {
+    drawImage = gachaRoomAssets.draw0;
+  }
+
+  const isPawnDraw = !banner.usesGold;
+  const size = isPawnDraw ? { width: 360, height: 144 } : { width: 240, height: 96 };
+
+  return (
+    <Pressable
+      onPress={() => {
+        void playSe('tap');
+        onSelect();
+      }}
+      className="items-center active:opacity-90"
+    >
+      <Image source={drawImage} contentFit="contain" style={size} />
+    </Pressable>
+  );
+}
+
 export function GachaRoomScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const vm = useGachaRoomScreen();
-  const remoteBannerUrls = useMemo(
-    () =>
-      vm.banners
-        .map((banner) => banner.imageSignedUrl)
-        .filter((url): url is string => typeof url === 'string' && url.length > 0),
-    [vm.banners],
-  );
-  const { isReady: areAssetsReady } = useAssetPreload(
-    [gachaAssets.draw1, gachaAssets.draw0, gachaAssets.drawGold, ...remoteBannerUrls],
-    {
-      enabled: !vm.isLoading,
-    },
-  );
+  const [introVisible, setIntroVisible] = useState(true);
+
+  const introBanners = useMemo(() => mergeIntroBanners(vm.banners), [vm.banners]);
+
+  const selectedBanner = useMemo(() => {
+    const sk = resolveGachaBannerKey(vm.selectedKey);
+    const fromApi = vm.banners.find((b) => resolveGachaBannerKey(b.key) === sk);
+    if (fromApi) return fromApi;
+    return introBanners.find((b) => b.key === sk) ?? introBanners[0];
+  }, [vm.banners, vm.selectedKey, introBanners]);
+
   useScreenBgm('gacha');
 
   useEffect(() => {
@@ -204,23 +227,63 @@ export function GachaRoomScreen() {
       .finally(() => undefined);
   }, [vm.lastResult]);
 
-  if (vm.isLoading || !areAssetsReady) {
+  if (vm.isLoading) {
     return <AppLoadingScreen imageSource={homeAssets.loadingImage} />;
   }
 
+  if (vm.loadError) {
+    return (
+      <SafeAreaView className="flex-1 justify-center px-6" style={{ backgroundColor: '#020617' }}>
+        <Text className="mb-6 text-center text-base text-slate-200">{vm.loadError}</Text>
+        <Pressable
+          onPress={() => {
+            void playSe('tap');
+            vm.reloadLobby();
+          }}
+          className="items-center rounded-xl bg-indigo-600 px-6 py-3 active:opacity-90"
+        >
+          <Text className="font-bold text-white">再読み込み</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => {
+            void playSe('tap');
+            router.back();
+          }}
+          className="mt-6 items-center py-2"
+        >
+          <Text className="text-slate-400">戻る</Text>
+        </Pressable>
+      </SafeAreaView>
+    );
+  }
+
   const isHit = vm.lastResult?.type === 'hit';
+  const canRoll = vm.phase === 'idle' || vm.phase === 'done';
+  const bgSource = selectedBanner
+    ? bannerImageSource(selectedBanner.key, selectedBanner.imageSignedUrl)
+    : gachaRoomAssets.draw1;
+
+  const currencyRow = (
+    <View className="flex-row flex-wrap items-center gap-2">
+      <View className="flex-row items-center gap-2 rounded-lg border border-white/20 bg-white/10 px-3 py-1.5">
+        <Text className="text-xs text-slate-100">歩</Text>
+        <Text className="font-bold text-amber-200">{vm.pawnCurrency}</Text>
+      </View>
+      <View className="flex-row items-center gap-2 rounded-lg border border-amber-300/40 bg-white/10 px-3 py-1.5">
+        <Text className="text-xs text-amber-100">金</Text>
+        <Text className="font-bold text-yellow-300">{vm.goldCurrency}</Text>
+      </View>
+    </View>
+  );
 
   return (
     <SafeAreaView
-      className="flex-1 bg-[#2f1b14]"
+      className="flex-1"
       edges={['left', 'right', 'bottom']}
-      style={{ position: 'relative' }}
+      style={{ position: 'relative', backgroundColor: '#020617' }}
     >
-      <GlobalHomeHud pawnCurrency={vm.pawnCurrency} goldCurrency={vm.goldCurrency} />
-      {/* 動画オーバーレイ */}
       {vm.phase === 'video' && <GachaVideoOverlay isHit={isHit} onEnd={vm.onVideoEnd} />}
 
-      {/* 駒イメージオーバーレイ */}
       {vm.phase === 'pieceOverlay' && vm.lastResult?.type === 'hit' && (
         <PieceOverlay
           char={vm.lastResult.piece.char}
@@ -229,89 +292,212 @@ export function GachaRoomScreen() {
         />
       )}
 
-      {/* ヘッダー */}
-      <View className="border-b border-[#f4c86a]/30 bg-[#3a152d] px-4 py-3">
-        <View className="flex-row items-center justify-between">
-          <Text className="text-lg font-black text-[#ffd56a]">ガチャルーム</Text>
-          <BackButton
-            onPress={() => {
-              void playSe('tap');
-              router.back();
-            }}
-          />
+      {/* HTML .gacha-currency-fixed に相当 */}
+      <View
+        pointerEvents="box-none"
+        style={{
+          position: 'absolute',
+          top: insets.top + 8,
+          right: 16,
+          zIndex: 50,
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 10,
+        }}
+      >
+        <View className="flex-row items-center gap-1">
+          <Text className="text-sm font-semibold text-slate-100">歩</Text>
+          <Text className="text-sm font-bold text-amber-300">{vm.pawnCurrency}</Text>
+        </View>
+        <View className="flex-row items-center gap-1">
+          <Text className="text-sm font-semibold text-slate-100">金</Text>
+          <Text className="text-sm font-bold text-yellow-300">{vm.goldCurrency}</Text>
         </View>
       </View>
 
-      <ScrollView className="flex-1" contentContainerClassName="gap-4 p-4 pb-8">
-        {vm.noticeMessage ? (
-          <View className="rounded-xl border border-amber-300/40 bg-amber-500/10 px-3 py-2">
-            <Text className="text-sm font-bold text-amber-200">{vm.noticeMessage}</Text>
+      {introVisible ? (
+        <ScrollView
+          className="flex-1"
+          contentContainerClassName="px-4 pb-10 pt-2"
+          style={{ paddingTop: insets.top + 40 }}
+          showsVerticalScrollIndicator
+        >
+          <View className="mb-6 rounded-2xl border border-indigo-400/30 bg-[#0f172a]/95 p-4">
+            <View className="mb-4 flex-row items-center">
+              <BackButton
+                onPress={() => {
+                  void playSe('tap');
+                  router.back();
+                }}
+              />
+            </View>
+            <Text className="mb-4 text-lg font-semibold text-white">ガチャ一覧</Text>
+            {introBanners.map((banner) => {
+              const active =
+                resolveGachaBannerKey(banner.key) === resolveGachaBannerKey(vm.selectedKey);
+              const src = bannerImageSource(banner.key, banner.imageSignedUrl);
+              return (
+                <View key={banner.key} className="mb-5">
+                  <View className="relative overflow-hidden rounded-xl border border-white/10">
+                    <Image source={src} contentFit="cover" style={{ width: '100%', height: 200 }} />
+                    <View className="absolute bottom-1 left-0 right-0 items-center">
+                      <IntroDrawButton
+                        banner={banner}
+                        active={active}
+                        onSelect={() => {
+                          vm.setSelectedKey(banner.key);
+                          setIntroVisible(false);
+                        }}
+                      />
+                    </View>
+                  </View>
+                  {banner.pieceRateText ? (
+                    <Text className="mt-2 text-center text-xs text-slate-300">
+                      {banner.pieceRateText}
+                    </Text>
+                  ) : null}
+                </View>
+              );
+            })}
           </View>
-        ) : null}
-
-        {/* バナー一覧 */}
-        {vm.banners.map((banner) => {
-          const active = banner.key === vm.selectedKey;
-          const drawImage = banner.usesGold
-            ? gachaAssets.drawGold
-            : active
-              ? gachaAssets.draw0
-              : gachaAssets.draw1;
-
-          return (
+        </ScrollView>
+      ) : (
+        <ScrollView
+          className="flex-1"
+          contentContainerClassName="flex-grow pb-10"
+          keyboardShouldPersistTaps="handled"
+        >
+          <ImageBackground
+            source={bgSource}
+            resizeMode="cover"
+            style={{ minHeight: 520 }}
+            imageStyle={{ opacity: 0.45 }}
+          >
             <View
-              key={banner.key}
-              className={`overflow-hidden rounded-2xl ${active ? 'bg-white/10' : 'bg-white/5'}`}
+              className="min-h-[520px] flex-1 bg-black/50 px-4 pb-8 pt-2"
+              style={{ paddingTop: insets.top + 48 }}
             >
+              {vm.noticeMessage ? (
+                <View className="mb-3 rounded-xl border border-amber-300/40 bg-amber-500/10 px-3 py-2">
+                  <Text className="text-sm font-bold text-amber-200">{vm.noticeMessage}</Text>
+                </View>
+              ) : null}
+
+              <View className="mb-4 flex-row flex-wrap items-start justify-between gap-3">
+                <View className="max-w-[70%]">
+                  <Text className="text-2xl font-black text-white drop-shadow-md">
+                    {selectedBanner?.name ?? 'ガチャルーム'}
+                  </Text>
+                  {selectedBanner?.description ? (
+                    <Text className="mt-1 text-sm text-slate-200">
+                      {selectedBanner.description}
+                    </Text>
+                  ) : selectedBanner?.pieceRateText ? (
+                    <Text className="mt-1 text-sm text-slate-200">
+                      {selectedBanner.pieceRateText}
+                    </Text>
+                  ) : null}
+                </View>
+                <View className="items-end gap-2">
+                  {currencyRow}
+                  <BackButton
+                    onPress={() => {
+                      void playSe('tap');
+                      router.back();
+                    }}
+                  />
+                </View>
+              </View>
+
+              {selectedBanner?.pieceRateText ? (
+                <View className="mb-4 self-end rounded-full bg-amber-500/30 px-3 py-1">
+                  <Text className="text-xs font-semibold text-amber-200">
+                    {selectedBanner.pieceRateText}
+                  </Text>
+                </View>
+              ) : null}
+
+              <View className="mb-4 rounded-xl border border-white/15 bg-white/10 p-4">
+                <View className="flex-row items-center gap-2">
+                  <MaterialIcons name="info" size={20} color="#bfdbfe" />
+                  <Text className="text-lg font-semibold text-white">ガチャ内容</Text>
+                </View>
+                <View className="mt-3 gap-2">
+                  {(selectedBanner?.lineup ?? []).map((entry, i) => (
+                    <View key={`${entry.char}-${i}`} className="flex-row gap-2">
+                      <MaterialIcons
+                        name="star"
+                        size={18}
+                        color="#fde68a"
+                        style={{ marginTop: 2 }}
+                      />
+                      <View className="flex-1">
+                        <Text className="font-semibold text-white">
+                          {entry.name}（{entry.rarity}）
+                        </Text>
+                        {typeof entry.description === 'string' &&
+                        entry.description.trim().length > 0 ? (
+                          <Text className="text-xs text-slate-300/90">
+                            {entry.description.trim()}
+                          </Text>
+                        ) : null}
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              </View>
+
+              <Pressable
+                disabled={!canRoll}
+                onPress={() => {
+                  void playSe('tap');
+                  if (!canRoll || !selectedBanner) return;
+                  void playSe('confirm');
+                  void vm.roll(selectedBanner.key);
+                }}
+                className="mb-6 w-full flex-row items-center justify-center gap-2 rounded-xl border-2 border-yellow-400/80 py-3.5 active:opacity-90 disabled:opacity-50"
+                style={{
+                  backgroundColor: '#c026d3',
+                  shadowColor: '#a855f7',
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.35,
+                  shadowRadius: 8,
+                }}
+              >
+                <MaterialIcons name="autorenew" color="#fff" size={24} />
+                <Text className="text-lg font-bold text-white">ガチャを引く</Text>
+              </Pressable>
+              <Text className="mb-2 text-center text-xs text-slate-400">
+                消費: 歩 x{selectedBanner?.pawnCost ?? 0} / 金 x{selectedBanner?.goldCost ?? 0}
+              </Text>
+
+              <View className="rounded-xl border border-white/15 bg-white/10 p-4">
+                <View className="mb-2 flex-row items-center gap-2">
+                  <MaterialIcons name="thumb-up" size={20} color="#bef264" />
+                  <Text className="text-lg font-semibold text-white">今回の結果</Text>
+                </View>
+                <ResultBlock vm={vm} selected={selectedBanner} />
+              </View>
+
+              <Text className="mx-1 mt-6 text-center text-xs leading-5 text-slate-400">
+                ※ 当たり駒は駒コレクションに記録されます。{'\n'}※
+                はずれの場合でも歩や金の通貨が返却され、ショップで利用できます。
+              </Text>
+
               <Pressable
                 onPress={() => {
                   void playSe('tap');
-                  vm.setSelectedKey(banner.key);
+                  setIntroVisible(true);
                 }}
-                className="active:scale-[0.99]"
+                className="mx-auto mt-6 flex-row items-center gap-2 rounded-lg border border-white/30 bg-white/10 px-4 py-2 active:bg-white/20"
               >
-                <Image
-                  source={
-                    banner.imageSignedUrl ? { uri: banner.imageSignedUrl } : gachaAssets.draw1
-                  }
-                  contentFit="cover"
-                  style={{ width: '100%', height: 120 }}
-                />
+                <MaterialIcons name="arrow-back" color="#fff" size={18} />
+                <Text className="text-sm font-semibold text-white">ガチャ選択画面に戻る</Text>
               </Pressable>
-
-              <View className="flex-row items-center justify-between px-3 py-3">
-                <View>
-                  <Text className="text-base font-black text-white">{banner.name}</Text>
-                  <Text className="text-xs text-slate-300">{banner.rareRateText}</Text>
-                  <Text className="text-xs text-slate-400">
-                    {`消費: 歩 x${banner.pawnCost} / 金 x${banner.goldCost}`}
-                  </Text>
-                </View>
-                <Pressable
-                  onPress={() => {
-                    void playSe('tap');
-                    vm.setSelectedKey(banner.key);
-                    if (vm.phase === 'idle' || vm.phase === 'done') {
-                      void playSe('confirm');
-                      void vm.roll(banner.key);
-                    }
-                  }}
-                  className="active:scale-95"
-                >
-                  <Image
-                    source={drawImage}
-                    contentFit="contain"
-                    style={{ width: 140, height: 56 }}
-                  />
-                </Pressable>
-              </View>
             </View>
-          );
-        })}
-
-        {/* 結果カード */}
-        <ResultCard vm={vm} />
-      </ScrollView>
+          </ImageBackground>
+        </ScrollView>
+      )}
     </SafeAreaView>
   );
 }

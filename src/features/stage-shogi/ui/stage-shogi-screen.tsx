@@ -10,6 +10,7 @@ import { homeAssets } from '@/constants/home-assets';
 import { getNormalDungeonStagePreviewSource } from '@/constants/normal-dungeon-stage-previews';
 import { UiScreenShell } from '@/components/organism/ui-screen-shell';
 import {
+  addHandPiece,
   BoardCell,
   BoardPiece as RuleBoardPiece,
   createEmptyHandsState,
@@ -278,6 +279,47 @@ function handsFromCanonical(position: BattleCanonicalPosition): HandsState {
   };
 }
 
+function countPiecesOnBoardWithCode(pieces: BoardPiece[], side: Side, pieceCode: string): number {
+  let n = 0;
+  for (const p of pieces) {
+    if (p.side === side && p.pieceCode === pieceCode) n += 1;
+  }
+  return n;
+}
+
+/**
+ * エンジン／永続化の不整合で、同一 pieceCode が盤上と手持ちに二重計上されることがある（主に標準外の特殊駒）。
+ * 2 文字コード（FU / TO など標準・成り）と 8 種の基本駒は従来どおりサーバ値を信用する。
+ */
+function reconcileExtendedPieceHandsAgainstBoard(
+  hands: HandsState,
+  pieces: BoardPiece[],
+): HandsState {
+  function adjustBag(side: Side, bag: Record<string, number>): Record<string, number> {
+    const next = { ...bag };
+    for (const code of Object.keys(next)) {
+      if (STANDARD_PIECE_CODES.has(code)) continue;
+      if (code.length <= 2) continue;
+      const raw = next[code];
+      const hc = typeof raw === 'number' && Number.isFinite(raw) ? Math.max(0, Math.floor(raw)) : 0;
+      if (hc <= 0) {
+        delete next[code];
+        continue;
+      }
+      const bc = countPiecesOnBoardWithCode(pieces, side, code);
+      if (bc <= 0) continue;
+      const adjusted = Math.max(0, hc - bc);
+      if (adjusted <= 0) delete next[code];
+      else next[code] = adjusted;
+    }
+    return next;
+  }
+  return {
+    player: adjustBag('player', hands.player),
+    enemy: adjustBag('enemy', hands.enemy),
+  };
+}
+
 function piecesFromCanonicalBoardState(
   position: BattleCanonicalPosition,
   pieceDefsByCode: Partial<Record<string, PieceCatalogItem>>,
@@ -424,15 +466,15 @@ function piecesFromCanonicalPosition(
   for (const piece of next) {
     mergedByKey.set(`${piece.side}:${piece.row}:${piece.col}`, piece);
   }
+  // boardState にだけ存在する駒（SFEN に載らない特殊駒など）を落とさない
   for (const piece of boardStatePieces) {
     const key = `${piece.side}:${piece.row}:${piece.col}`;
-    if (!mergedByKey.has(key)) {
-      continue;
+    const existing = mergedByKey.get(key);
+    if (existing) {
+      mergedByKey.set(key, { ...existing, ...piece });
+    } else {
+      mergedByKey.set(key, piece);
     }
-    mergedByKey.set(key, {
-      ...mergedByKey.get(key)!,
-      ...piece,
-    });
   }
   return [...mergedByKey.values()];
 }
@@ -983,7 +1025,10 @@ export function StageShogiScreen() {
     );
     const nextPieces = preserveMovedPieceIdentity(parsedPieces, preservedMovedPiece);
     const reconciledPieces = reconcilePieceIdentity(nextPieces, piecesRef.current);
-    const nextHands = handsFromCanonical(position);
+    const nextHands = reconcileExtendedPieceHandsAgainstBoard(
+      handsFromCanonical(position),
+      reconciledPieces,
+    );
     setPieces(reconciledPieces);
     setHands(nextHands);
     setSideToMove(position.sideToMove);
@@ -1327,13 +1372,7 @@ export function StageShogiScreen() {
           imageSignedUrl: pieceDef?.imageSignedUrl ?? null,
         },
       ]);
-      setHands((prev) => ({
-        ...prev,
-        [actorSide]: {
-          ...prev[actorSide],
-          [pieceCode]: Math.max(0, (prev[actorSide][pieceCode] ?? 1) - 1),
-        },
-      }));
+      setHands((prev) => addHandPiece(prev, actorSide, pieceCode, -1));
     } else if (move.fromRow !== null && move.fromCol !== null) {
       const fromRow = move.fromRow;
       const fromCol = move.fromCol;

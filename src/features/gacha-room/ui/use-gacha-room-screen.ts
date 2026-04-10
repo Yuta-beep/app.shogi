@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { ApiClientError } from '@/infra/http/api-client';
 import { GachaBanner } from '@/usecases/gacha-room/load-gacha-lobby-usecase';
@@ -12,6 +12,9 @@ export type GachaPhase = 'idle' | 'rolling' | 'video' | 'pieceOverlay' | 'done';
 
 export type GachaRoomVM = {
   isLoading: boolean;
+  /** ロビー取得失敗時のみ */
+  loadError: string | null;
+  reloadLobby: () => void;
   selectedKey: GachaBanner['key'];
   setSelectedKey: (key: GachaBanner['key']) => void;
   banners: GachaBanner[];
@@ -27,6 +30,7 @@ export type GachaRoomVM = {
 
 export function useGachaRoomScreen(): GachaRoomVM {
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedKey, setSelectedKey] = useState<GachaBanner['key']>('ukanmuri');
   const [banners, setBanners] = useState<GachaBanner[]>([]);
   const [pawnCurrency, setPawnCurrency] = useState(0);
@@ -39,13 +43,12 @@ export function useGachaRoomScreen(): GachaRoomVM {
   const loadUseCase = useMemo(() => createLoadGachaLobbyUseCase(), []);
   const rollUseCase = useMemo(() => createRollGachaUseCase(), []);
 
-  useEffect(() => {
-    let active = true;
+  const reloadLobby = useCallback(() => {
     setIsLoading(true);
+    setLoadError(null);
     loadUseCase
       .execute()
       .then((snapshot) => {
-        if (!active) return;
         setBanners(snapshot.banners);
         if (snapshot.banners.length > 0) {
           setSelectedKey(snapshot.banners[0].key);
@@ -53,13 +56,19 @@ export function useGachaRoomScreen(): GachaRoomVM {
         setPawnCurrency(snapshot.pawnCurrency);
         setGoldCurrency(snapshot.goldCurrency);
       })
+      .catch((e: unknown) => {
+        const msg = e instanceof Error ? e.message : 'ガチャ一覧の取得に失敗しました';
+        setLoadError(msg);
+        setBanners([]);
+      })
       .finally(() => {
-        if (active) setIsLoading(false);
+        setIsLoading(false);
       });
-    return () => {
-      active = false;
-    };
   }, [loadUseCase]);
+
+  useEffect(() => {
+    reloadLobby();
+  }, [reloadLobby]);
 
   async function roll(gachaKey?: GachaBanner['key']) {
     if (isRollingRef.current) return;
@@ -108,6 +117,8 @@ export function useGachaRoomScreen(): GachaRoomVM {
 
   return {
     isLoading,
+    loadError,
+    reloadLobby,
     selectedKey,
     setSelectedKey,
     banners,
