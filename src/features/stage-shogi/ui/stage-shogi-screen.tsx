@@ -253,47 +253,6 @@ function legalMovesToTarget(legalMoves: BattleMove[], to: BoardCell): BattleMove
   return legalMoves.filter((move) => move.toRow === to.row && move.toCol === to.col);
 }
 
-function isSpecialPieceCode(pieceCode: string | null | undefined): boolean {
-  if (!pieceCode) return false;
-  return !STANDARD_PIECE_CODES.has(pieceCode);
-}
-
-function reconcileHandsAfterSpecialDrop(
-  syncedHands: HandsState,
-  prevHands: HandsState,
-  actorSide: Side,
-  move?: BattleMove,
-): HandsState {
-  if (!move?.dropPieceCode) return syncedHands;
-  if (!isSpecialPieceCode(move.dropPieceCode)) return syncedHands;
-
-  const pieceCode = move.dropPieceCode;
-  const prevCount = prevHands[actorSide][pieceCode] ?? 0;
-  const syncedCount = syncedHands[actorSide][pieceCode] ?? 0;
-  const expectedMax = Math.max(0, prevCount - 1);
-  if (syncedCount <= expectedMax) return syncedHands;
-
-  const nextSideHands = { ...syncedHands[actorSide] };
-  if (expectedMax <= 0) {
-    delete nextSideHands[pieceCode];
-  } else {
-    nextSideHands[pieceCode] = expectedMax;
-  }
-
-  return {
-    ...syncedHands,
-    [actorSide]: nextSideHands,
-  };
-}
-
-function isBackwardEnemyPawnMove(move: BattleMove, movingPiece: BoardPiece | null): boolean {
-  if (move.fromRow == null || move.fromCol == null) return false;
-  if (move.toCol !== move.fromCol) return false;
-  if (move.toRow !== move.fromRow - 1) return false;
-  const pieceCode = movingPiece?.pieceCode ?? move.pieceCode ?? null;
-  return movingPiece?.side === 'enemy' && pieceCode === 'FU';
-}
-
 function pieceCharFromCode(pieceCode: string, side: Side, promoted: boolean) {
   if (promoted && PROMOTED_CODE_TO_CHAR[pieceCode]) {
     return PROMOTED_CODE_TO_CHAR[pieceCode];
@@ -779,18 +738,6 @@ const BoardHighlightsLayer = memo(function BoardHighlightsLayer({
           strokeWidth={4}
         />
       ))}
-      {enemyPreviewTargets.map((target) => (
-        <Rect
-          key={`enemy-preview-${target.row}-${target.col}`}
-          x={target.col * BOARD_CELL}
-          y={target.row * BOARD_CELL}
-          width={BOARD_CELL}
-          height={BOARD_CELL}
-          fill="#dc262655"
-          stroke="#dc2626"
-          strokeWidth={4}
-        />
-      ))}
       {aiPreviewTarget ? (
         <Rect
           key={`ai-preview-${aiPreviewTarget.row}-${aiPreviewTarget.col}`}
@@ -803,6 +750,18 @@ const BoardHighlightsLayer = memo(function BoardHighlightsLayer({
           strokeWidth={4}
         />
       ) : null}
+      {enemyPreviewTargets.map((target) => (
+        <Rect
+          key={`enemy-preview-${target.row}-${target.col}`}
+          x={target.col * BOARD_CELL}
+          y={target.row * BOARD_CELL}
+          width={BOARD_CELL}
+          height={BOARD_CELL}
+          fill="#dc262622"
+          stroke="#dc2626"
+          strokeWidth={4}
+        />
+      ))}
     </Svg>
   );
 });
@@ -836,7 +795,7 @@ const BoardTouchLayer = memo(function BoardTouchLayer({
             onLongPress={() => {
               onCellLongPress(rowIndex, colIndex);
             }}
-            delayLongPress={300}
+            delayLongPress={350}
           />
         )),
       )}
@@ -905,8 +864,8 @@ export function StageShogiScreen() {
   const [selectedDropPieceCode, setSelectedDropPieceCode] = useState<string | null>(null);
   const [legalTargets, setLegalTargets] = useState<BoardCell[]>([]);
   const [aiPreviewTarget, setAiPreviewTarget] = useState<BoardCell | null>(null);
-  const [enemyPreviewTargets, setEnemyPreviewTargets] = useState<BoardCell[]>([]);
   const [playerLegalMoves, setPlayerLegalMoves] = useState<BattleMove[]>([]);
+  const [enemyPreviewTargets, setEnemyPreviewTargets] = useState<BoardCell[]>([]);
   const [isLoadingPlayerLegalMoves, setIsLoadingPlayerLegalMoves] = useState(false);
   const [hands, setHands] = useState<HandsState>(createEmptyHandsState());
   const [pendingPromotion, setPendingPromotion] = useState<PendingPromotion | null>(null);
@@ -915,11 +874,9 @@ export function StageShogiScreen() {
   const [winner, setWinner] = useState<Side | null>(null);
   const [clearRewardText, setClearRewardText] = useState<string | null>(null);
   const [skillActivationText, setSkillActivationText] = useState<string | null>(null);
-  const [inspectedPiece, setInspectedPiece] = useState<{
-    side: Side;
+  const [inspectingPiece, setInspectingPiece] = useState<{
     char: string;
     name: string;
-    skill: string;
     desc: string;
     move: string;
     imageSignedUrl: string | null;
@@ -932,7 +889,6 @@ export function StageShogiScreen() {
   const requestAiMoveUseCase = useMemo(() => new RequestAiMoveUseCase(), []);
   const isMountedRef = useRef(true);
   const piecesRef = useRef<BoardPiece[]>([]);
-  const handsRef = useRef<HandsState>(createEmptyHandsState());
   const stateHashRef = useRef<string | null>(null);
   const handleCellPressRef = useRef<(row: number, col: number) => void>(() => undefined);
   const hasEnteredBattleRef = useRef(false);
@@ -960,10 +916,6 @@ export function StageShogiScreen() {
   useEffect(() => {
     stateHashRef.current = stateHash;
   }, [stateHash]);
-
-  useEffect(() => {
-    handsRef.current = hands;
-  }, [hands]);
 
   const pieceDefsByChar = useMemo(
     () =>
@@ -1021,10 +973,6 @@ export function StageShogiScreen() {
     position: BattleCanonicalPosition,
     game: BattleGameStatus,
     preservedMovedPiece?: PreservedMovedPiece,
-    lastAppliedMove?: {
-      actorSide: Side;
-      move: BattleMove;
-    },
   ): Side | null {
     const parsedPieces = piecesFromCanonicalPosition(
       position,
@@ -1035,15 +983,7 @@ export function StageShogiScreen() {
     );
     const nextPieces = preserveMovedPieceIdentity(parsedPieces, preservedMovedPiece);
     const reconciledPieces = reconcilePieceIdentity(nextPieces, piecesRef.current);
-    const nextHandsRaw = handsFromCanonical(position);
-    const nextHands = lastAppliedMove
-      ? reconcileHandsAfterSpecialDrop(
-          nextHandsRaw,
-          handsRef.current,
-          lastAppliedMove.actorSide,
-          lastAppliedMove.move,
-        )
-      : nextHandsRaw;
+    const nextHands = handsFromCanonical(position);
     setPieces(reconciledPieces);
     setHands(nextHands);
     setSideToMove(position.sideToMove);
@@ -1051,8 +991,8 @@ export function StageShogiScreen() {
     setSelectedCell(null);
     setSelectedDropPieceCode(null);
     setLegalTargets([]);
-    setAiPreviewTarget(null);
     setEnemyPreviewTargets([]);
+    setAiPreviewTarget(null);
     setPlayerLegalMoves([]);
     setPendingPromotion(null);
     setStateHash(position.stateHash);
@@ -1104,8 +1044,8 @@ export function StageShogiScreen() {
     setSelectedCell(null);
     setSelectedDropPieceCode(null);
     setLegalTargets([]);
-    setAiPreviewTarget(null);
     setEnemyPreviewTargets([]);
+    setAiPreviewTarget(null);
     setPlayerLegalMoves([]);
     setHands(createEmptyHandsState());
     setPendingPromotion(null);
@@ -1113,7 +1053,6 @@ export function StageShogiScreen() {
     setWinner(null);
     setClearRewardText(null);
     setSkillActivationText(null);
-    setInspectedPiece(null);
     if (skillToastTimeoutRef.current) {
       clearTimeout(skillToastTimeoutRef.current);
       skillToastTimeoutRef.current = null;
@@ -1304,10 +1243,8 @@ export function StageShogiScreen() {
 
       let preservedMovedPiece: PreservedMovedPiece | undefined;
       const selectedMove = response.selectedMove;
-      let selectedMoveSourcePiece: BoardPiece | null = null;
       if (selectedMove?.fromRow != null && selectedMove?.fromCol != null) {
         const moved = findPieceAt(piecesRef.current, selectedMove.fromRow, selectedMove.fromCol);
-        selectedMoveSourcePiece = moved;
         if (moved && moved.side === 'enemy' && moved.imageSignedUrl) {
           preservedMovedPiece = {
             side: moved.side,
@@ -1322,27 +1259,20 @@ export function StageShogiScreen() {
       }
 
       if (selectedMove) {
-        const skipOptimisticForIllegalPawn = isBackwardEnemyPawnMove(
-          selectedMove,
-          selectedMoveSourcePiece,
-        );
-        if (!skipOptimisticForIllegalPawn) {
-          // CPU の着手先を 1 秒だけ先にハイライト表示する（通常移動・持ち駒打ちの両方）
-          setAiPreviewTarget({ row: selectedMove.toRow, col: selectedMove.toCol });
-          await new Promise<void>((resolve) => {
-            setTimeout(resolve, 1000);
-          });
-          setAiPreviewTarget(null);
-          applyOptimisticMove('enemy', selectedMove);
-          await waitForAiMoveVisualCommit();
-        }
+        // CPU の着手先を 1 秒だけ先にハイライト表示する（通常移動・持ち駒打ちの両方）
+        setAiPreviewTarget({ row: selectedMove.toRow, col: selectedMove.toCol });
+        await new Promise<void>((resolve) => {
+          setTimeout(resolve, 1000);
+        });
+        setAiPreviewTarget(null);
+        applyOptimisticMove('enemy', selectedMove);
+        await waitForAiMoveVisualCommit();
       }
 
       const nextWinner = syncFromCanonicalPosition(
         response.position,
         response.game,
         preservedMovedPiece,
-        selectedMove ? { actorSide: 'enemy', move: selectedMove } : undefined,
       );
       lastSuccessfulAiKeyRef.current = requestKey;
       if (nextWinner === 'player') {
@@ -1462,6 +1392,7 @@ export function StageShogiScreen() {
     setSelectedCell(null);
     setSelectedDropPieceCode(null);
     setLegalTargets([]);
+    setEnemyPreviewTargets([]);
     setPlayerLegalMoves([]);
     setPendingPromotion(null);
     setAiError(null);
@@ -1484,7 +1415,6 @@ export function StageShogiScreen() {
         result.position,
         result.game,
         preservedMovedPiece,
-        { actorSide: 'player', move },
       );
       if (nextWinner === 'player') {
         void claimStageClearRewardIfNeeded();
@@ -1503,31 +1433,6 @@ export function StageShogiScreen() {
     if (pendingPromotion) return;
 
     const tapped = { row, col };
-    const tappedPiece = findPieceAt(pieces, row, col);
-    if (tappedPiece?.side === 'enemy') {
-      const pieceDef = tappedPiece.promoted
-        ? tappedPiece.pieceCode
-          ? (promotedPieceDefsByCode[tappedPiece.pieceCode] ??
-            pieceDefsByCode[tappedPiece.pieceCode])
-          : undefined
-        : tappedPiece.pieceCode
-          ? pieceDefsByCode[tappedPiece.pieceCode]
-          : pieceDefsByChar[tappedPiece.char];
-      const vectors = pieceDef?.moveVectors ?? [];
-      const previewTargets =
-        vectors.length > 0
-          ? getLegalTargetsFromVectors(pieces, tappedPiece, vectors, BOARD_SIZE, {
-              canJump: pieceDef?.canJump ?? false,
-            })
-          : [];
-      setSelectedCell(null);
-      setSelectedDropPieceCode(null);
-      setLegalTargets([]);
-      setEnemyPreviewTargets(previewTargets);
-      return;
-    }
-    setEnemyPreviewTargets([]);
-
     if (selectedDropPieceCode) {
       const dropMoves = legalMovesToTarget(
         legalMovesForDropPiece(playerLegalMoves, selectedDropPieceCode),
@@ -1538,6 +1443,7 @@ export function StageShogiScreen() {
         return;
       }
       // 無効マスでは持ち駒選択を維持し、自駒タップ時のみ通常の駒選択へ戻す
+      const tappedPiece = findPieceAt(pieces, row, col);
       if (!tappedPiece || tappedPiece.side !== 'player') {
         return;
       }
@@ -1563,9 +1469,31 @@ export function StageShogiScreen() {
     }
 
     const piece = findPieceAt(pieces, row, col);
+    if (piece?.side === 'enemy') {
+      const enemyPieceDef =
+        piece.promoted && piece.pieceCode
+          ? (promotedPieceDefsByCode[piece.pieceCode] ?? pieceDefsByCode[piece.pieceCode])
+          : ((piece.pieceCode ? pieceDefsByCode[piece.pieceCode] : null) ??
+            pieceDefsByChar[piece.char] ??
+            null);
+
+      const targets = enemyPieceDef?.moveVectors?.length
+        ? getLegalTargetsFromVectors(pieces, piece, enemyPieceDef.moveVectors, BOARD_SIZE, {
+            canJump: enemyPieceDef.canJump === true,
+          })
+        : [];
+
+      setSelectedCell(null);
+      setSelectedDropPieceCode(null);
+      setLegalTargets([]);
+      setEnemyPreviewTargets(targets);
+      return;
+    }
+
     if (!piece || piece.side !== 'player') {
       setSelectedCell(null);
       setLegalTargets([]);
+      setEnemyPreviewTargets([]);
       return;
     }
 
@@ -1573,12 +1501,36 @@ export function StageShogiScreen() {
     if (targets.length === 0) {
       setSelectedCell(null);
       setLegalTargets([]);
+      setEnemyPreviewTargets([]);
       return;
     }
 
     setSelectedDropPieceCode(null);
     setSelectedCell({ row, col });
     setLegalTargets(targets);
+    setEnemyPreviewTargets([]);
+  }
+
+  function handleCellLongPress(row: number, col: number) {
+    const target = findPieceAt(pieces, row, col);
+    if (!target) return;
+
+    const lookupChar =
+      target.promoted && target.pieceCode
+        ? (PROMOTED_CODE_TO_CHAR[target.pieceCode] ?? target.char)
+        : target.char;
+    const detail =
+      pieceDefsByChar[lookupChar] ??
+      (target.pieceCode ? pieceDefsByCode[target.pieceCode] : undefined) ??
+      null;
+
+    setInspectingPiece({
+      char: lookupChar,
+      name: detail?.name ?? lookupChar,
+      desc: detail?.desc ?? '詳細は準備中です。',
+      move: detail?.move ?? '準備中',
+      imageSignedUrl: detail?.imageSignedUrl ?? target.imageSignedUrl ?? null,
+    });
   }
 
   function handleHandPiecePress(pieceCode: string) {
@@ -1590,6 +1542,7 @@ export function StageShogiScreen() {
     setSelectedCell(null);
     setSelectedDropPieceCode(pieceCode);
     setLegalTargets(targets);
+    setEnemyPreviewTargets([]);
   }
 
   handleCellPressRef.current = handleCellPress;
@@ -1597,31 +1550,6 @@ export function StageShogiScreen() {
   const handleBoardCellPress = useCallback((row: number, col: number) => {
     handleCellPressRef.current(row, col);
   }, []);
-
-  const handleBoardCellLongPress = useCallback(
-    (row: number, col: number) => {
-      const piece = findPieceAt(piecesRef.current, row, col);
-      if (!piece) return;
-      const pieceDef = piece.promoted
-        ? piece.pieceCode
-          ? promotedPieceDefsByCode[piece.pieceCode]
-          : undefined
-        : piece.pieceCode
-          ? pieceDefsByCode[piece.pieceCode]
-          : pieceDefsByChar[piece.char];
-      const displayChar = getDisplayChar(piece);
-      setInspectedPiece({
-        side: piece.side,
-        char: displayChar,
-        name: pieceDef?.name ?? displayChar,
-        skill: pieceDef?.skill ?? '準備中',
-        desc: pieceDef?.desc ?? `${displayChar}の詳細は準備中です。`,
-        move: pieceDef?.move ?? '準備中',
-        imageSignedUrl: piece.imageSignedUrl ?? pieceDef?.imageSignedUrl ?? null,
-      });
-    },
-    [pieceDefsByChar, pieceDefsByCode, promotedPieceDefsByCode],
-  );
 
   const handlePieceImageError = useCallback((placementKey: string) => {
     setFailedImageKeys((prev) => (prev[placementKey] ? prev : { ...prev, [placementKey]: true }));
@@ -1801,7 +1729,7 @@ export function StageShogiScreen() {
               />
               <BoardTouchLayer
                 onCellPress={handleBoardCellPress}
-                onCellLongPress={handleBoardCellLongPress}
+                onCellLongPress={handleCellLongPress}
               />
               <BoardPiecesLayer
                 pieces={pieces}
@@ -1876,37 +1804,41 @@ export function StageShogiScreen() {
           </View>
         </View>
       ) : null}
+
+      {selectedDropPieceCode && legalTargets.length === 0 ? (
+        <Text className="mt-2 text-xs text-red-600">その駒は打てる場所がありません。</Text>
+      ) : null}
       <Modal
-        visible={!!inspectedPiece}
+        visible={!!inspectingPiece}
         transparent
         animationType="fade"
-        onRequestClose={() => setInspectedPiece(null)}
+        onRequestClose={() => {
+          setInspectingPiece(null);
+        }}
       >
         <View className="flex-1 items-center justify-center bg-black/45 px-6">
           <View className="w-full max-w-sm rounded-xl bg-[#fff7e6] p-4">
-            {inspectedPiece?.imageSignedUrl ? (
+            {inspectingPiece?.imageSignedUrl ? (
               <Image
-                source={{ uri: inspectedPiece.imageSignedUrl }}
+                source={{ uri: inspectingPiece.imageSignedUrl }}
                 contentFit="contain"
                 style={{ width: 56, height: 56, alignSelf: 'center' }}
               />
             ) : (
               <Text className="text-center text-3xl font-black text-[#2f1b14]">
-                {inspectedPiece?.char}
+                {inspectingPiece?.char}
               </Text>
             )}
             <Text className="mt-1 text-center text-base font-black text-[#2f1b14]">
-              {`${inspectedPiece?.name ?? ''} (${inspectedPiece?.side === 'player' ? 'あなた' : 'CPU'})`}
+              {inspectingPiece?.name}
             </Text>
-            <Text className="mt-3 text-xs font-black text-[#7f1d1d]">【スキル】</Text>
-            <Text className="mt-1 text-sm text-[#1f2937]">{inspectedPiece?.skill}</Text>
             <Text className="mt-3 text-xs font-black text-[#7f1d1d]">【スキルの説明】</Text>
-            <Text className="mt-1 text-sm text-[#1f2937]">{inspectedPiece?.desc}</Text>
+            <Text className="mt-1 text-sm text-[#1f2937]">{inspectingPiece?.desc}</Text>
             <Text className="mt-3 text-xs font-black text-[#7f1d1d]">【行動範囲】</Text>
-            <Text className="mt-1 text-sm text-[#1f2937]">{inspectedPiece?.move}</Text>
+            <Text className="mt-1 text-sm text-[#1f2937]">{inspectingPiece?.move}</Text>
             <Pressable
               onPress={() => {
-                setInspectedPiece(null);
+                setInspectingPiece(null);
               }}
               className="mt-4 rounded-md bg-[#8b0000] px-3 py-2"
             >
@@ -1915,10 +1847,6 @@ export function StageShogiScreen() {
           </View>
         </View>
       </Modal>
-
-      {selectedDropPieceCode && legalTargets.length === 0 ? (
-        <Text className="mt-2 text-xs text-red-600">その駒は打てる場所がありません。</Text>
-      ) : null}
       {isAiThinking ? (
         <View className="absolute bottom-3 right-3 rounded-md bg-black/65 px-2 py-1">
           <Text className="text-xs font-bold text-white">Loading...</Text>

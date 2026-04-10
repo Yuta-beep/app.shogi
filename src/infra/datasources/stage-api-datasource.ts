@@ -1,3 +1,4 @@
+import type { StageBattleSetup } from '@/domain/repositories/stage-repository';
 import { getJson, postJson } from '@/infra/http/api-client';
 
 type StageListResponse = {
@@ -12,31 +13,6 @@ type StageListResponse = {
 type StageSelectResponse = {
   canStart: boolean;
   reason?: 'LOCKED' | 'NOT_FOUND';
-};
-
-type StageBattleSetupResponse = {
-  labels: {
-    stageLabel: string;
-    turnLabel: string;
-    handLabel: string;
-  };
-  board?: {
-    size: number;
-    placements: {
-      side: string;
-      row: number;
-      col: number;
-      piece: {
-        id: number;
-        code: string | null;
-        char: string | null;
-        name: string | null;
-        imageBucket: string | null;
-        imageKey: string | null;
-        imageSignedUrl: string | null;
-      };
-    }[];
-  };
 };
 
 type StageClearRewardResponse = {
@@ -76,9 +52,9 @@ export class StageApiDataSource {
     return postJson<StageSelectResponse>(`/api/v1/stages/${stageNo}/select`);
   }
 
-  async getBattleSetup(stageNo: number): Promise<StageBattleSetupResponse> {
+  async getBattleSetup(stageNo: number): Promise<StageBattleSetup> {
     const token = await this.getAccessToken();
-    return getJson<StageBattleSetupResponse>(`/api/v1/stages/${stageNo}/battle-setup`, { token });
+    return getJson<StageBattleSetup>(`/api/v1/stages/${stageNo}/battle-setup`, { token });
   }
 
   async postClearStage(stageNo: number): Promise<StageClearRewardResponse> {

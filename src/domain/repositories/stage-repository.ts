@@ -11,6 +11,10 @@ export type StageSelectResult = {
 };
 
 export type StageBattleSetup = {
+  stage?: {
+    stageNo: number;
+    stageName: string;
+  };
   labels: {
     stageLabel: string;
     turnLabel: string;

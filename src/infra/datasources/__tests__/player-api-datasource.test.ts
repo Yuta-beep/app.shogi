@@ -3,10 +3,18 @@ import { PlayerApiDataSource } from '../player-api-datasource';
 const mockGetJson: jest.Mock = jest.fn();
 const mockPutJson: jest.Mock = jest.fn();
 
-jest.mock('@/infra/http/api-client', () => ({
-  getJson: (...args: unknown[]) => mockGetJson(...args),
-  putJson: (...args: unknown[]) => mockPutJson(...args),
-}));
+jest.mock('@/infra/http/api-client', () => {
+  const actual =
+    jest.requireActual<typeof import('@/infra/http/api-client')>('@/infra/http/api-client');
+  return {
+    ...actual,
+    getJson: (...args: unknown[]) => mockGetJson(...args),
+    putJson: (...args: unknown[]) => mockPutJson(...args),
+  };
+});
+
+const { ApiClientError } =
+  jest.requireActual<typeof import('@/infra/http/api-client')>('@/infra/http/api-client');
 
 describe('PlayerApiDataSource', () => {
   const ds = new PlayerApiDataSource();
@@ -26,6 +34,58 @@ describe('PlayerApiDataSource', () => {
       mockGetJson.mockResolvedValueOnce({ displayName: null });
       const result = await ds.getDisplayName(token);
       expect(result).toBeNull();
+    });
+
+    it('falls back to /api/v1/me/snapshot when display-name returns HTML 404', async () => {
+      mockGetJson
+        .mockRejectedValueOnce(
+          new ApiClientError(
+            {
+              code: 'INVALID_JSON_RESPONSE',
+              message: 'Expected JSON but received HTML (status: 404)',
+            },
+            404,
+          ),
+        )
+        .mockResolvedValueOnce({ playerName: '  スナップショット名  ' });
+
+      const result = await ds.getDisplayName(token);
+
+      expect(mockGetJson).toHaveBeenNthCalledWith(1, '/api/v1/me/display-name', { token });
+      expect(mockGetJson).toHaveBeenNthCalledWith(2, '/api/v1/me/snapshot', { token });
+      expect(result).toBe('スナップショット名');
+    });
+
+    it('returns null when fallback snapshot has empty playerName', async () => {
+      mockGetJson
+        .mockRejectedValueOnce(
+          new ApiClientError({ code: 'INVALID_JSON_RESPONSE', message: 'HTML 404' }, 404),
+        )
+        .mockResolvedValueOnce({ playerName: '   ' });
+
+      const result = await ds.getDisplayName(token);
+      expect(result).toBeNull();
+    });
+
+    it('returns null when fallback snapshot is PLAYER_NOT_FOUND', async () => {
+      mockGetJson
+        .mockRejectedValueOnce(
+          new ApiClientError({ code: 'INVALID_JSON_RESPONSE', message: 'HTML 404' }, 404),
+        )
+        .mockRejectedValueOnce(
+          new ApiClientError({ code: 'PLAYER_NOT_FOUND', message: 'not found' }, 404),
+        );
+
+      const result = await ds.getDisplayName(token);
+      expect(result).toBeNull();
+    });
+
+    it('rethrows non-404 display-name errors', async () => {
+      mockGetJson.mockRejectedValueOnce(
+        new ApiClientError({ code: 'UNAUTHORIZED', message: 'no' }, 401),
+      );
+
+      await expect(ds.getDisplayName(token)).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
     });
   });
 

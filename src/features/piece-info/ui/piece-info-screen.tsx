@@ -136,8 +136,9 @@ export function PieceInfoScreen() {
 
           <ScrollView
             className="mt-1 flex-1"
-            showsVerticalScrollIndicator={false}
-            scrollEnabled={false}
+            showsVerticalScrollIndicator
+            nestedScrollEnabled
+            contentContainerStyle={{ paddingBottom: 28 }}
           >
             <View style={{ transform: [{ translateY: -24 }] }}>
               <View className="-mx-4 -mt-2 h-[300px] justify-center">

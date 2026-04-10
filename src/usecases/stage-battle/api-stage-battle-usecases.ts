@@ -35,8 +35,9 @@ export class ApiPrepareStageBattleUseCase implements PrepareStageBattleUseCase {
     }
 
     const setup = await this.repository.getBattleSetup(stageNo);
+    const stageName = setup.stage?.stageName?.trim();
     return {
-      stageLabel: setup.labels.stageLabel,
+      stageLabel: stageName && stageName.length > 0 ? stageName : setup.labels.stageLabel,
       turnLabel: setup.labels.turnLabel,
       handLabel: setup.labels.handLabel,
       boardSize: setup.board?.size ?? 9,
