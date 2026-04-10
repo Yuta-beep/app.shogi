@@ -1116,9 +1116,7 @@ export function StageShogiScreen() {
       jsonHands,
     );
     const nextHands = remapHandsStateToDisplayPieceCodes(
-      normalizeHandsStateKeys(
-        reconcileExtendedPieceHandsAgainstBoard(baseHands, reconciledPieces),
-      ),
+      normalizeHandsStateKeys(reconcileExtendedPieceHandsAgainstBoard(baseHands, reconciledPieces)),
       pieceCatalog,
     );
     setPieces(reconciledPieces);
@@ -1717,9 +1715,13 @@ export function StageShogiScreen() {
             isFinished ||
             pendingPromotion !== null;
           const selected =
-            isPlayer && selectedDropPieceCode != null && selectedDropPieceCode.toUpperCase() === codeKey;
+            isPlayer &&
+            selectedDropPieceCode != null &&
+            selectedDropPieceCode.toUpperCase() === codeKey;
           const handImageUri = getPieceImageUri(
-            pieceDefsByCode[codeKey]?.imageSignedUrl ?? pieceDefsByCode[entry.code]?.imageSignedUrl ?? null,
+            pieceDefsByCode[codeKey]?.imageSignedUrl ??
+              pieceDefsByCode[entry.code]?.imageSignedUrl ??
+              null,
           );
           return (
             <Pressable

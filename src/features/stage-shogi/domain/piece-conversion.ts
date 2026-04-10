@@ -325,16 +325,7 @@ function totalHandPieceCount(h: HandsState): number {
 }
 
 /** 持ち駒の「基本 8 種」（stage-shogi の reconcile と揃える） */
-const STANDARD_HAND_PIECE_CODES = new Set([
-  'FU',
-  'KY',
-  'KE',
-  'GI',
-  'KI',
-  'KA',
-  'HI',
-  'OU',
-]);
+const STANDARD_HAND_PIECE_CODES = new Set(['FU', 'KY', 'KE', 'GI', 'KI', 'KA', 'HI', 'OU']);
 
 function normalizedHandBagCounts(bag: Record<string, number>): Map<string, number> {
   const m = new Map<string, number>();
@@ -351,7 +342,10 @@ function normalizedHandBagCounts(bag: Record<string, number>): Map<string, numbe
  * 総枚数が一致するとき: 歩香桂銀金角飛玉は JSON（取り駒が先に JSON に載るが SFEN が遅れるのを防ぐ）、
  * それ以外の駒は SFEN（特殊駒の幽霊手持ちの是正）。
  */
-function mergeStandardFromJsonExtendedFromSfen(jsonHands: HandsState, sfenHands: HandsState): HandsState {
+function mergeStandardFromJsonExtendedFromSfen(
+  jsonHands: HandsState,
+  sfenHands: HandsState,
+): HandsState {
   const jp = normalizedHandBagCounts(jsonHands.player);
   const je = normalizedHandBagCounts(jsonHands.enemy);
   const sp = normalizedHandBagCounts(sfenHands.player);
