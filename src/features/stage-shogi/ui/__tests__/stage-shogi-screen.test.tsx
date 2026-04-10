@@ -131,6 +131,9 @@ jest.mock('@/components/organism/app-loading-screen', () => {
   };
 });
 
+/** handleAiMove 内のプレビュー待ち（1s）より長く取る（CI の waitFor デフォルトは短くて足りない） */
+const AI_STEP_WAIT_MS = 15_000;
+
 describe('StageShogiScreen ai call', () => {
   beforeEach(() => {
     mockPostJson.mockReset();
@@ -370,53 +373,63 @@ describe('StageShogiScreen ai call', () => {
     });
   });
 
-  it('uses backend legal moves for player movement and keeps canonical position rendering', async () => {
-    const { getByTestId, getByText } = render(<StageShogiScreen />);
+  it(
+    'uses backend legal moves for player movement and keeps canonical position rendering',
+    async () => {
+      const { getByTestId, getByText } = render(<StageShogiScreen />);
 
-    await waitFor(() => {
-      expect(mockPostJson).toHaveBeenCalledWith('/api/v1/games', expect.any(Object));
-    });
-    await waitFor(() => {
-      expect(mockGetJson).toHaveBeenCalledWith('/api/v1/games/game-1/legal-moves');
-    });
+      await waitFor(() => {
+        expect(mockPostJson).toHaveBeenCalledWith('/api/v1/games', expect.any(Object));
+      });
+      await waitFor(() => {
+        expect(mockGetJson).toHaveBeenCalledWith('/api/v1/games/game-1/legal-moves');
+      });
 
-    await waitFor(() => {
-      expect(getByText('角')).toBeTruthy();
-    });
+      await waitFor(() => {
+        expect(getByText('角')).toBeTruthy();
+      });
 
-    fireEvent.press(getByTestId('board-cell-4-4'));
-    fireEvent.press(getByTestId('board-cell-4-5'));
+      fireEvent.press(getByTestId('board-cell-4-4'));
+      fireEvent.press(getByTestId('board-cell-4-5'));
 
-    await waitFor(() => {
-      expect(mockPostJson).toHaveBeenCalledWith(
-        '/api/v1/games/game-1/moves',
-        expect.objectContaining({
-          moveNo: 1,
-          actorSide: 'player',
-          move: expect.objectContaining({
-            pieceCode: 'KA',
-            toRow: 4,
-            toCol: 5,
+      await waitFor(() => {
+        expect(mockPostJson).toHaveBeenCalledWith(
+          '/api/v1/games/game-1/moves',
+          expect.objectContaining({
+            moveNo: 1,
+            actorSide: 'player',
+            move: expect.objectContaining({
+              pieceCode: 'KA',
+              toRow: 4,
+              toCol: 5,
+            }),
           }),
-        }),
-      );
-    });
+        );
+      });
 
-    await waitFor(() => {
-      expect(mockPostJson).toHaveBeenCalledWith(
-        '/api/v1/ai/move',
-        expect.objectContaining({
-          gameId: 'game-1',
-          moveNo: 2,
-          engineConfig: {},
-        }),
+      await waitFor(
+        () => {
+          expect(mockPostJson).toHaveBeenCalledWith(
+            '/api/v1/ai/move',
+            expect.objectContaining({
+              gameId: 'game-1',
+              moveNo: 2,
+              engineConfig: {},
+            }),
+          );
+        },
+        { timeout: AI_STEP_WAIT_MS },
       );
-    });
 
-    await waitFor(() => {
-      expect(getByText('TURN 3')).toBeTruthy();
-    });
-  });
+      await waitFor(
+        () => {
+          expect(getByText('TURN 3')).toBeTruthy();
+        },
+        { timeout: AI_STEP_WAIT_MS },
+      );
+    },
+    AI_STEP_WAIT_MS + 10_000,
+  );
 
   it('uses backend legal drop targets instead of local drop calculation', async () => {
     const { getByTestId } = render(<StageShogiScreen />);
@@ -435,9 +448,12 @@ describe('StageShogiScreen ai call', () => {
       );
     });
 
-    await waitFor(() => {
-      expect(mockGetJson).toHaveBeenCalledTimes(2);
-    });
+    await waitFor(
+      () => {
+        expect(mockGetJson).toHaveBeenCalledTimes(2);
+      },
+      { timeout: AI_STEP_WAIT_MS },
+    );
 
     fireEvent.press(getByTestId('hand-player-FU'));
     fireEvent.press(getByTestId('board-cell-0-0'));
