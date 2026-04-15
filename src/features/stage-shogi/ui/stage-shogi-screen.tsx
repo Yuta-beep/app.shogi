@@ -2552,20 +2552,6 @@ export function StageShogiScreen() {
         {aiError ? <Text className="mt-1 text-xs text-red-600">{aiError}</Text> : null}
       </View>
 
-      <View className="mt-3 flex-row items-center gap-2">
-        <Pressable
-          className={`rounded-lg px-4 py-2 ${isAiThinking || isCreatingGame || !gameId || sideToMove !== 'enemy' || isFinished ? 'bg-gray-400' : 'bg-[#1e40af]'}`}
-          disabled={
-            isAiThinking || isCreatingGame || !gameId || sideToMove !== 'enemy' || isFinished
-          }
-          onPress={() => {
-            void handleAiMove(moveNo);
-          }}
-        >
-          <Text className="font-bold text-white">AI応手を再試行</Text>
-        </Pressable>
-      </View>
-
       <View className="relative -mx-2 mt-20 mb-20">
         <View className="absolute -top-16 left-0 right-1 z-10 flex-row items-center justify-between gap-2">
           <View className="flex-1">{renderHandsRow('enemy', true)}</View>

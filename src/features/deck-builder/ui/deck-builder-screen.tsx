@@ -1,7 +1,16 @@
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { Modal, Pressable, Text, TextInput, View, ScrollView, PanResponder } from 'react-native';
+import {
+  Alert,
+  Modal,
+  Pressable,
+  Text,
+  TextInput,
+  View,
+  ScrollView,
+  PanResponder,
+} from 'react-native';
 import Svg, { Line, Rect } from 'react-native-svg';
 
 import { AppLoadingScreen } from '@/components/organism/app-loading-screen';
@@ -26,6 +35,17 @@ const BOARD_PADDING_RATIO = BOARD_PADDING / BOARD_VIEWBOX;
 const BOARD_CELL_INNER_RATIO = 1 / BOARD_SIZE;
 const PLACED_PIECE_OFFSET_X = 0;
 const PLACED_PIECE_OFFSET_Y = -2;
+const STANDARD_DECK_PIECE_CHARS = new Set(['歩', '香', '桂', '銀', '金', '角', '飛', '玉', '王']);
+const STANDARD_DECK_PIECE_SIZE_PERCENT = 140;
+const SPECIAL_DECK_PIECE_SIZE_PERCENT = 96;
+const DECK_PIECE_SIZE_OVERRIDES: Partial<Record<string, number>> = {
+  忍: 104,
+};
+
+function pieceSelectionKey(piece: { pieceId?: number; char: string }): string {
+  if (typeof piece.pieceId === 'number') return `id:${piece.pieceId}`;
+  return `char:${piece.char}`;
+}
 
 export function DeckBuilderScreen() {
   const router = useRouter();
@@ -140,6 +160,19 @@ export function DeckBuilderScreen() {
     [applyCellAction, beginLongPressDetection, clearLongPressTimer, getCellFromTouch],
   );
 
+  const validPlacementCells = useMemo(() => {
+    if (!vm.selectedPieceForPlacement) return [] as Array<{ row: number; col: number }>;
+    const cells: Array<{ row: number; col: number }> = [];
+    for (let row = 6; row < BOARD_SIZE; row += 1) {
+      for (let col = 0; col < BOARD_SIZE; col += 1) {
+        if (vm.isValidPlacementAt(row, col)) {
+          cells.push({ row, col });
+        }
+      }
+    }
+    return cells;
+  }, [vm.selectedPieceForPlacement, vm.isValidPlacementAt]);
+
   if (vm.isLoading || !areAssetsReady) {
     return <AppLoadingScreen imageSource={homeAssets.loadingImage} />;
   }
@@ -213,7 +246,6 @@ export function DeckBuilderScreen() {
               const { width, height } = event.nativeEvent.layout;
               setBoardTouchArea({ width, height });
             }}
-            {...boardPanResponder.panHandlers}
           >
             <Svg
               width="100%"
@@ -222,6 +254,18 @@ export function DeckBuilderScreen() {
               style={{ position: 'absolute', top: 0, left: 0 }}
               pointerEvents="none"
             >
+              {validPlacementCells.map((cell) => (
+                <Rect
+                  key={`valid-${cell.row}-${cell.col}`}
+                  x={cell.col * BOARD_CELL}
+                  y={cell.row * BOARD_CELL}
+                  width={BOARD_CELL}
+                  height={BOARD_CELL}
+                  fill="#22c55e33"
+                  stroke="#16a34a"
+                  strokeWidth={2.5}
+                />
+              ))}
               {activeCell ? (
                 <Rect
                   x={activeCell.col * BOARD_CELL}
@@ -238,10 +282,24 @@ export function DeckBuilderScreen() {
               Array.from({ length: BOARD_SIZE }).map((__, col) => {
                 const placement =
                   vm.boardPlacements.find((cell) => cell.row === row && cell.col === col) ?? null;
+                const pieceSizePercent =
+                  placement && DECK_PIECE_SIZE_OVERRIDES[placement.piece.char] != null
+                    ? (DECK_PIECE_SIZE_OVERRIDES[placement.piece.char] as number)
+                    : placement && STANDARD_DECK_PIECE_CHARS.has(placement.piece.char)
+                      ? STANDARD_DECK_PIECE_SIZE_PERCENT
+                      : SPECIAL_DECK_PIECE_SIZE_PERCENT;
                 return (
                   <Pressable
                     key={`cell-${row}-${col}`}
                     className="absolute items-center justify-center overflow-visible"
+                    onPress={() => {
+                      applyCellAction(row, col);
+                    }}
+                    onLongPress={() => {
+                      if (placement) {
+                        vm.openPieceDetail(placement.piece);
+                      }
+                    }}
                     style={{
                       top: `${row * BOARD_CELL_INNER_RATIO * 100}%`,
                       left: `${col * BOARD_CELL_INNER_RATIO * 100}%`,
@@ -255,8 +313,8 @@ export function DeckBuilderScreen() {
                           source={{ uri: placement.piece.imageSignedUrl }}
                           contentFit="contain"
                           style={{
-                            width: '140%',
-                            height: '140%',
+                            width: `${pieceSizePercent}%`,
+                            height: `${pieceSizePercent}%`,
                             transform: [
                               { translateX: PLACED_PIECE_OFFSET_X },
                               { translateY: PLACED_PIECE_OFFSET_Y },
@@ -290,8 +348,6 @@ export function DeckBuilderScreen() {
         </Text>
         <View className="mt-2 flex-row flex-wrap gap-x-2 gap-y-1">
           {vm.ownedPieces.map((piece) => {
-            const remaining = vm.getRemainingCount(piece);
-            const outOfStock = remaining <= 0;
             const paletteKey =
               typeof piece.pieceId === 'number' ? `piece-${piece.pieceId}` : `char-${piece.char}`;
             return (
@@ -305,10 +361,11 @@ export function DeckBuilderScreen() {
                     vm.openPieceDetail(piece);
                   }}
                   className={`relative h-16 w-16 items-center justify-center active:scale-95 ${
-                    vm.selectedPieceForPlacement?.pieceId === piece.pieceId
+                    vm.selectedPieceForPlacement &&
+                    pieceSelectionKey(vm.selectedPieceForPlacement) === pieceSelectionKey(piece)
                       ? 'rounded-md border border-[#8b0000]/50 bg-[#fff7e6]'
                       : ''
-                  } ${outOfStock ? 'opacity-45' : ''}`}
+                  }`}
                 >
                   {piece.imageSignedUrl ? (
                     <Image
@@ -319,9 +376,6 @@ export function DeckBuilderScreen() {
                   ) : (
                     <Text className="text-lg font-black text-[#2f1b14]">{piece.char}</Text>
                   )}
-                  <View className="absolute -right-1 -top-1 rounded-full bg-black/75 px-1.5 py-0.5">
-                    <Text className="text-[10px] font-black text-white">{`×${remaining}`}</Text>
-                  </View>
                 </Pressable>
                 <Text className="mt-0.5 text-[10px] font-black text-[#6b4532]">
                   {`コスト ${getDeckBuilderPieceCost(piece.char)}`}
@@ -334,6 +388,21 @@ export function DeckBuilderScreen() {
 
       {/* 操作ボタン */}
       <View className="mt-4 flex-row gap-2">
+        <Pressable
+          onPress={() => {
+            void playSe('confirm');
+            void vm.applyAsBattleDeck().then((ok) => {
+              if (ok) {
+                Alert.alert('デッキ反映', '現在の配置をバトルデッキ（マイデッキ）に反映しました。');
+              } else {
+                Alert.alert('デッキ反映', 'デッキ反映に失敗しました。');
+              }
+            });
+          }}
+          className="h-20 flex-1 items-center justify-center rounded-xl bg-[#166534] px-3 active:scale-95"
+        >
+          <Text className="text-center text-base font-black text-white">デッキ反映</Text>
+        </Pressable>
         <Pressable
           onPress={() => {
             void playSe('tap');
@@ -467,6 +536,16 @@ export function DeckBuilderScreen() {
                       <Text className="text-sm font-black text-[#2f1b14]">{deck.name}</Text>
                       <Text className="text-xs text-[#6b4532]">{deck.savedAt}</Text>
                     </View>
+                    <Pressable
+                      onPress={() => {
+                        void playSe('confirm');
+                        vm.loadDeck(deck.id);
+                      }}
+                      className="ml-2 rounded px-2 py-1 active:opacity-70"
+                      style={{ backgroundColor: '#dcfce7' }}
+                    >
+                      <Text className="text-xs font-black text-[#166534]">読込</Text>
+                    </Pressable>
                     <Pressable
                       onPress={() => {
                         void playSe('cancel');
