@@ -58,6 +58,9 @@ const BOARD_PADDING_RATIO = BOARD_PADDING / BOARD_VIEWBOX;
 const BOARD_CELL_INNER_RATIO = 1 / BOARD_SIZE;
 const NORMAL_PIECE_SIZE_PERCENT = 120;
 const KING_PIECE_SIZE_PERCENT = 136;
+const BOARD_PIECE_SIZE_OVERRIDES: Partial<Record<string, number>> = {
+  波: 128,
+};
 const ENABLE_PIECE_IMAGES = process.env.EXPO_PUBLIC_ENABLE_PIECE_IMAGES !== 'false';
 const STANDARD_PIECE_CODES = new Set(['FU', 'KY', 'KE', 'GI', 'KI', 'KA', 'HI', 'OU']);
 /** プロジェクト直下 `assets/pieces/promoted/` の PNG（Metro の静的 require） */
@@ -699,6 +702,11 @@ function getDisplayChar(piece: BoardPiece) {
 }
 
 function isPromotedVisualPiece(piece: BoardPiece) {
+  // Stage 4 の「竜」(pieceCode=RYU) は成り飛ではなく通常の特殊駒。
+  // promoted でない限り、ローカル成り画像(ryuo.png)へ寄せない。
+  if ((piece.pieceCode?.toUpperCase() ?? '') === 'RYU' && !piece.promoted) {
+    return false;
+  }
   if (piece.promoted) return true;
   if (PROMOTED_DISPLAY_CHARS.has(piece.char)) return true;
   const pc = piece.pieceCode?.toUpperCase() ?? '';
@@ -745,6 +753,10 @@ function localPromotedModuleFromBaseCodeCandidates(candidates: Iterable<string>)
 }
 
 function resolvePromotedImageSource(piece: BoardPiece) {
+  // Stage 4 の「竜」駒（char=竜, pieceCode=RYU）は通常の特殊駒画像を使う。
+  if ((piece.pieceCode?.toUpperCase() ?? '') === 'RYU' && piece.char === '竜') {
+    return null;
+  }
   if (!isPromotedVisualPiece(piece)) return null;
 
   // 成り駒はリモート URL より先に bundled PNG を確実に使う（コード表記ゆれ対策）
@@ -1194,9 +1206,13 @@ const BoardPieceSprite = memo(function BoardPieceSprite({
 
   const enemy = isEnemySide(piece.side);
   const king = piece.pieceCode === 'OU' || isKingChar(piece.char);
-  const pieceScalePercent = king ? KING_PIECE_SIZE_PERCENT : NORMAL_PIECE_SIZE_PERCENT;
+  const pieceScalePercent =
+    BOARD_PIECE_SIZE_OVERRIDES[piece.char] ??
+    (king ? KING_PIECE_SIZE_PERCENT : NORMAL_PIECE_SIZE_PERCENT);
+  const isStage4DragonVisual =
+    (piece.pieceCode?.toUpperCase() ?? '') === 'RYU' && piece.char === '竜';
   const bundledPromoted =
-    piece.promoted || isPromotedVisualPiece(piece)
+    !isStage4DragonVisual && (piece.promoted || isPromotedVisualPiece(piece))
       ? localPromotedModuleFromBaseCodeCandidates(
           collectStandardBaseCodesForLocalPromotedImage(piece),
         )

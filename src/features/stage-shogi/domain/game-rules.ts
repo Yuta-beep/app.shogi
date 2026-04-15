@@ -38,6 +38,27 @@ function cellKey(row: number, col: number) {
   return `${row}:${col}`;
 }
 
+function isGoldPiece(piece: BoardPiece): boolean {
+  if (piece.pieceCode?.toUpperCase() === 'KI') return true;
+  return piece.char === '金';
+}
+
+function isBackwardDiagonalForSide(
+  piece: BoardPiece,
+  targetRow: number,
+  targetCol: number,
+): boolean {
+  const rowDelta = targetRow - piece.row;
+  const colDelta = targetCol - piece.col;
+  if (Math.abs(colDelta) !== 1) return false;
+  if (piece.side === 'enemy') {
+    // enemy の後ろ方向は +row。金は斜め後ろ不可
+    return rowDelta > 0;
+  }
+  // player の後ろ方向は -row。金は斜め後ろ不可
+  return rowDelta < 0;
+}
+
 export function sameCell(a: BoardCell, b: BoardCell) {
   return a.row === b.row && a.col === b.col;
 }
@@ -273,6 +294,12 @@ export function getLegalTargetsFromVectors<T extends BoardPiece>(
       }
 
       if (step < minStep) {
+        if (occupied && !canJump) break;
+        continue;
+      }
+
+      // ベクトル定義の取り違えがあっても、金の「斜め後ろ」は必ず禁止する。
+      if (isGoldPiece(piece) && isBackwardDiagonalForSide(piece, targetRow, targetCol)) {
         if (occupied && !canJump) break;
         continue;
       }
