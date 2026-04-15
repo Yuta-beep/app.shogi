@@ -66,7 +66,8 @@ export function sfenCharToDisplayChar(
 ): string | null {
   const upper = ch.toUpperCase();
   if (isPromoted) {
-    return mapping.sfenToCode.promoted[upper] ?? null;
+    // m_piece_mapping では成り駒の sfen_code が "+R" のように先頭 + 付きで登録されることがある。
+    return mapping.sfenToCode.promoted[upper] ?? mapping.sfenToCode.promoted[`+${upper}`] ?? null;
   }
   return mapping.sfenToCode.unpromoted[upper] ?? null;
 }

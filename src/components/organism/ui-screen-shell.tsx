@@ -22,6 +22,7 @@ type UiScreenShellProps = {
   rightAction?: ReactNode;
   hideTitleText?: boolean;
   plainHeader?: boolean;
+  homeButtonTextClassName?: string;
   /** ユーザーバー（GlobalHomeHud）直下〜画面下端までを覆う背景。タイトル帯・スクロール領域の下にまで伸びる */
   fullBleedBackgroundSource?: ImageSourcePropType;
 };
@@ -34,6 +35,7 @@ export function UiScreenShell({
   rightAction,
   hideTitleText = false,
   plainHeader = false,
+  homeButtonTextClassName = 'text-ink',
   fullBleedBackgroundSource,
 }: UiScreenShellProps) {
   const router = useRouter();
@@ -65,7 +67,7 @@ export function UiScreenShell({
             }}
             className="rounded-md border border-accent px-3 py-1 active:scale-95"
           >
-            <Text className="text-sm font-bold text-ink">ホーム</Text>
+            <Text className={`text-sm font-bold ${homeButtonTextClassName}`}>ホーム</Text>
           </Pressable>
         )}
       </View>

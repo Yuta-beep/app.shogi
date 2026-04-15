@@ -2,6 +2,7 @@ import { Image } from 'expo-image';
 import { useLocalSearchParams } from 'expo-router';
 import { Crown, Shield } from 'lucide-react-native';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { Modal, Pressable, Text, View } from 'react-native';
 import Svg, { Line, Polygon, Rect } from 'react-native-svg';
 
@@ -29,7 +30,6 @@ import {
   type PieceSfenMapping,
   toSfenBoardPure,
   toSfenHandsPure,
-  resolveHandsStateFromCanonicalSfenAndJson,
 } from '@/features/stage-shogi/domain/piece-conversion';
 import { useStageBattleScreen } from '@/features/stage-shogi/ui/use-stage-battle-screen';
 import { useAssetPreload } from '@/hooks/common/use-asset-preload';
@@ -60,6 +60,84 @@ const NORMAL_PIECE_SIZE_PERCENT = 120;
 const KING_PIECE_SIZE_PERCENT = 136;
 const ENABLE_PIECE_IMAGES = process.env.EXPO_PUBLIC_ENABLE_PIECE_IMAGES !== 'false';
 const STANDARD_PIECE_CODES = new Set(['FU', 'KY', 'KE', 'GI', 'KI', 'KA', 'HI', 'OU']);
+/** プロジェクト直下 `assets/pieces/promoted/` の PNG（Metro の静的 require） */
+const LOCAL_PROMOTED_PIECE_IMAGE_BY_CODE: Partial<Record<string, number>> = {
+  FU: require('../../../../assets/pieces/promoted/tokin.png'),
+  KY: require('../../../../assets/pieces/promoted/narikyo.png'),
+  KE: require('../../../../assets/pieces/promoted/narikei.png'),
+  GI: require('../../../../assets/pieces/promoted/narigin.png'),
+  /** 成り飛（龍王）— SFEN/内部で HI のままの場合 */
+  HI: require('../../../../assets/pieces/promoted/ryuo.png'),
+  /** 成り飛が RYU（竜）として渡る場合も同一画像 */
+  RYU: require('../../../../assets/pieces/promoted/ryuo.png'),
+  KA: require('../../../../assets/pieces/promoted/ryuma.png'),
+};
+
+/** 標準成りで `assets/pieces/promoted` に PNG があるときはカタログ URL を載せない（表示は bundled のみ） */
+function preferBundledPromotedImageOverRemoteUrl(
+  pieceCode: string | null,
+  promoted: boolean,
+  remoteOrFallback: string | null,
+): string | null {
+  if (!promoted || !pieceCode) return remoteOrFallback;
+  const base = (toBasePieceCode(pieceCode) ?? pieceCode).toUpperCase();
+  if (LOCAL_PROMOTED_PIECE_IMAGE_BY_CODE[base] != null) {
+    return null;
+  }
+  return remoteOrFallback;
+}
+
+const PROMOTED_DISPLAY_CHARS = new Set([
+  'と',
+  'と金',
+  '杏',
+  '圭',
+  '全',
+  '成香',
+  '成桂',
+  '成銀',
+  '馬',
+  '龍',
+  '竜',
+  '龍王',
+  '竜王',
+  '龍馬',
+]);
+const PROMOTED_CHAR_TO_BASE_CODE: Record<string, string> = {
+  と: 'FU',
+  と金: 'FU',
+  杏: 'KY',
+  圭: 'KE',
+  全: 'GI',
+  成香: 'KY',
+  成桂: 'KE',
+  成銀: 'GI',
+  馬: 'KA',
+  龍: 'HI',
+  竜: 'HI',
+  龍王: 'HI',
+  竜王: 'HI',
+  龍馬: 'KA',
+};
+const PROMOTED_PIECE_CODE_TO_BASE_CODE: Record<string, string> = {
+  TO: 'FU',
+  NY: 'KY',
+  NK: 'KE',
+  NG: 'GI',
+  UM: 'KA',
+  RY: 'HI',
+  /** `CHAR_TO_CODE` では成り飛が RYU（竜）になる */
+  RYU: 'HI',
+};
+
+/** SFEN/API で promoted フラグが欠けても、駒コードだけで成りとみなす（画像切替用） */
+const VISUAL_PROMOTED_PIECE_CODES = new Set(['TO', 'NY', 'NK', 'NG', 'UM', 'RY', 'RYU']);
+
+function toBasePieceCode(pieceCode: string | null | undefined): string | null {
+  if (!pieceCode) return null;
+  const upper = pieceCode.toUpperCase();
+  return PROMOTED_PIECE_CODE_TO_BASE_CODE[upper] ?? upper;
+}
 
 type BoardPiece = RuleBoardPiece & {
   imageSignedUrl: string | null;
@@ -67,7 +145,22 @@ type BoardPiece = RuleBoardPiece & {
 type PendingPromotion = {
   promoteMove: BattleMove;
   nonPromoteMove: BattleMove;
+  /** 盤面 state 上の着手元・着手先（API の from/to が 0/1 始まり等でずれてもこちらを正とする） */
+  boardFromRow: number;
+  boardFromCol: number;
+  boardToRow: number;
+  boardToCol: number;
 };
+
+/** 「成る」タップと同じ更新でローカル成り画像を最優先表示（RN / Expo Image の遅延を回避） */
+type PromotionImageFlash = {
+  row: number;
+  col: number;
+  side: Side;
+  assetModule: number;
+  flashKey: string;
+};
+
 type PreservedMovedPiece = {
   side: Side;
   toRow: number;
@@ -140,9 +233,12 @@ function pieceCodeFromPlacement(
   char: string,
   pieceDefsByChar: Partial<Record<string, PieceCatalogItem>>,
 ): string | null {
-  if (pieceCode) return pieceCode;
+  if (pieceCode) return toBasePieceCode(pieceCode);
   const fromCatalog = pieceDefsByChar[char]?.pieceCode;
   if (fromCatalog) return fromCatalog;
+  if (PROMOTED_CHAR_TO_BASE_CODE[char]) {
+    return PROMOTED_CHAR_TO_BASE_CODE[char];
+  }
   return CHAR_TO_CODE[char] ?? null;
 }
 
@@ -248,6 +344,18 @@ function handKeyToDisplayPieceCode(rawKey: string, catalog: readonly PieceCatalo
   if (!trimmed) return rawKey;
   const upper = trimmed.toUpperCase();
   if (Object.prototype.hasOwnProperty.call(CODE_TO_CHAR, upper)) return upper;
+  const fromChar = CHAR_TO_CODE[trimmed];
+  if (fromChar) return fromChar.toUpperCase();
+  const promotedCharToBaseCode: Record<string, string> = {
+    と: 'FU',
+    成香: 'KY',
+    成桂: 'KE',
+    成銀: 'GI',
+    馬: 'KA',
+    龍: 'HI',
+  };
+  const fromPromotedChar = promotedCharToBaseCode[trimmed];
+  if (fromPromotedChar) return fromPromotedChar;
 
   for (const it of catalog) {
     const pc = it.pieceCode;
@@ -263,11 +371,6 @@ function handKeyToDisplayPieceCode(rawKey: string, catalog: readonly PieceCatalo
       const c = CHAR_TO_CODE[it.char];
       return c ? c.toUpperCase() : upper;
     }
-  }
-  // 一部レスポンスで汎用プレースホルダのみ届く場合（砲＝HOU に寄せる）
-  if (upper === 'PIECE') {
-    const houItem = catalog.find((it) => CHAR_TO_CODE[it.char] === 'HOU');
-    if (houItem) return 'HOU';
   }
   return upper;
 }
@@ -289,6 +392,11 @@ function remapHandsStateToDisplayPieceCodes(
   }
   return { player: remapBag(hands.player), enemy: remapBag(hands.enemy) };
 }
+
+type ConsumedDropHandPiece = {
+  side: Side;
+  pieceCode: string;
+};
 
 function legalMovesForBoardPiece(legalMoves: BattleMove[], row: number, col: number): BattleMove[] {
   return legalMoves.filter(
@@ -361,6 +469,9 @@ function countPiecesOnBoardWithCode(pieces: BoardPiece[], side: Side, pieceCode:
 /**
  * エンジン／永続化の不整合で、同一駒が盤上と手持ちに二重計上されることがある（特殊駒・成り駒で顕在化しやすい）。
  * 8 種の基本駒（未駒）はサーバの持ち駒カウントをそのまま使う。それ以外は盤上の枚数ぶん手持ちから減算する。
+ *
+ * 打ち駒の楽観更新用に負の「デット」を持たせる方式は、後から同コードの駒を取ったときにデットが残り
+ * 手持ちが 0 になるため使わない（盤面実数との突合のみで二重計上を防ぐ）。
  */
 function reconcileExtendedPieceHandsAgainstBoard(
   hands: HandsState,
@@ -416,7 +527,7 @@ function piecesFromCanonicalBoardState(
     const col = normalizeCellIndex(Number(entry.col));
     if (row === null || col === null) continue;
     const side = normalizeSide(asString(entry.side ?? nested.side) ?? 'player');
-    const promoted = asBoolean(entry.promoted ?? nested.promoted) ?? false;
+    const rawPromoted = asBoolean(entry.promoted ?? nested.promoted) ?? false;
     const code =
       asString(nested.pieceCode ?? nested.piece_code ?? nested.code) ??
       CHAR_TO_CODE[asString(nested.char ?? entry.char) ?? ''] ??
@@ -426,22 +537,28 @@ function piecesFromCanonicalBoardState(
     if (seen.has(key)) continue;
     seen.add(key);
 
+    const rawChar =
+      asString(nested.char ?? entry.char) ?? pieceCharFromCode(code, side, rawPromoted);
+    const promoted = rawPromoted || PROMOTED_DISPLAY_CHARS.has(rawChar);
+    const char = rawChar;
     const pieceDef = promoted
       ? (promotedPieceDefsByCode[code] ?? pieceDefsByCode[code])
       : pieceDefsByCode[code];
-    const char = asString(nested.char ?? entry.char) ?? pieceCharFromCode(code, side, promoted);
-    const imageSignedUrl =
+    const imageSignedUrl = preferBundledPromotedImageOverRemoteUrl(
+      code,
+      promoted,
       asString(nested.imageSignedUrl ?? nested.image_signed_url ?? entry.imageSignedUrl) ??
-      pieceDef?.imageSignedUrl ??
-      findBestExistingImage(existingPieces, {
-        side,
-        row,
-        col,
-        pieceCode: code,
-        char,
-        promoted,
-      }) ??
-      null;
+        pieceDef?.imageSignedUrl ??
+        findBestExistingImage(existingPieces, {
+          side,
+          row,
+          col,
+          pieceCode: code,
+          char,
+          promoted,
+        }) ??
+        null,
+    );
 
     next.push({
       side,
@@ -483,24 +600,30 @@ function piecesFromCanonicalPosition(
       }
 
       const side: Side = ch === ch.toUpperCase() ? 'player' : 'enemy';
-      // DB 由来 mapping から未成り基準の pieceCode を復元する。
-      const pieceCode = sfenCharToDisplayChar(ch, false, pieceSfenMapping);
+      // DB 由来 mapping から pieceCode を復元する（`+` プレフィックスの成り駒は第2引数が必要）。
+      let pieceCode = sfenCharToDisplayChar(ch, promoted, pieceSfenMapping);
+      if (!pieceCode && promoted) {
+        pieceCode = sfenCharToDisplayChar(ch, false, pieceSfenMapping);
+      }
       if (pieceCode && row >= 0 && row < BOARD_SIZE && col >= 0 && col < BOARD_SIZE) {
         const pieceDef = promoted
           ? (promotedPieceDefsByCode[pieceCode] ?? pieceDefsByCode[pieceCode])
           : pieceDefsByCode[pieceCode];
         const char = pieceCharFromCode(pieceCode, side, promoted);
-        const imageSignedUrl =
+        const imageSignedUrl = preferBundledPromotedImageOverRemoteUrl(
+          pieceCode,
+          promoted,
           pieceDef?.imageSignedUrl ??
-          findBestExistingImage(existingPieces, {
-            side,
-            row,
-            col,
-            pieceCode,
-            char,
-            promoted,
-          }) ??
-          null;
+            findBestExistingImage(existingPieces, {
+              side,
+              row,
+              col,
+              pieceCode,
+              char,
+              promoted,
+            }) ??
+            null,
+        );
 
         next.push({
           side,
@@ -541,7 +664,22 @@ function piecesFromCanonicalPosition(
     const key = `${piece.side}:${piece.row}:${piece.col}`;
     const existing = mergedByKey.get(key);
     if (existing) {
-      mergedByKey.set(key, { ...existing, ...piece });
+      const promoted = (existing.promoted ?? false) || (piece.promoted ?? false);
+      const pieceCode = existing.pieceCode ?? piece.pieceCode;
+      const side = existing.side ?? piece.side;
+      const char =
+        promoted && pieceCode
+          ? pieceCharFromCode(pieceCode, side, true)
+          : (existing.char ?? piece.char);
+      const mergedUrl = existing.imageSignedUrl ?? piece.imageSignedUrl ?? null;
+      mergedByKey.set(key, {
+        ...piece,
+        ...existing,
+        promoted,
+        pieceCode,
+        char,
+        imageSignedUrl: preferBundledPromotedImageOverRemoteUrl(pieceCode, promoted, mergedUrl),
+      });
     } else {
       mergedByKey.set(key, piece);
     }
@@ -558,6 +696,103 @@ function getDisplayChar(piece: BoardPiece) {
     return PROMOTED_CODE_TO_CHAR[piece.pieceCode];
   }
   return piece.char ?? (piece.pieceCode ? (CODE_TO_CHAR[piece.pieceCode] ?? '?') : '?');
+}
+
+function isPromotedVisualPiece(piece: BoardPiece) {
+  if (piece.promoted) return true;
+  if (PROMOTED_DISPLAY_CHARS.has(piece.char)) return true;
+  const pc = piece.pieceCode?.toUpperCase() ?? '';
+  if (pc && VISUAL_PROMOTED_PIECE_CODES.has(pc)) return true;
+  return false;
+}
+
+/** 表示用の駒から、標準ローカル成り PNG へ引く候補となる基底コードを列挙する */
+function collectStandardBaseCodesForLocalPromotedImage(piece: BoardPiece): string[] {
+  const out: string[] = [];
+  if (piece.pieceCode) {
+    const u = piece.pieceCode.toUpperCase();
+    out.push(u);
+    const b = toBasePieceCode(u);
+    if (b) out.push(b);
+  }
+  if (piece.char) {
+    const fromKanji = CHAR_TO_CODE[piece.char];
+    if (fromKanji) {
+      out.push(fromKanji);
+      const bb = toBasePieceCode(fromKanji);
+      if (bb) out.push(bb);
+    }
+    const fromPromotedKanji = PROMOTED_CHAR_TO_BASE_CODE[piece.char];
+    if (fromPromotedKanji) out.push(fromPromotedKanji);
+  }
+  return out;
+}
+
+/** bundled の `LOCAL_PROMOTED_PIECE_IMAGE_BY_CODE` を候補コードから解決 */
+function localPromotedModuleFromBaseCodeCandidates(candidates: Iterable<string>): number | null {
+  for (const raw of candidates) {
+    if (!raw) continue;
+    const u = raw.toUpperCase();
+    const mapped = (toBasePieceCode(u) ?? u).toUpperCase();
+    const img = LOCAL_PROMOTED_PIECE_IMAGE_BY_CODE[mapped];
+    if (img != null) return img;
+    if (mapped === 'RYU' || mapped === 'RY') {
+      const alt = LOCAL_PROMOTED_PIECE_IMAGE_BY_CODE.HI ?? LOCAL_PROMOTED_PIECE_IMAGE_BY_CODE.RYU;
+      if (alt != null) return alt;
+    }
+  }
+  return null;
+}
+
+function resolvePromotedImageSource(piece: BoardPiece) {
+  if (!isPromotedVisualPiece(piece)) return null;
+
+  // 成り駒はリモート URL より先に bundled PNG を確実に使う（コード表記ゆれ対策）
+  if (piece.promoted) {
+    const quick = localPromotedModuleFromBaseCodeCandidates(
+      collectStandardBaseCodesForLocalPromotedImage(piece),
+    );
+    if (quick != null) return quick;
+  }
+
+  const pc = piece.pieceCode?.toUpperCase() ?? '';
+  const codeFromPiece = toBasePieceCode(piece.pieceCode);
+  const codeFromChar = PROMOTED_CHAR_TO_BASE_CODE[piece.char] ?? null;
+
+  let key = codeFromPiece ?? codeFromChar;
+  if (!key && (piece.char === '龍' || piece.char === '竜')) {
+    key = 'HI';
+  }
+  if (!key && (pc === 'HI' || pc === 'RYU')) {
+    key = 'HI';
+  }
+  // API が promoted のみ true で char が未成「飛」のまま返すケース
+  if (!key && piece.promoted && piece.char === '飛') {
+    key = 'HI';
+  }
+  // char がまだ未成表記のまま（飛・角・歩…）でも CHAR_TO_CODE から基底を取りローカル画像へ
+  if (!key && piece.promoted && piece.char) {
+    const fromKanji = CHAR_TO_CODE[piece.char];
+    if (fromKanji) {
+      key = toBasePieceCode(fromKanji) ?? fromKanji;
+    }
+  }
+
+  if (!key) return null;
+  const fromMap = LOCAL_PROMOTED_PIECE_IMAGE_BY_CODE[key] ?? null;
+  if (fromMap != null) return fromMap;
+
+  // PROMOTED_CODE_TO_CHAR の成り字（龍・馬・と…）だけでもローカルへ
+  if (isPromotedVisualPiece(piece) && piece.char) {
+    for (const [code, kanji] of Object.entries(PROMOTED_CODE_TO_CHAR)) {
+      if (piece.char === kanji) {
+        const m = LOCAL_PROMOTED_PIECE_IMAGE_BY_CODE[code];
+        if (m != null) return m;
+      }
+    }
+  }
+
+  return null;
 }
 
 function findBestExistingImage(
@@ -648,16 +883,25 @@ function pieceIdentityKey(piece: BoardPiece) {
   return `${piece.side}:${piece.row}:${piece.col}`;
 }
 
-function sameBoardPiece(lhs: BoardPiece, rhs: BoardPiece) {
-  return (
-    lhs.side === rhs.side &&
-    lhs.row === rhs.row &&
-    lhs.col === rhs.col &&
-    lhs.pieceCode === rhs.pieceCode &&
-    lhs.char === rhs.char &&
-    (lhs.promoted ?? false) === (rhs.promoted ?? false) &&
-    lhs.imageSignedUrl === rhs.imageSignedUrl
-  );
+/** 同一マスの同一駒か（成りで「飛」と「龍」、HI と RYU など表記ゆれを同一視） */
+function basePieceKeyForReconcile(p: BoardPiece): string | null {
+  if (p.pieceCode) {
+    return toBasePieceCode(p.pieceCode) ?? p.pieceCode.toUpperCase();
+  }
+  if (p.char && CHAR_TO_CODE[p.char]) {
+    const c = CHAR_TO_CODE[p.char];
+    return toBasePieceCode(c) ?? c;
+  }
+  return null;
+}
+
+function sameBoardPieceForReconcile(lhs: BoardPiece, rhs: BoardPiece) {
+  if (lhs.side !== rhs.side || lhs.row !== rhs.row || lhs.col !== rhs.col) return false;
+  if ((lhs.promoted ?? false) !== (rhs.promoted ?? false)) return false;
+  const lk = basePieceKeyForReconcile(lhs);
+  const rk = basePieceKeyForReconcile(rhs);
+  if (lk && rk) return lk === rk;
+  return lhs.pieceCode === rhs.pieceCode && lhs.char === rhs.char;
 }
 
 function reconcilePieceIdentity(
@@ -668,98 +912,386 @@ function reconcilePieceIdentity(
   return nextPieces.map((piece) => {
     const existing = existingByKey.get(pieceIdentityKey(piece));
     if (!existing) return piece;
-    return sameBoardPiece(existing, piece) ? existing : piece;
+    if (!sameBoardPieceForReconcile(existing, piece)) return piece;
+    if (isPromotedVisualPiece(piece) !== isPromotedVisualPiece(existing)) return piece;
+    return existing;
   });
+}
+
+/**
+ * 合法手 API の座標が 0 始まり／1 始まりで混在しても盤上の駒と対応づける。
+ * 見つからないと楽観更新がスキップされ、成り画像が遅れる原因になる。
+ */
+function resolveBattleMovePlacements(
+  prev: BoardPiece[],
+  move: BattleMove,
+): { fromRow: number; fromCol: number; toRow: number; toCol: number; moving: BoardPiece } | null {
+  if (move.fromRow === null || move.fromCol === null) return null;
+
+  const rawFr = move.fromRow;
+  const rawFc = move.fromCol;
+  const rawTr = move.toRow;
+  const rawTc = move.toCol;
+
+  const nFr = normalizeCellIndex(move.fromRow);
+  const nFc = normalizeCellIndex(move.fromCol);
+  const nTr = normalizeCellIndex(move.toRow);
+  const nTc = normalizeCellIndex(move.toCol);
+
+  const variants: Array<{ fr: number; fc: number; tr: number; tc: number }> = [];
+  if (nFr !== null && nFc !== null && nTr !== null && nTc !== null) {
+    variants.push({ fr: nFr, fc: nFc, tr: nTr, tc: nTc });
+  }
+  variants.push({ fr: rawFr, fc: rawFc, tr: rawTr, tc: rawTc });
+
+  const seen = new Set<string>();
+  for (const v of variants) {
+    const key = `${v.fr},${v.fc},${v.tr},${v.tc}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const moving = prev.find((p) => p.row === v.fr && p.col === v.fc);
+    if (moving) {
+      return {
+        fromRow: v.fr,
+        fromCol: v.fc,
+        toRow: v.tr,
+        toCol: v.tc,
+        moving,
+      };
+    }
+  }
+  return null;
+}
+
+/** 成り選択など、盤上で確定したマスがあるときは API 座標より優先する */
+type TrustedBoardEndpoints = {
+  fromRow: number;
+  fromCol: number;
+  toRow: number;
+  toCol: number;
+};
+
+function buildPreservedMovedPieceForPlayer(
+  sourceBoard: BoardPiece[],
+  move: BattleMove,
+  pieceDefsByChar: Partial<Record<string, PieceCatalogItem>>,
+  promotedPieceDefsByCode: Partial<Record<string, PieceCatalogItem>>,
+  trustedBoard?: TrustedBoardEndpoints,
+): PreservedMovedPiece | undefined {
+  let resolved: {
+    fromRow: number;
+    fromCol: number;
+    toRow: number;
+    toCol: number;
+    moving: BoardPiece;
+  } | null = null;
+
+  if (trustedBoard) {
+    let moving = sourceBoard.find(
+      (p) => p.row === trustedBoard.fromRow && p.col === trustedBoard.fromCol,
+    );
+    // 成り選択の直前に「不成」で盤上へ動かしたあとでは、着手元に駒がなく着手先にだけある
+    if (!moving || moving.side !== 'player') {
+      moving = sourceBoard.find(
+        (p) => p.row === trustedBoard.toRow && p.col === trustedBoard.toCol && p.side === 'player',
+      );
+    }
+    if (moving && moving.side === 'player') {
+      resolved = {
+        fromRow: trustedBoard.fromRow,
+        fromCol: trustedBoard.fromCol,
+        toRow: trustedBoard.toRow,
+        toCol: trustedBoard.toCol,
+        moving,
+      };
+    }
+  }
+  if (!resolved) {
+    resolved = resolveBattleMovePlacements(sourceBoard, move);
+  }
+  if (!resolved || resolved.moving.side !== 'player') return undefined;
+  const moved = resolved.moving;
+  const resolvedPieceCode = pieceCodeFromPlacement(moved.pieceCode, moved.char, pieceDefsByChar);
+  const codeKey = (resolvedPieceCode ?? moved.pieceCode ?? '').toUpperCase();
+  const promoted = move.promote ? true : (moved.promoted ?? false);
+  const promotedDef = move.promote ? promotedPieceDefsByCode[codeKey] : null;
+  const imageSignedUrl = preferBundledPromotedImageOverRemoteUrl(
+    resolvedPieceCode ?? moved.pieceCode,
+    promoted,
+    promotedDef?.imageSignedUrl ?? moved.imageSignedUrl,
+  );
+  const char = resolvedPieceCode
+    ? pieceCharFromCode(resolvedPieceCode, moved.side, promoted)
+    : moved.char;
+  return {
+    side: moved.side,
+    toRow: resolved.toRow,
+    toCol: resolved.toCol,
+    pieceCode: resolvedPieceCode ?? moved.pieceCode,
+    char,
+    imageSignedUrl,
+    promoted,
+  };
+}
+
+/**
+ * 同期直後の駒に、楽観で既に合わせた成り表示を載せる。
+ * - canonical がまだ未成に見える → 楽観の promoted/char を反映
+ * - 両方成りでも楽観だけローカル成り画像が効く → リモート URL で上書きしない
+ */
+function overlayPromotionFromOptimistic(
+  canonical: BoardPiece[],
+  optimistic: BoardPiece[],
+): BoardPiece[] {
+  const optByKey = new Map(optimistic.map((p) => [pieceIdentityKey(p), p]));
+  return canonical.map((p) => {
+    const o = optByKey.get(pieceIdentityKey(p));
+    if (!o || !isPromotedVisualPiece(o)) return p;
+
+    const optHasLocalPromoted = resolvePromotedImageSource(o) != null;
+    const canHasLocalPromoted = resolvePromotedImageSource(p) != null;
+    if (optHasLocalPromoted && !canHasLocalPromoted) {
+      return {
+        ...p,
+        promoted: (p.promoted ?? false) || (o.promoted ?? false),
+        pieceCode: o.pieceCode ?? p.pieceCode,
+        char: o.char,
+        imageSignedUrl: o.imageSignedUrl,
+      };
+    }
+
+    if (isPromotedVisualPiece(p)) return p;
+    // 楽観で imageSignedUrl を null にしている（標準駒のローカル成り画像）とき、
+    // `??` で canonical の未成 URL に落ちるとリモートが一瞬／次ターンまで残る
+    const preferLocalPromoted =
+      resolvePromotedImageSource(o) != null || (o.promoted && o.imageSignedUrl == null);
+    return {
+      ...p,
+      promoted: o.promoted ?? true,
+      pieceCode: o.pieceCode ?? p.pieceCode,
+      char: o.char,
+      imageSignedUrl: preferLocalPromoted ? null : (o.imageSignedUrl ?? p.imageSignedUrl),
+    };
+  });
+}
+
+/** 楽観的着手後の盤面（`setPieces` に渡す内容と同一）。同期時に `piecesRef` が未更新でも使えるようにする。 */
+function computePiecesAfterOptimisticMove(
+  prev: BoardPiece[],
+  actorSide: Side,
+  move: BattleMove,
+  pieceDefsByCode: Partial<Record<string, PieceCatalogItem>>,
+  pieceDefsByChar: Partial<Record<string, PieceCatalogItem>>,
+  promotedPieceDefsByCode: Partial<Record<string, PieceCatalogItem>>,
+  trustedBoard?: TrustedBoardEndpoints,
+): BoardPiece[] {
+  if (move.dropPieceCode) {
+    const rawCode = move.dropPieceCode;
+    const pieceCode = rawCode.toUpperCase();
+    const pieceDef = pieceDefsByCode[pieceCode] ?? pieceDefsByCode[rawCode];
+    const tr = normalizeCellIndex(move.toRow) ?? move.toRow;
+    const tc = normalizeCellIndex(move.toCol) ?? move.toCol;
+    return [
+      ...prev,
+      {
+        side: actorSide,
+        row: tr,
+        col: tc,
+        pieceCode,
+        char: pieceCharFromCode(pieceCode, actorSide, false),
+        promoted: false,
+        imageSignedUrl: pieceDef?.imageSignedUrl ?? null,
+      },
+    ];
+  }
+  if (move.fromRow === null || move.fromCol === null) {
+    return prev;
+  }
+
+  let resolved: {
+    fromRow: number;
+    fromCol: number;
+    toRow: number;
+    toCol: number;
+    moving: BoardPiece;
+  } | null = null;
+
+  if (trustedBoard) {
+    const moving = prev.find(
+      (p) => p.row === trustedBoard.fromRow && p.col === trustedBoard.fromCol,
+    );
+    if (moving && moving.side === actorSide) {
+      resolved = {
+        fromRow: trustedBoard.fromRow,
+        fromCol: trustedBoard.fromCol,
+        toRow: trustedBoard.toRow,
+        toCol: trustedBoard.toCol,
+        moving,
+      };
+    }
+  }
+  if (!resolved) {
+    resolved = resolveBattleMovePlacements(prev, move);
+  }
+  if (!resolved) return prev;
+  const { fromRow, fromCol, toRow, toCol, moving } = resolved;
+  if (moving.side !== actorSide) return prev;
+
+  const resolvedPieceCode = pieceCodeFromPlacement(moving.pieceCode, moving.char, pieceDefsByChar);
+  const codeKey = (resolvedPieceCode ?? moving.pieceCode ?? '').toUpperCase();
+  const promoted = move.promote ? true : (moving.promoted ?? false);
+  const promotedDef = move.promote ? promotedPieceDefsByCode[codeKey] : null;
+  const baseForChar =
+    resolvedPieceCode ??
+    (moving.pieceCode ? (toBasePieceCode(moving.pieceCode) ?? moving.pieceCode) : null);
+  const char =
+    baseForChar != null && baseForChar.length > 0
+      ? pieceCharFromCode(baseForChar, moving.side, promoted)
+      : moving.char;
+  const baseForLocalKey = (toBasePieceCode(codeKey) ?? codeKey).toUpperCase();
+  const imageSignedUrl =
+    move.promote && LOCAL_PROMOTED_PIECE_IMAGE_BY_CODE[baseForLocalKey]
+      ? null
+      : (promotedDef?.imageSignedUrl ?? moving.imageSignedUrl);
+  return prev
+    .filter((p) => !(p.row === toRow && p.col === toCol))
+    .map((p) =>
+      p.row === fromRow && p.col === fromCol
+        ? {
+            ...p,
+            row: toRow,
+            col: toCol,
+            pieceCode: baseForChar ?? resolvedPieceCode ?? p.pieceCode,
+            promoted,
+            imageSignedUrl,
+            char,
+          }
+        : p,
+    );
 }
 
 type BoardPieceSpriteProps = {
   piece: BoardPiece;
   failed: boolean;
   onImageError: () => void;
+  /** 成る直後のみ: require したローカル成り画像を `resolvePromotedImageSource` より優先 */
+  instantPromotedSource?: number | null;
+  instantPromotedKey?: string | null;
 };
 
-const BoardPieceSprite = memo(
-  function BoardPieceSprite({ piece, failed, onImageError }: BoardPieceSpriteProps) {
-    const rowIndex = normalizeCellIndex(piece.row);
-    const colIndex = normalizeCellIndex(piece.col);
-    if (rowIndex === null || colIndex === null) {
-      return null;
-    }
+const BoardPieceSprite = memo(function BoardPieceSprite({
+  piece,
+  failed,
+  onImageError,
+  instantPromotedSource = null,
+  instantPromotedKey = null,
+}: BoardPieceSpriteProps) {
+  const rowIndex = normalizeCellIndex(piece.row);
+  const colIndex = normalizeCellIndex(piece.col);
+  if (rowIndex === null || colIndex === null) {
+    return null;
+  }
 
-    const enemy = isEnemySide(piece.side);
-    const king = piece.pieceCode === 'OU' || isKingChar(piece.char);
-    const pieceScalePercent = king ? KING_PIECE_SIZE_PERCENT : NORMAL_PIECE_SIZE_PERCENT;
-    const imageUri = failed ? null : getPieceImageUri(piece.imageSignedUrl);
+  const enemy = isEnemySide(piece.side);
+  const king = piece.pieceCode === 'OU' || isKingChar(piece.char);
+  const pieceScalePercent = king ? KING_PIECE_SIZE_PERCENT : NORMAL_PIECE_SIZE_PERCENT;
+  const bundledPromoted =
+    piece.promoted || isPromotedVisualPiece(piece)
+      ? localPromotedModuleFromBaseCodeCandidates(
+          collectStandardBaseCodesForLocalPromotedImage(piece),
+        )
+      : null;
+  const localPromotedImageSource =
+    instantPromotedSource != null
+      ? instantPromotedSource
+      : bundledPromoted != null
+        ? bundledPromoted
+        : resolvePromotedImageSource(piece);
+  const imageUri =
+    localPromotedImageSource != null
+      ? null
+      : failed
+        ? null
+        : getPieceImageUri(piece.imageSignedUrl);
+  const pieceImageRecyclingKey = `${instantPromotedKey ?? 'x'}-${piece.side}-r${piece.row}-c${piece.col}-p${piece.promoted ? 1 : 0}-ch${piece.char}-pc${piece.pieceCode ?? ''}-u${imageUri ?? 'local'}`;
 
-    return (
+  return (
+    <View
+      style={{
+        position: 'absolute',
+        top: `${rowIndex * BOARD_CELL_INNER_RATIO * 100}%`,
+        left: `${colIndex * BOARD_CELL_INNER_RATIO * 100}%`,
+        width: `${BOARD_CELL_INNER_RATIO * 100}%`,
+        height: `${BOARD_CELL_INNER_RATIO * 100}%`,
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
       <View
+        className="items-center justify-center"
         style={{
-          position: 'absolute',
-          top: `${rowIndex * BOARD_CELL_INNER_RATIO * 100}%`,
-          left: `${colIndex * BOARD_CELL_INNER_RATIO * 100}%`,
-          width: `${BOARD_CELL_INNER_RATIO * 100}%`,
-          height: `${BOARD_CELL_INNER_RATIO * 100}%`,
-          alignItems: 'center',
-          justifyContent: 'center',
+          width: `${pieceScalePercent}%`,
+          height: `${pieceScalePercent}%`,
+          overflow: 'hidden',
+          transform: [{ rotate: enemy ? '180deg' : '0deg' }],
         }}
       >
-        <View
-          className="items-center justify-center"
-          style={{
-            width: `${pieceScalePercent}%`,
-            height: `${pieceScalePercent}%`,
-            overflow: 'hidden',
-            transform: [{ rotate: enemy ? '180deg' : '0deg' }],
-          }}
-        >
-          {imageUri ? (
-            <Image
-              source={{ uri: imageUri }}
-              contentFit="contain"
-              style={{ width: '100%', height: '100%' }}
-              onError={onImageError}
-            />
-          ) : (
-            <View style={{ width: '100%', height: '100%' }}>
-              <Svg width="100%" height="100%" viewBox="0 0 100 120">
-                <Polygon
-                  points="50,3 97,30 83,117 17,117 3,30"
-                  fill={fallbackPiecePalette(piece.side).fill}
-                  stroke={fallbackPiecePalette(piece.side).stroke}
-                  strokeWidth={5}
-                />
-              </Svg>
-              <View
-                style={{
-                  position: 'absolute',
-                  inset: 0,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 2,
-                }}
+        {localPromotedImageSource != null ? (
+          <Image
+            key={`pl-${instantPromotedKey ?? 'n'}-${piece.side}-${piece.row}-${piece.col}-${piece.promoted ? 1 : 0}-${piece.char}-${piece.pieceCode ?? ''}`}
+            recyclingKey={pieceImageRecyclingKey}
+            source={localPromotedImageSource}
+            contentFit="contain"
+            transition={0}
+            cachePolicy="memory-disk"
+            style={{ width: '100%', height: '100%' }}
+          />
+        ) : imageUri ? (
+          <Image
+            key={`uri-${piece.side}-${piece.row}-${piece.col}-${piece.promoted ? 1 : 0}-${piece.char}-${imageUri}`}
+            recyclingKey={pieceImageRecyclingKey}
+            source={{ uri: imageUri }}
+            contentFit="contain"
+            style={{ width: '100%', height: '100%' }}
+            onError={onImageError}
+          />
+        ) : (
+          <View style={{ width: '100%', height: '100%' }}>
+            <Svg width="100%" height="100%" viewBox="0 0 100 120">
+              <Polygon
+                points="50,3 97,30 83,117 17,117 3,30"
+                fill={fallbackPiecePalette(piece.side).fill}
+                stroke={fallbackPiecePalette(piece.side).stroke}
+                strokeWidth={5}
+              />
+            </Svg>
+            <View
+              style={{
+                position: 'absolute',
+                inset: 0,
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 2,
+              }}
+            >
+              {king ? (
+                <Crown size={16} color={fallbackPiecePalette(piece.side).icon} />
+              ) : (
+                <Shield size={16} color={fallbackPiecePalette(piece.side).icon} />
+              )}
+              <Text
+                className="text-sm font-black"
+                style={{ color: fallbackPiecePalette(piece.side).text }}
               >
-                {king ? (
-                  <Crown size={16} color={fallbackPiecePalette(piece.side).icon} />
-                ) : (
-                  <Shield size={16} color={fallbackPiecePalette(piece.side).icon} />
-                )}
-                <Text
-                  className="text-sm font-black"
-                  style={{ color: fallbackPiecePalette(piece.side).text }}
-                >
-                  {getDisplayChar(piece)}
-                </Text>
-              </View>
+                {getDisplayChar(piece)}
+              </Text>
             </View>
-          )}
-        </View>
+          </View>
+        )}
       </View>
-    );
-  },
-  (prev, next) => {
-    return prev.failed === next.failed && sameBoardPiece(prev.piece, next.piece);
-  },
-);
+    </View>
+  );
+});
 
 const StaticBoardBackground = memo(function StaticBoardBackground() {
   return (
@@ -919,17 +1451,29 @@ type BoardPiecesLayerProps = {
   pieces: BoardPiece[];
   failedImageKeys: Record<string, true>;
   onPieceImageError: (pieceKey: string) => void;
+  /** 成り確定時などに増やして Expo Image / memo の取りこぼしを防ぐ */
+  spriteEpoch?: number;
+  promotionImageFlash?: PromotionImageFlash | null;
 };
 
 const BoardPiecesLayer = memo(function BoardPiecesLayer({
   pieces,
   failedImageKeys,
   onPieceImageError,
+  spriteEpoch = 0,
+  promotionImageFlash = null,
 }: BoardPiecesLayerProps) {
   return (
     <View pointerEvents="none" style={{ position: 'absolute', inset: 0 }}>
       {pieces.map((placement) => {
-        const placementKey = `${placement.side}-${placement.pieceCode ?? 'X'}-${placement.promoted ? 'P' : 'N'}-${placement.row}-${placement.col}`;
+        const placementKey = `${spriteEpoch}-${placement.side}-${placement.pieceCode ?? 'X'}-${placement.promoted ? 'P' : 'N'}-${getDisplayChar(placement)}-${placement.row}-${placement.col}`;
+        const flash =
+          promotionImageFlash &&
+          promotionImageFlash.side === placement.side &&
+          promotionImageFlash.row === placement.row &&
+          promotionImageFlash.col === placement.col
+            ? promotionImageFlash
+            : null;
         return (
           <BoardPieceSprite
             key={placementKey}
@@ -938,6 +1482,8 @@ const BoardPiecesLayer = memo(function BoardPiecesLayer({
             onImageError={() => {
               onPieceImageError(placementKey);
             }}
+            instantPromotedSource={flash?.assetModule ?? null}
+            instantPromotedKey={flash?.flashKey ?? null}
           />
         );
       })}
@@ -966,6 +1512,10 @@ export function StageShogiScreen() {
   const [areBoardImagesReady, setAreBoardImagesReady] = useState(true);
   const [failedImageKeys, setFailedImageKeys] = useState<Record<string, true>>({});
   const [pieces, setPieces] = useState<BoardPiece[]>([]);
+  /** レンダー直後の盤（ref より state に近い）。成り選択の onPress で即時に使う */
+  const piecesRenderRef = useRef<BoardPiece[]>([]);
+  piecesRenderRef.current = pieces;
+  const [boardSpriteEpoch, setBoardSpriteEpoch] = useState(0);
   const [sideToMove, setSideToMove] = useState<Side>('player');
   const [moveNo, setMoveNo] = useState(1);
   const [gameId, setGameId] = useState<string | null>(null);
@@ -981,6 +1531,7 @@ export function StageShogiScreen() {
   const [isLoadingPlayerLegalMoves, setIsLoadingPlayerLegalMoves] = useState(false);
   const [hands, setHands] = useState<HandsState>(createEmptyHandsState());
   const [pendingPromotion, setPendingPromotion] = useState<PendingPromotion | null>(null);
+  const [promotionImageFlash, setPromotionImageFlash] = useState<PromotionImageFlash | null>(null);
   const [stateHash, setStateHash] = useState<string | null>(null);
   const [pieceCatalog, setPieceCatalog] = useState<PieceCatalogItem[]>([]);
   const [winner, setWinner] = useState<Side | null>(null);
@@ -1001,6 +1552,9 @@ export function StageShogiScreen() {
   const requestAiMoveUseCase = useMemo(() => new RequestAiMoveUseCase(), []);
   const isMountedRef = useRef(true);
   const piecesRef = useRef<BoardPiece[]>([]);
+  /** 成りダイアログを出す直前の盤（不成で先に動かす前）。「成る」確定時はここから楽観計算する */
+  const piecesBeforePromotionDialogRef = useRef<BoardPiece[] | null>(null);
+  const handsRef = useRef<HandsState>(createEmptyHandsState());
   const stateHashRef = useRef<string | null>(null);
   const handleCellPressRef = useRef<(row: number, col: number) => void>(() => undefined);
   const hasEnteredBattleRef = useRef(false);
@@ -1024,10 +1578,29 @@ export function StageShogiScreen() {
   useEffect(() => {
     piecesRef.current = pieces;
   }, [pieces]);
+  useEffect(() => {
+    handsRef.current = hands;
+  }, [hands]);
 
   useEffect(() => {
     stateHashRef.current = stateHash;
   }, [stateHash]);
+
+  useEffect(() => {
+    if (!promotionImageFlash) return;
+    const hit = pieces.find(
+      (p) =>
+        p.row === promotionImageFlash.row &&
+        p.col === promotionImageFlash.col &&
+        p.side === promotionImageFlash.side,
+    );
+    if (hit != null && resolvePromotedImageSource(hit) != null) {
+      setPromotionImageFlash(null);
+      return;
+    }
+    const t = setTimeout(() => setPromotionImageFlash(null), 2500);
+    return () => clearTimeout(t);
+  }, [pieces, promotionImageFlash]);
 
   const pieceDefsByChar = useMemo(
     () =>
@@ -1060,15 +1633,34 @@ export function StageShogiScreen() {
     }
     return map;
   }, [pieceCatalog, pieceDefsByChar]);
-  const promotedPieceDefsByCode = useMemo(
-    () =>
-      Object.fromEntries(
-        Object.entries(PROMOTED_CODE_TO_CHAR)
-          .map(([code, char]) => [code, pieceDefsByChar[char]])
-          .filter((entry): entry is [string, PieceCatalogItem] => Boolean(entry[1])),
-      ),
-    [pieceDefsByChar],
-  );
+  const promotedPieceDefsByCode = useMemo(() => {
+    const map: Record<string, PieceCatalogItem> = {};
+
+    // 1) DBカタログで isPromoted=true の駒を最優先で採用する。
+    for (const item of pieceCatalog) {
+      if (!item.isPromoted) continue;
+      const byPieceCode = item.pieceCode?.toUpperCase();
+      if (byPieceCode) {
+        map[byPieceCode] = item;
+        continue;
+      }
+      const byChar = CHAR_TO_CODE[item.char]?.toUpperCase();
+      if (byChar) {
+        map[byChar] = item;
+      }
+    }
+
+    // 2) 足りない分だけ従来の文字マップで補完する。
+    for (const [code, char] of Object.entries(PROMOTED_CODE_TO_CHAR)) {
+      if (map[code]) continue;
+      const fallback = pieceDefsByChar[char];
+      if (fallback) {
+        map[code] = fallback;
+      }
+    }
+
+    return map;
+  }, [pieceCatalog, pieceDefsByChar]);
   const pieceSfenMapping = useMemo(() => createPieceSfenMapping(pieceCatalog), [pieceCatalog]);
 
   function resolveSkillName(move: BattleMove): string | null {
@@ -1099,28 +1691,35 @@ export function StageShogiScreen() {
     position: BattleCanonicalPosition,
     game: BattleGameStatus,
     preservedMovedPiece?: PreservedMovedPiece,
+    /** `await` 直後は `piecesRef` が楽観更新より遅れるため、直前に計算した盤面を渡す */
+    optimisticBaseline?: BoardPiece[] | null,
   ): Side | null {
+    const reconcileSource = optimisticBaseline ?? piecesRef.current;
     const parsedPieces = piecesFromCanonicalPosition(
       position,
       pieceSfenMapping,
       pieceDefsByCode,
       promotedPieceDefsByCode,
-      piecesRef.current,
+      reconcileSource,
     );
     const nextPieces = preserveMovedPieceIdentity(parsedPieces, preservedMovedPiece);
-    const reconciledPieces = reconcilePieceIdentity(nextPieces, piecesRef.current);
-    const jsonHands = handsFromCanonical(position);
-    const baseHands = resolveHandsStateFromCanonicalSfenAndJson(
-      position.sfen,
-      pieceSfenMapping,
-      jsonHands,
-    );
+    const reconciledPieces = reconcilePieceIdentity(nextPieces, reconcileSource);
+    const withPromotionOverlay =
+      optimisticBaseline && optimisticBaseline.length > 0
+        ? overlayPromotionFromOptimistic(reconciledPieces, optimisticBaseline)
+        : reconciledPieces;
+    // hands は canonical JSON を唯一の真実として扱う（SFEN 由来の手と混ぜると二重計上が起きやすい）
     const nextHands = remapHandsStateToDisplayPieceCodes(
-      normalizeHandsStateKeys(reconcileExtendedPieceHandsAgainstBoard(baseHands, reconciledPieces)),
+      normalizeHandsStateKeys(handsFromCanonical(position)),
       pieceCatalog,
     );
-    setPieces(reconciledPieces);
-    setHands(nextHands);
+    const reconciledHands = reconcileExtendedPieceHandsAgainstBoard(
+      nextHands,
+      withPromotionOverlay,
+    );
+    setPromotionImageFlash(null);
+    setPieces(withPromotionOverlay);
+    setHands(reconciledHands);
     setSideToMove(position.sideToMove);
     setMoveNo(position.turnNumber);
     setSelectedCell(null);
@@ -1377,23 +1976,48 @@ export function StageShogiScreen() {
       }
 
       let preservedMovedPiece: PreservedMovedPiece | undefined;
+      let optimisticBaseline: BoardPiece[] | undefined;
       const selectedMove = response.selectedMove;
       if (selectedMove?.fromRow != null && selectedMove?.fromCol != null) {
         const moved = findPieceAt(piecesRef.current, selectedMove.fromRow, selectedMove.fromCol);
-        if (moved && moved.side === 'enemy' && moved.imageSignedUrl) {
+        if (moved && moved.side === 'enemy') {
+          const resolvedPieceCode = pieceCodeFromPlacement(
+            moved.pieceCode,
+            moved.char,
+            pieceDefsByChar,
+          );
+          const codeKey = (resolvedPieceCode ?? moved.pieceCode ?? '').toUpperCase();
+          const promoted = selectedMove.promote ? true : (moved.promoted ?? false);
+          const promotedDef = selectedMove.promote ? promotedPieceDefsByCode[codeKey] : null;
+          const imageSignedUrl = preferBundledPromotedImageOverRemoteUrl(
+            resolvedPieceCode ?? moved.pieceCode,
+            promoted,
+            promotedDef?.imageSignedUrl ?? moved.imageSignedUrl,
+          );
+          const char = resolvedPieceCode
+            ? pieceCharFromCode(resolvedPieceCode, moved.side, promoted)
+            : moved.char;
           preservedMovedPiece = {
             side: moved.side,
             toRow: selectedMove.toRow,
             toCol: selectedMove.toCol,
-            pieceCode: moved.pieceCode,
-            char: moved.char,
-            imageSignedUrl: moved.imageSignedUrl,
-            promoted: moved.promoted,
+            pieceCode: resolvedPieceCode ?? moved.pieceCode,
+            char,
+            imageSignedUrl,
+            promoted,
           };
         }
       }
 
       if (selectedMove) {
+        optimisticBaseline = computePiecesAfterOptimisticMove(
+          piecesRef.current,
+          'enemy',
+          selectedMove,
+          pieceDefsByCode,
+          pieceDefsByChar,
+          promotedPieceDefsByCode,
+        );
         // CPU の着手先を 1 秒だけ先にハイライト表示する（通常移動・持ち駒打ちの両方）
         setAiPreviewTarget({ row: selectedMove.toRow, col: selectedMove.toCol });
         await new Promise<void>((resolve) => {
@@ -1408,6 +2032,7 @@ export function StageShogiScreen() {
         response.position,
         response.game,
         preservedMovedPiece,
+        optimisticBaseline,
       );
       lastSuccessfulAiKeyRef.current = requestKey;
       if (nextWinner === 'player') {
@@ -1447,42 +2072,18 @@ export function StageShogiScreen() {
   }
 
   function applyOptimisticMove(actorSide: Side, move: BattleMove) {
+    setPieces((prev) =>
+      computePiecesAfterOptimisticMove(
+        prev,
+        actorSide,
+        move,
+        pieceDefsByCode,
+        pieceDefsByChar,
+        promotedPieceDefsByCode,
+      ),
+    );
     if (move.dropPieceCode) {
-      const pieceCode = move.dropPieceCode;
-      const pieceDef = pieceDefsByCode[pieceCode];
-      setPieces((prev) => [
-        ...prev,
-        {
-          side: actorSide,
-          row: move.toRow,
-          col: move.toCol,
-          pieceCode,
-          char: pieceCharFromCode(pieceCode, actorSide, false),
-          promoted: false,
-          imageSignedUrl: pieceDef?.imageSignedUrl ?? null,
-        },
-      ]);
-      setHands((prev) => addHandPiece(prev, actorSide, pieceCode, -1));
-    } else if (move.fromRow !== null && move.fromCol !== null) {
-      const fromRow = move.fromRow;
-      const fromCol = move.fromCol;
-      setPieces((prev) => {
-        const moving = prev.find((p) => p.row === fromRow && p.col === fromCol);
-        if (!moving) return prev;
-        const promoted = move.promote ? true : (moving.promoted ?? false);
-        const promotedDef = move.promote ? promotedPieceDefsByCode[moving.pieceCode ?? ''] : null;
-        const imageSignedUrl = promotedDef?.imageSignedUrl ?? moving.imageSignedUrl;
-        const char = moving.pieceCode
-          ? pieceCharFromCode(moving.pieceCode, moving.side, promoted)
-          : moving.char;
-        return prev
-          .filter((p) => !(p.row === move.toRow && p.col === move.toCol))
-          .map((p) =>
-            p.row === fromRow && p.col === fromCol
-              ? { ...p, row: move.toRow, col: move.toCol, promoted, imageSignedUrl, char }
-              : p,
-          );
-      });
+      setHands((prev) => addHandPiece(prev, actorSide, move.dropPieceCode!, -1));
     }
   }
 
@@ -1499,34 +2100,12 @@ export function StageShogiScreen() {
     });
   }
 
-  async function commitPlayerMove(move: BattleMove) {
-    if (!gameId || isAiThinking || isCreatingGame) return;
-
-    let preservedMovedPiece: PreservedMovedPiece | undefined;
-    if (move.fromRow != null && move.fromCol != null) {
-      const moved = findPieceAt(piecesRef.current, move.fromRow, move.fromCol);
-      if (moved && moved.side === 'player' && moved.imageSignedUrl) {
-        preservedMovedPiece = {
-          side: moved.side,
-          toRow: move.toRow,
-          toCol: move.toCol,
-          pieceCode: moved.pieceCode,
-          char: moved.char,
-          imageSignedUrl: moved.imageSignedUrl,
-          promoted: move.promote ? true : moved.promoted,
-        };
-      }
-    }
-
-    setSelectedCell(null);
-    setSelectedDropPieceCode(null);
-    setLegalTargets([]);
-    setEnemyPreviewTargets([]);
-    setPlayerLegalMoves([]);
-    setPendingPromotion(null);
-    setAiError(null);
-    applyOptimisticMove('player', move);
-
+  async function sendCommittedPlayerMoveToServer(
+    move: BattleMove,
+    optimisticBaseline: BoardPiece[],
+    preservedMovedPiece: PreservedMovedPiece | undefined,
+  ) {
+    if (!gameId) return;
     try {
       const result = await commitGameMoveUseCase.execute({
         gameId,
@@ -1544,6 +2123,7 @@ export function StageShogiScreen() {
         result.position,
         result.game,
         preservedMovedPiece,
+        optimisticBaseline,
       );
       if (nextWinner === 'player') {
         void claimStageClearRewardIfNeeded();
@@ -1555,6 +2135,136 @@ export function StageShogiScreen() {
     } catch (error: unknown) {
       setAiError(error instanceof Error ? error.message : String(error));
     }
+  }
+
+  async function commitPlayerMove(move: BattleMove) {
+    if (!gameId || isAiThinking || isCreatingGame) return;
+
+    const preservedMovedPiece = buildPreservedMovedPieceForPlayer(
+      pieces,
+      move,
+      pieceDefsByChar,
+      promotedPieceDefsByCode,
+    );
+
+    const optimisticBaseline = computePiecesAfterOptimisticMove(
+      pieces,
+      'player',
+      move,
+      pieceDefsByCode,
+      pieceDefsByChar,
+      promotedPieceDefsByCode,
+    );
+
+    const applyBoardAndClearSelection = () => {
+      piecesRef.current = optimisticBaseline;
+      setPieces(optimisticBaseline);
+      if (move.dropPieceCode) {
+        setHands((prev) => addHandPiece(prev, 'player', move.dropPieceCode!, -1));
+      }
+      setSelectedCell(null);
+      setSelectedDropPieceCode(null);
+      setLegalTargets([]);
+      setEnemyPreviewTargets([]);
+      setPlayerLegalMoves([]);
+      setPendingPromotion(null);
+      setAiError(null);
+    };
+
+    try {
+      flushSync(applyBoardAndClearSelection);
+    } catch {
+      applyBoardAndClearSelection();
+    }
+
+    await sendCommittedPlayerMoveToServer(move, optimisticBaseline, preservedMovedPiece);
+  }
+
+  /** 成り／不成: 盤上マスを正として楽観更新し、画像キャッシュ取りこぼし用に spriteEpoch を進める */
+  function commitPromotionChoice(move: BattleMove, pending: PendingPromotion) {
+    if (!gameId || isAiThinking || isCreatingGame) return;
+    const preBoard = piecesRenderRef.current;
+    const trusted: TrustedBoardEndpoints = {
+      fromRow: pending.boardFromRow,
+      fromCol: pending.boardFromCol,
+      toRow: pending.boardToRow,
+      toCol: pending.boardToCol,
+    };
+
+    if (move.promote) {
+      const atDest = findPieceAt(preBoard, pending.boardToRow, pending.boardToCol);
+      if (atDest && atDest.side === 'player') {
+        const mod = localPromotedModuleFromBaseCodeCandidates(
+          collectStandardBaseCodesForLocalPromotedImage(atDest),
+        );
+        if (mod != null) {
+          setPromotionImageFlash({
+            row: pending.boardToRow,
+            col: pending.boardToCol,
+            side: 'player',
+            assetModule: mod,
+            flashKey: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+          });
+        } else {
+          setPromotionImageFlash(null);
+        }
+      } else {
+        setPromotionImageFlash(null);
+      }
+    } else {
+      setPromotionImageFlash(null);
+    }
+
+    const snapshot = piecesBeforePromotionDialogRef.current;
+    piecesBeforePromotionDialogRef.current = null;
+
+    let optimisticBaseline: BoardPiece[];
+    let preservedMovedPiece: PreservedMovedPiece | undefined;
+
+    if (move.promote) {
+      // ダイアログ中は既に「不成」で着手先に駒がある。成りはダイアログ直前の盤から計算する
+      const baseForPromote = snapshot && snapshot.length > 0 ? snapshot : preBoard;
+      optimisticBaseline = computePiecesAfterOptimisticMove(
+        baseForPromote,
+        'player',
+        move,
+        pieceDefsByCode,
+        pieceDefsByChar,
+        promotedPieceDefsByCode,
+        trusted,
+      );
+      preservedMovedPiece = buildPreservedMovedPieceForPlayer(
+        snapshot && snapshot.length > 0 ? snapshot : baseForPromote,
+        move,
+        pieceDefsByChar,
+        promotedPieceDefsByCode,
+        trusted,
+      );
+    } else {
+      optimisticBaseline = preBoard;
+      preservedMovedPiece = buildPreservedMovedPieceForPlayer(
+        preBoard,
+        move,
+        pieceDefsByChar,
+        promotedPieceDefsByCode,
+        trusted,
+      );
+    }
+
+    piecesRef.current = optimisticBaseline;
+    setPieces(optimisticBaseline);
+    if (move.promote) {
+      setBoardSpriteEpoch((e) => e + 1);
+    }
+    setSelectedCell(null);
+    setSelectedDropPieceCode(null);
+    setLegalTargets([]);
+    setEnemyPreviewTargets([]);
+    setPlayerLegalMoves([]);
+    setPendingPromotion(null);
+    setAiError(null);
+
+    void sendCommittedPlayerMoveToServer(move, optimisticBaseline, preservedMovedPiece);
   }
 
   function handleCellPress(row: number, col: number) {
@@ -1589,7 +2299,30 @@ export function StageShogiScreen() {
         const promoteMove = targetMoves.find((move) => move.promote);
         const nonPromoteMove = targetMoves.find((move) => !move.promote);
         if (promoteMove && nonPromoteMove) {
-          setPendingPromotion({ promoteMove, nonPromoteMove });
+          setPromotionImageFlash(null);
+          piecesBeforePromotionDialogRef.current = pieces.map((p) => ({ ...p }));
+          const afterNonPromote = computePiecesAfterOptimisticMove(
+            pieces,
+            'player',
+            nonPromoteMove,
+            pieceDefsByCode,
+            pieceDefsByChar,
+            promotedPieceDefsByCode,
+          );
+          piecesRef.current = afterNonPromote;
+          setPieces(afterNonPromote);
+          setBoardSpriteEpoch((e) => e + 1);
+          setSelectedCell(null);
+          setLegalTargets([]);
+          setEnemyPreviewTargets([]);
+          setPendingPromotion({
+            promoteMove,
+            nonPromoteMove,
+            boardFromRow: selectedCell.row,
+            boardFromCol: selectedCell.col,
+            boardToRow: tapped.row,
+            boardToCol: tapped.col,
+          });
           return;
         }
         void commitPlayerMove(promoteMove ?? nonPromoteMove ?? targetMoves[0]);
@@ -1748,7 +2481,7 @@ export function StageShogiScreen() {
                   )}
                 </View>
                 <Text
-                  className={`-ml-0.5 text-sm font-bold ${selected ? 'text-blue-700' : 'text-[#5d3b2e]'}`}
+                  className={`-ml-0.5 text-sm font-bold ${selected ? 'text-white' : 'text-white'}`}
                 >
                   {`x${entry.count}`}
                 </Text>
@@ -1807,6 +2540,7 @@ export function StageShogiScreen() {
       subtitle="バトル画面（AI接続）"
       hideTitleText
       plainHeader
+      homeButtonTextClassName="text-white"
       fullBleedBackgroundSource={stageBattleBackgroundSource ?? undefined}
     >
       <View className="rounded-xl border-2 border-accent bg-[#f3ead3] p-3">
@@ -1872,6 +2606,8 @@ export function StageShogiScreen() {
                 pieces={pieces}
                 failedImageKeys={failedImageKeys}
                 onPieceImageError={handlePieceImageError}
+                spriteEpoch={boardSpriteEpoch}
+                promotionImageFlash={promotionImageFlash}
               />
             </View>
           </View>
@@ -1915,7 +2651,8 @@ export function StageShogiScreen() {
                 testID="promotion-yes"
                 className="flex-1 rounded-md bg-[#166534] px-3 py-2"
                 onPress={() => {
-                  void commitPlayerMove(pendingPromotion.promoteMove);
+                  const p = pendingPromotion;
+                  if (p) commitPromotionChoice(p.promoteMove, p);
                 }}
               >
                 <Text className="text-center font-bold text-white">成る</Text>
@@ -1924,7 +2661,8 @@ export function StageShogiScreen() {
                 testID="promotion-no"
                 className="flex-1 rounded-md bg-[#92400e] px-3 py-2"
                 onPress={() => {
-                  void commitPlayerMove(pendingPromotion.nonPromoteMove);
+                  const p = pendingPromotion;
+                  if (p) commitPromotionChoice(p.nonPromoteMove, p);
                 }}
               >
                 <Text className="text-center font-bold text-white">成らない</Text>

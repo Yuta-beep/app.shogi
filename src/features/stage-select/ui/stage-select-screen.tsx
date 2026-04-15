@@ -94,7 +94,8 @@ export function StageSelectScreen() {
   const showStagePreviewImage =
     selectedStage && (!userInteractedWithMapScroll || mapScrollY < MAP_SCROLL_HIDE_PREVIEW_PX);
 
-  const previewImageMaxHeight = Math.min(420, Math.round(windowHeight * 0.42));
+  // 各ステージのイメージ高さ（画面に対して控えめに表示）
+  const previewImageMaxHeight = Math.min(460, Math.max(220, Math.round(windowHeight * 0.38)));
 
   return (
     <SafeAreaView className="flex-1" edges={['left', 'right', 'bottom']}>
