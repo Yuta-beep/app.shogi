@@ -335,4 +335,72 @@ describe('piece conversion via DB-derived mapping', () => {
       enemy: {},
     });
   });
+
+  it('normalizes DB multi-char sfen for mineral pieces and keeps them on the board string', () => {
+    const mineralMapping = createPieceSfenMapping([
+      {
+        pieceCode: 'COPPER',
+        sfenCode: 'ZAA',
+        isPromoted: false,
+        char: '銅',
+        name: '',
+        unlock: '',
+        desc: '',
+        skill: '',
+        move: '',
+        moveVectors: [],
+        isRepeatable: false,
+      },
+      {
+        pieceCode: 'LEAD',
+        sfenCode: 'ZAB',
+        isPromoted: false,
+        char: '鉛',
+        name: '',
+        unlock: '',
+        desc: '',
+        skill: '',
+        move: '',
+        moveVectors: [],
+        isRepeatable: false,
+      },
+    ]);
+    expect(mineralMapping.codeToSfen.COPPER).toBe('A');
+    expect(mineralMapping.codeToSfen.LEAD).toBe('!');
+    expect(sfenCharToDisplayChar('a', false, mineralMapping)).toBe('COPPER');
+    expect(sfenCharToDisplayChar('!', false, mineralMapping)).toBe('LEAD');
+
+    const pieces: TestPiece[] = [
+      { side: 'enemy', row: 0, col: 0, pieceCode: 'COPPER', char: '銅' },
+      { side: 'enemy', row: 0, col: 1, pieceCode: 'LEAD', char: '鉛' },
+    ];
+    expect(toSfenBoardPure(pieces, mineralMapping)).toBe('a!7/9/9/9/9/9/9/9/9');
+  });
+
+  it('resolves mineral SFEN even when the catalog has no m_piece rows (fallback)', () => {
+    const emptyCatalogMapping = createPieceSfenMapping([]);
+    expect(sfenCharToDisplayChar('a', false, emptyCatalogMapping)).toBe('COPPER');
+    expect(sfenCharToDisplayChar('o', false, emptyCatalogMapping)).toBe('IRON');
+    expect(sfenCharToDisplayChar('z', false, emptyCatalogMapping)).toBe('TIN');
+    expect(sfenCharToDisplayChar('!', false, emptyCatalogMapping)).toBe('LEAD');
+  });
+
+  it('parses enemy hand tokens that use symbol sfen atoms', () => {
+    const mineralMapping = createPieceSfenMapping([
+      {
+        pieceCode: 'LEAD',
+        sfenCode: 'ZAB',
+        isPromoted: false,
+        char: '鉛',
+        name: '',
+        unlock: '',
+        desc: '',
+        skill: '',
+        move: '',
+        moveVectors: [],
+        isRepeatable: false,
+      },
+    ]);
+    expect(parseSfenHandsPart('2!', mineralMapping)).toEqual({ player: {}, enemy: { LEAD: 2 } });
+  });
 });

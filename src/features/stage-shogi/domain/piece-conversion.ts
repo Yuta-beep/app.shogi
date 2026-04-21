@@ -22,6 +22,138 @@ export type PieceSfenMapping = {
 
 const LEGACY_STANDARD_HAND_ORDER = ['HI', 'KA', 'KI', 'GI', 'KE', 'KY', 'FU'];
 
+/**
+ * Shogi-AI（`ai.shogi` の `piece_mapping::MAPPINGS`）は盤・手駒とも
+ * 1 駒あたり英字 1 文字（成りは `+` + 1 文字）のみ解釈する。
+ * DB の `m_piece_mapping.sfen_code` が 2〜3 文字のとき、ここへ寄せないと
+ * `rank width mismatch` / `invalid sfen` になる。
+ *
+ * 鉱物駒4種はアルファベットの空きが足りないため、鉛のみ記号 `!` を使う
+ * （Rust 側では非 ASCII 大文字は後手扱いで、フロントも A–Z 以外は敵と揃える）。
+ */
+const RUST_ENGINE_ONE_CHAR_SFEN: Readonly<Record<string, string>> = {
+  FU: 'P',
+  KY: 'L',
+  KE: 'N',
+  GI: 'S',
+  KI: 'G',
+  KA: 'B',
+  HI: 'R',
+  OU: 'K',
+  TO: 'P',
+  NY: 'L',
+  NK: 'N',
+  NG: 'S',
+  UM: 'B',
+  RY: 'R',
+  RYU: 'F',
+  NIN: 'C',
+  KAG: 'D',
+  HOU: 'E',
+  HOO: 'H',
+  ENN: 'I',
+  FIR: 'J',
+  SUI: 'M',
+  NAM: 'Q',
+  MOK: 'T',
+  HAA: 'U',
+  HIK: 'V',
+  HOS: 'W',
+  YAM: 'X',
+  MAK: 'Y',
+  COPPER: 'A',
+  IRON: 'O',
+  TIN: 'Z',
+  LEAD: '!',
+  TREASURE: '$',
+};
+
+/** カタログに行が無い／sfen が未同期でも、エンジン SFEN 1 文字 → pieceCode を復元する */
+const CODES_WITH_ENGINE_SFEN_FALLBACK: ReadonlySet<string> = new Set([
+  'COPPER',
+  'IRON',
+  'TIN',
+  'LEAD',
+  'TREASURE',
+]);
+
+/** `sfenCharToDisplayChar` 用（`a`→`A` と `!` の両方で引けるよう atom をキーにする） */
+const ENGINE_SFEN_ATOM_TO_FALLBACK_CODE: Readonly<Record<string, string>> = (() => {
+  const rust = RUST_ENGINE_ONE_CHAR_SFEN as Readonly<Record<string, string>>;
+  const out: Record<string, string> = {};
+  for (const code of CODES_WITH_ENGINE_SFEN_FALLBACK) {
+    const atom = rust[code];
+    if (atom == null) continue;
+    out[atom] = code;
+    out[atom.toUpperCase()] = code;
+  }
+  return out;
+})();
+
+/**
+ * DB カタログに無い駒でも、Rust エンジンと同じ SFEN 原子の逆引きを載せる。
+ * （`sfenCharToDisplayChar` が `null` になり盤から駒が消えるのを防ぐ）
+ */
+function injectEngineSfenFallbackIntoMapping(
+  codeToSfen: Record<string, string>,
+  sfenToCodeUnpromoted: Record<string, string>,
+): void {
+  const rust = RUST_ENGINE_ONE_CHAR_SFEN as Readonly<Record<string, string>>;
+  for (const code of CODES_WITH_ENGINE_SFEN_FALLBACK) {
+    const atom = rust[code];
+    if (atom == null) continue;
+    if (sfenToCodeUnpromoted[atom] != null) continue;
+    sfenToCodeUnpromoted[atom] = code;
+    if (codeToSfen[code] == null) {
+      codeToSfen[code] = atom;
+    }
+  }
+}
+
+function resolveRustSfenAtom(
+  pieceCodeUpper: string,
+  rawFromCatalog: string | undefined,
+): string | null {
+  const raw = rawFromCatalog ?? '';
+  const core = raw.startsWith('+') ? raw.slice(1) : raw;
+  if (core.length === 1 && /^[A-Za-z]$/.test(core)) {
+    return core.toUpperCase();
+  }
+  return RUST_ENGINE_ONE_CHAR_SFEN[pieceCodeUpper] ?? null;
+}
+
+/** DB の多字 sfen をエンジン用 1 文字へ寄せ、逆引き sfenToCode も整合させる */
+function normalizeCatalogSfenToRustAtoms(
+  items: PieceCatalogItem[],
+  codeToSfen: Record<string, string>,
+  sfenToCodeUnpromoted: Record<string, string>,
+  _sfenToCodePromoted: Record<string, string>,
+): void {
+  const rust = RUST_ENGINE_ONE_CHAR_SFEN as Readonly<Record<string, string>>;
+  for (const item of items) {
+    if (item.isPromoted) continue;
+    const pieceCode = item.pieceCode?.toUpperCase();
+    if (!pieceCode) continue;
+    const engineAtom = rust[pieceCode];
+    if (engineAtom == null) continue;
+
+    const current = codeToSfen[pieceCode];
+    if (!current) continue;
+
+    const withoutPlus = current.startsWith('+') ? current.slice(1) : current;
+    const upperCore = withoutPlus.toUpperCase();
+    if (upperCore.length === 1 && upperCore === engineAtom.toUpperCase()) continue;
+
+    delete sfenToCodeUnpromoted[current];
+    delete sfenToCodeUnpromoted[current.toUpperCase()];
+    delete sfenToCodeUnpromoted[withoutPlus];
+    delete sfenToCodeUnpromoted[withoutPlus.toUpperCase()];
+
+    codeToSfen[pieceCode] = engineAtom;
+    sfenToCodeUnpromoted[engineAtom] = pieceCode;
+  }
+}
+
 export function createPieceSfenMapping(items: PieceCatalogItem[]): PieceSfenMapping {
   const sfenToCodeUnpromoted: Record<string, string> = {};
   const sfenToCodePromoted: Record<string, string> = {};
@@ -39,6 +171,9 @@ export function createPieceSfenMapping(items: PieceCatalogItem[]): PieceSfenMapp
       sfenToCodeUnpromoted[sfenCode] = pieceCode;
     }
   }
+
+  normalizeCatalogSfenToRustAtoms(items, codeToSfen, sfenToCodeUnpromoted, sfenToCodePromoted);
+  injectEngineSfenFallbackIntoMapping(codeToSfen, sfenToCodeUnpromoted);
 
   const customHandCodes = Object.entries(codeToSfen)
     .filter(([code]) => !LEGACY_STANDARD_HAND_ORDER.includes(code))
@@ -69,7 +204,13 @@ export function sfenCharToDisplayChar(
     // m_piece_mapping では成り駒の sfen_code が "+R" のように先頭 + 付きで登録されることがある。
     return mapping.sfenToCode.promoted[upper] ?? mapping.sfenToCode.promoted[`+${upper}`] ?? null;
   }
-  return mapping.sfenToCode.unpromoted[upper] ?? null;
+  return (
+    mapping.sfenToCode.unpromoted[upper] ??
+    mapping.sfenToCode.unpromoted[ch] ??
+    ENGINE_SFEN_ATOM_TO_FALLBACK_CODE[upper] ??
+    ENGINE_SFEN_ATOM_TO_FALLBACK_CODE[ch] ??
+    null
+  );
 }
 
 // ── kanji 表示文字マップ ──────────────────────────────────────────────────────
@@ -98,6 +239,11 @@ export const CODE_TO_CHAR: Readonly<Record<string, string>> = {
   HOS: '星',
   YAM: '闇',
   MAK: '魔',
+  COPPER: '銅',
+  IRON: '鉄',
+  TIN: '錫',
+  LEAD: '鉛',
+  TREASURE: '宝',
 };
 
 export const PROMOTED_CODE_TO_CHAR: Readonly<Record<string, string>> = {
@@ -134,6 +280,11 @@ export const CHAR_TO_CODE: Readonly<Record<string, string>> = {
   星: 'HOS',
   闇: 'YAM',
   魔: 'MAK',
+  銅: 'COPPER',
+  鉄: 'IRON',
+  錫: 'TIN',
+  鉛: 'LEAD',
+  宝: 'TREASURE',
 };
 
 // ── toSfenBoardPure ───────────────────────────────────────────────────────────
@@ -161,9 +312,10 @@ export function toSfenBoardPure(placements: SfenPiece[], mapping: PieceSfenMappi
     if (p.row < 0 || p.row >= BOARD_SIZE || p.col < 0 || p.col >= BOARD_SIZE) continue;
     const code = p.pieceCode ?? CHAR_TO_CODE[p.char];
     if (!code) continue;
-    const sfen = mapping.codeToSfen[code.toUpperCase()];
-    if (!sfen) continue;
-    const withPromotion = p.promoted ? `+${sfen}` : sfen;
+    const codeU = code.toUpperCase();
+    const atom = resolveRustSfenAtom(codeU, mapping.codeToSfen[codeU]);
+    if (!atom) continue;
+    const withPromotion = p.promoted ? `+${atom}` : atom;
     board[p.row][p.col] = p.side === 'player' ? withPromotion : withPromotion.toLowerCase();
   }
 
@@ -194,30 +346,33 @@ export function toSfenBoardPure(placements: SfenPiece[], mapping: PieceSfenMappi
  * 持ち駒 HandsState から SFEN hands 部分文字列を生成する純粋関数。
  */
 export function toSfenHandsPure(hands: HandsState, mapping: PieceSfenMapping): string {
-  const playerBySfen: Record<string, number> = {};
-  const enemyBySfen: Record<string, number> = {};
+  const playerByAtom: Record<string, number> = {};
+  const enemyByAtom: Record<string, number> = {};
 
   for (const code of mapping.handOrder) {
-    const sfen = mapping.codeToSfen[code];
-    if (!sfen) continue;
+    const codeU = code.toUpperCase();
+    const atom = resolveRustSfenAtom(codeU, mapping.codeToSfen[codeU]);
+    if (!atom) continue;
     const playerCount = hands.player[code] ?? 0;
     const enemyCount = hands.enemy[code] ?? 0;
-    if (playerCount > 0) playerBySfen[sfen] = (playerBySfen[sfen] ?? 0) + playerCount;
-    if (enemyCount > 0) enemyBySfen[sfen] = (enemyBySfen[sfen] ?? 0) + enemyCount;
+    if (playerCount > 0) playerByAtom[atom] = (playerByAtom[atom] ?? 0) + playerCount;
+    if (enemyCount > 0) enemyByAtom[atom] = (enemyByAtom[atom] ?? 0) + enemyCount;
   }
 
   const chunks: string[] = [];
-  const sfenOrder = mapping.handOrder
-    .map((code) => mapping.codeToSfen[code])
-    .filter(
-      (value, index, array): value is string => Boolean(value) && array.indexOf(value) === index,
-    );
-  for (const sfen of sfenOrder) {
-    const playerCount = playerBySfen[sfen] ?? 0;
-    const enemyCount = enemyBySfen[sfen] ?? 0;
-    if (playerCount > 0) chunks.push(`${playerCount > 1 ? String(playerCount) : ''}${sfen}`);
+  const atomOrder: string[] = [];
+  for (const code of mapping.handOrder) {
+    const codeU = code.toUpperCase();
+    const atom = resolveRustSfenAtom(codeU, mapping.codeToSfen[codeU]);
+    if (!atom) continue;
+    if (!atomOrder.includes(atom)) atomOrder.push(atom);
+  }
+  for (const atom of atomOrder) {
+    const playerCount = playerByAtom[atom] ?? 0;
+    const enemyCount = enemyByAtom[atom] ?? 0;
+    if (playerCount > 0) chunks.push(`${playerCount > 1 ? String(playerCount) : ''}${atom}`);
     if (enemyCount > 0)
-      chunks.push(`${enemyCount > 1 ? String(enemyCount) : ''}${sfen.toLowerCase()}`);
+      chunks.push(`${enemyCount > 1 ? String(enemyCount) : ''}${atom.toLowerCase()}`);
   }
   return chunks.length > 0 ? chunks.join('') : '-';
 }
@@ -225,10 +380,13 @@ export function toSfenHandsPure(hands: HandsState, mapping: PieceSfenMapping): s
 // ── parseSfenHandsPart / handsFromCanonicalSfen ───────────────────────────────
 
 function handTokenSideIsPlayer(token: string): boolean {
-  const idx = token.search(/[a-zA-Z]/);
-  if (idx < 0) return true;
-  const c = token[idx]!;
-  return c >= 'A' && c <= 'Z';
+  let i = 0;
+  while (i < token.length && /\d/.test(token[i]!)) i += 1;
+  const c = token[i];
+  if (c == null) return true;
+  if (c >= 'A' && c <= 'Z') return true;
+  if (c >= 'a' && c <= 'z') return false;
+  return false;
 }
 
 type HandsPattern = { code: string; upper: string; len: number };

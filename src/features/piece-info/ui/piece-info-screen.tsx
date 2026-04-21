@@ -27,6 +27,13 @@ const pieceImages: Record<string, number> = {
 // 5x5グリッド（中心 [2][2] = 駒位置）
 const GRID_SIZE = 5;
 const CENTER = 2;
+const LEAF_SKILL_DESCRIPTION = '移動時10%の確率で「葉」駒を周囲1マスに召喚する。';
+
+function resolveDisplaySkillText(char: string, skill: string | null | undefined): string {
+  if (char === '葉') return LEAF_SKILL_DESCRIPTION;
+  const normalized = (skill ?? '').trim();
+  return normalized.length > 0 ? normalized : '-';
+}
 
 function MovementGrid({ vectors, isRepeatable }: { vectors: MoveVector[]; isRepeatable: boolean }) {
   // グリッドセルに移動可能かどうかをマーク
@@ -169,7 +176,9 @@ export function PieceInfoScreen() {
                 )}
 
                 <Text className="mt-3 text-sm font-black text-[#7f1d1d]">【スキル】</Text>
-                <Text className="mt-1 text-base leading-6 text-[#1f2937]">{piece.skill}</Text>
+                <Text className="mt-1 text-base leading-6 text-[#1f2937]">
+                  {resolveDisplaySkillText(piece.char, piece.skill)}
+                </Text>
 
                 <Text className="mt-3 text-sm font-black text-[#7f1d1d]">【移動】</Text>
                 <Text className="mt-1 text-base leading-6 text-[#1f2937]">{piece.move}</Text>

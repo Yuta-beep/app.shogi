@@ -63,6 +63,7 @@ const BOARD_PIECE_SIZE_OVERRIDES: Partial<Record<string, number>> = {
 };
 const ENABLE_PIECE_IMAGES = process.env.EXPO_PUBLIC_ENABLE_PIECE_IMAGES !== 'false';
 const STANDARD_PIECE_CODES = new Set(['FU', 'KY', 'KE', 'GI', 'KI', 'KA', 'HI', 'OU']);
+const LEAF_SKILL_DESCRIPTION = '移動時10%の確率で「葉」駒を周囲1マスに召喚する。';
 /** プロジェクト直下 `assets/pieces/promoted/` の PNG（Metro の静的 require） */
 const LOCAL_PROMOTED_PIECE_IMAGE_BY_CODE: Partial<Record<string, number>> = {
   FU: require('../../../../assets/pieces/promoted/tokin.png'),
@@ -144,6 +145,8 @@ function toBasePieceCode(pieceCode: string | null | undefined): string | null {
 
 type BoardPiece = RuleBoardPiece & {
   imageSignedUrl: string | null;
+  /** 闇の `dark_blind`（boardState.skill_state.piece_statuses）。敵に取られるまで維持 */
+  darkVeiled?: boolean;
 };
 type PendingPromotion = {
   promoteMove: BattleMove;
@@ -231,18 +234,36 @@ function fallbackPiecePalette(side: string) {
   };
 }
 
+/** `master.m_piece.piece_code` が `piece_…` の実体IDで返るとき、SFEN 用の表示コードではない */
+function isOpaquePieceInstanceId(code: string | null | undefined): boolean {
+  if (!code) return false;
+  return /^piece_[a-z0-9]+$/i.test(code.trim());
+}
+
 function pieceCodeFromPlacement(
   pieceCode: string | null,
   char: string,
   pieceDefsByChar: Partial<Record<string, PieceCatalogItem>>,
 ): string | null {
-  if (pieceCode) return toBasePieceCode(pieceCode);
-  const fromCatalog = pieceDefsByChar[char]?.pieceCode;
-  if (fromCatalog) return fromCatalog;
+  if (!isOpaquePieceInstanceId(pieceCode) && pieceCode) {
+    return toBasePieceCode(pieceCode);
+  }
+  const catalogItem = pieceDefsByChar[char];
+  if (catalogItem?.pieceCode && !isOpaquePieceInstanceId(catalogItem.pieceCode)) {
+    return toBasePieceCode(catalogItem.pieceCode) ?? catalogItem.pieceCode;
+  }
+  // API の pieceCode / カタログの pieceCode が共に `piece_…` のとき、漢字からエンジン用コードへ
+  if (catalogItem && isOpaquePieceInstanceId(catalogItem.pieceCode)) {
+    const fromKanji = CHAR_TO_CODE[char];
+    if (fromKanji) return toBasePieceCode(fromKanji) ?? fromKanji;
+  }
   if (PROMOTED_CHAR_TO_BASE_CODE[char]) {
     return PROMOTED_CHAR_TO_BASE_CODE[char];
   }
-  return CHAR_TO_CODE[char] ?? null;
+  const fromKanji = CHAR_TO_CODE[char];
+  if (fromKanji) return toBasePieceCode(fromKanji) ?? fromKanji;
+  if (pieceCode) return toBasePieceCode(pieceCode);
+  return null;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -450,6 +471,50 @@ function handsFromCanonical(position: BattleCanonicalPosition): HandsState {
   };
 }
 
+function normalizeCapturedCodeForStarReturn(code: string | null | undefined): string | null {
+  if (!code) return null;
+  const normalized = code.toUpperCase();
+  if (normalized === 'HOS' || code === '星') return 'HOS';
+  return normalized;
+}
+
+function patchHandsForStarReturnSkill(
+  position: BattleCanonicalPosition,
+  actorSide: Side,
+  move: BattleMove | null | undefined,
+  skillTriggered: boolean,
+): BattleCanonicalPosition {
+  if (!skillTriggered) return position;
+  if (normalizeCapturedCodeForStarReturn(move?.capturedPieceCode) !== 'HOS') return position;
+  const actorBag = { ...(position.hands[actorSide] ?? {}) };
+  const actorCountRaw = actorBag.HOS;
+  const actorCount =
+    typeof actorCountRaw === 'number' && Number.isFinite(actorCountRaw)
+      ? Math.max(0, Math.floor(actorCountRaw))
+      : 0;
+  if (actorCount <= 0) return position;
+  const targetSide: Side = actorSide === 'player' ? 'enemy' : 'player';
+  const targetBag = { ...(position.hands[targetSide] ?? {}) };
+  const targetCountRaw = targetBag.HOS;
+  const targetCount =
+    typeof targetCountRaw === 'number' && Number.isFinite(targetCountRaw)
+      ? Math.max(0, Math.floor(targetCountRaw))
+      : 0;
+  actorBag.HOS = Math.max(0, actorCount - 1);
+  if (actorBag.HOS <= 0) {
+    delete actorBag.HOS;
+  }
+  targetBag.HOS = targetCount + 1;
+  return {
+    ...position,
+    hands: {
+      ...position.hands,
+      [actorSide]: actorBag,
+      [targetSide]: targetBag,
+    },
+  };
+}
+
 function countPiecesOnBoardWithCode(pieces: BoardPiece[], side: Side, pieceCode: string): number {
   const want = pieceCode.toUpperCase();
   let n = 0;
@@ -504,6 +569,47 @@ function reconcileExtendedPieceHandsAgainstBoard(
   };
 }
 
+/** `boardState.skill_state.piece_statuses` の dark_blind を表示用マスクに反映 */
+function darkBlindDisplayKeysFromCanonical(position: BattleCanonicalPosition): Set<string> {
+  const keys = new Set<string>();
+  const boardState = asRecord(position.boardState);
+  if (!boardState) return keys;
+  const skillState = asRecord(boardState.skill_state ?? boardState.skillState);
+  const rawList = (skillState?.piece_statuses ??
+    skillState?.pieceStatuses ??
+    boardState.piece_statuses ??
+    boardState.pieceStatuses) as unknown;
+  if (!Array.isArray(rawList)) return keys;
+  for (const raw of rawList) {
+    const st = asRecord(raw);
+    if (!st) continue;
+    const statusType = asString(st.status_type ?? st.statusType) ?? '';
+    if (statusType !== 'dark_blind') continue;
+    const turns = Number(st.remaining_turns ?? st.remainingTurns ?? 1);
+    if (!Number.isFinite(turns) || turns <= 0) continue;
+    const row = normalizeCellIndex(Number(st.row));
+    const col = normalizeCellIndex(Number(st.col));
+    if (row === null || col === null) continue;
+    const side = normalizeSide(asString(st.side) ?? 'player');
+    keys.add(`${side}:${row}:${col}`);
+  }
+  return keys;
+}
+
+function applyDarkVeilFromSkillStateToPieces(
+  pieces: BoardPiece[],
+  position: BattleCanonicalPosition,
+): BoardPiece[] {
+  const keys = darkBlindDisplayKeysFromCanonical(position);
+  if (keys.size === 0) {
+    return pieces.map((p) => ({ ...p, darkVeiled: false }));
+  }
+  return pieces.map((p) => ({
+    ...p,
+    darkVeiled: keys.has(`${p.side}:${p.row}:${p.col}`),
+  }));
+}
+
 function piecesFromCanonicalBoardState(
   position: BattleCanonicalPosition,
   pieceDefsByCode: Partial<Record<string, PieceCatalogItem>>,
@@ -531,10 +637,15 @@ function piecesFromCanonicalBoardState(
     if (row === null || col === null) continue;
     const side = normalizeSide(asString(entry.side ?? nested.side) ?? 'player');
     const rawPromoted = asBoolean(entry.promoted ?? nested.promoted) ?? false;
-    const code =
+    const rawCharForCode = asString(nested.char ?? entry.char) ?? '';
+    let code =
       asString(nested.pieceCode ?? nested.piece_code ?? nested.code) ??
-      CHAR_TO_CODE[asString(nested.char ?? entry.char) ?? ''] ??
+      CHAR_TO_CODE[rawCharForCode] ??
       null;
+    if (code && isOpaquePieceInstanceId(code)) {
+      const fromKanji = CHAR_TO_CODE[rawCharForCode];
+      if (fromKanji) code = fromKanji;
+    }
     if (!code) continue;
     const key = `${side}:${row}:${col}`;
     if (seen.has(key)) continue;
@@ -602,7 +713,8 @@ function piecesFromCanonicalPosition(
         continue;
       }
 
-      const side: Side = ch === ch.toUpperCase() ? 'player' : 'enemy';
+      // A–Z のみ先手（player）。記号駒（鉛 `!` など）は Rust 側と同様に後手扱いとする。
+      const side: Side = ch >= 'A' && ch <= 'Z' ? 'player' : 'enemy';
       // DB 由来 mapping から pieceCode を復元する（`+` プレフィックスの成り駒は第2引数が必要）。
       let pieceCode = sfenCharToDisplayChar(ch, promoted, pieceSfenMapping);
       if (!pieceCode && promoted) {
@@ -1189,6 +1301,8 @@ type BoardPieceSpriteProps = {
   /** 成る直後のみ: require したローカル成り画像を `resolvePromotedImageSource` より優先 */
   instantPromotedSource?: number | null;
   instantPromotedKey?: string | null;
+  /** 敵「闇」の隣接マスにいるとき、駒の文字・絵柄を判別しづらくする */
+  darkVeiled?: boolean;
 };
 
 const BoardPieceSprite = memo(function BoardPieceSprite({
@@ -1197,6 +1311,7 @@ const BoardPieceSprite = memo(function BoardPieceSprite({
   onImageError,
   instantPromotedSource = null,
   instantPromotedKey = null,
+  darkVeiled = false,
 }: BoardPieceSpriteProps) {
   const rowIndex = normalizeCellIndex(piece.row);
   const colIndex = normalizeCellIndex(piece.col);
@@ -1252,58 +1367,74 @@ const BoardPieceSprite = memo(function BoardPieceSprite({
           transform: [{ rotate: enemy ? '180deg' : '0deg' }],
         }}
       >
-        {localPromotedImageSource != null ? (
-          <Image
-            key={`pl-${instantPromotedKey ?? 'n'}-${piece.side}-${piece.row}-${piece.col}-${piece.promoted ? 1 : 0}-${piece.char}-${piece.pieceCode ?? ''}`}
-            recyclingKey={pieceImageRecyclingKey}
-            source={localPromotedImageSource}
-            contentFit="contain"
-            transition={0}
-            cachePolicy="memory-disk"
-            style={{ width: '100%', height: '100%' }}
-          />
-        ) : imageUri ? (
-          <Image
-            key={`uri-${piece.side}-${piece.row}-${piece.col}-${piece.promoted ? 1 : 0}-${piece.char}-${imageUri}`}
-            recyclingKey={pieceImageRecyclingKey}
-            source={{ uri: imageUri }}
-            contentFit="contain"
-            style={{ width: '100%', height: '100%' }}
-            onError={onImageError}
-          />
-        ) : (
-          <View style={{ width: '100%', height: '100%' }}>
-            <Svg width="100%" height="100%" viewBox="0 0 100 120">
-              <Polygon
-                points="50,3 97,30 83,117 17,117 3,30"
-                fill={fallbackPiecePalette(piece.side).fill}
-                stroke={fallbackPiecePalette(piece.side).stroke}
-                strokeWidth={5}
-              />
-            </Svg>
+        <View style={{ width: '100%', height: '100%', position: 'relative' }}>
+          {localPromotedImageSource != null ? (
+            <Image
+              key={`pl-${instantPromotedKey ?? 'n'}-${piece.side}-${piece.row}-${piece.col}-${piece.promoted ? 1 : 0}-${piece.char}-${piece.pieceCode ?? ''}`}
+              recyclingKey={pieceImageRecyclingKey}
+              source={localPromotedImageSource}
+              contentFit="contain"
+              transition={0}
+              cachePolicy="memory-disk"
+              style={{ width: '100%', height: '100%' }}
+            />
+          ) : imageUri ? (
+            <Image
+              key={`uri-${piece.side}-${piece.row}-${piece.col}-${piece.promoted ? 1 : 0}-${piece.char}-${imageUri}`}
+              recyclingKey={pieceImageRecyclingKey}
+              source={{ uri: imageUri }}
+              contentFit="contain"
+              style={{ width: '100%', height: '100%' }}
+              onError={onImageError}
+            />
+          ) : (
+            <View style={{ width: '100%', height: '100%' }}>
+              <Svg width="100%" height="100%" viewBox="0 0 100 120">
+                <Polygon
+                  points="50,3 97,30 83,117 17,117 3,30"
+                  fill={fallbackPiecePalette(piece.side).fill}
+                  stroke={fallbackPiecePalette(piece.side).stroke}
+                  strokeWidth={5}
+                />
+              </Svg>
+              <View
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 2,
+                }}
+              >
+                {king ? (
+                  <Crown size={16} color={fallbackPiecePalette(piece.side).icon} />
+                ) : (
+                  <Shield size={16} color={fallbackPiecePalette(piece.side).icon} />
+                )}
+                <Text
+                  className="text-sm font-black"
+                  style={{ color: fallbackPiecePalette(piece.side).text }}
+                >
+                  {darkVeiled ? '' : getDisplayChar(piece)}
+                </Text>
+              </View>
+            </View>
+          )}
+          {darkVeiled ? (
             <View
+              pointerEvents="none"
               style={{
                 position: 'absolute',
-                inset: 0,
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 2,
+                left: 0,
+                right: 0,
+                top: 0,
+                bottom: 0,
+                /** 闇に包まれた駒は文字・絵柄を完全に隠す（透過なしの不透過黒） */
+                backgroundColor: '#000000',
               }}
-            >
-              {king ? (
-                <Crown size={16} color={fallbackPiecePalette(piece.side).icon} />
-              ) : (
-                <Shield size={16} color={fallbackPiecePalette(piece.side).icon} />
-              )}
-              <Text
-                className="text-sm font-black"
-                style={{ color: fallbackPiecePalette(piece.side).text }}
-              >
-                {getDisplayChar(piece)}
-              </Text>
-            </View>
-          </View>
-        )}
+            />
+          ) : null}
+        </View>
       </View>
     </View>
   );
@@ -1500,6 +1631,7 @@ const BoardPiecesLayer = memo(function BoardPiecesLayer({
             }}
             instantPromotedSource={flash?.assetModule ?? null}
             instantPromotedKey={flash?.flashKey ?? null}
+            darkVeiled={Boolean(placement.darkVeiled)}
           />
         );
       })}
@@ -1514,6 +1646,12 @@ function normalizeSkillName(skill: string | undefined): string | null {
     return null;
   }
   return normalized;
+}
+
+function resolveInspectSkillDescription(char: string, desc: string | undefined): string {
+  if (char === '葉') return LEAF_SKILL_DESCRIPTION;
+  const normalized = (desc ?? '').trim();
+  return normalized.length > 0 ? normalized : '詳細は準備中です。';
 }
 
 export function StageShogiScreen() {
@@ -1724,6 +1862,7 @@ export function StageShogiScreen() {
       optimisticBaseline && optimisticBaseline.length > 0
         ? overlayPromotionFromOptimistic(reconciledPieces, optimisticBaseline)
         : reconciledPieces;
+    const withDarkVeil = applyDarkVeilFromSkillStateToPieces(withPromotionOverlay, position);
     // hands は canonical JSON を唯一の真実として扱う（SFEN 由来の手と混ぜると二重計上が起きやすい）
     const nextHands = remapHandsStateToDisplayPieceCodes(
       normalizeHandsStateKeys(handsFromCanonical(position)),
@@ -1734,7 +1873,7 @@ export function StageShogiScreen() {
       withPromotionOverlay,
     );
     setPromotionImageFlash(null);
-    setPieces(withPromotionOverlay);
+    setPieces(withDarkVeil);
     setHands(reconciledHands);
     setSideToMove(position.sideToMove);
     setMoveNo(position.turnNumber);
@@ -1941,6 +2080,16 @@ export function StageShogiScreen() {
   }, [failedImageKeys, remoteImageUrls]);
 
   useEffect(() => {
+    if (!selectedCell) return;
+    const at = findPieceAt(pieces, selectedCell.row, selectedCell.col);
+    // 闇に覆われた駒でも選択は維持し、緑の移動先ハイライトだけ消す
+    if (at?.darkVeiled) {
+      setLegalTargets([]);
+      setEnemyPreviewTargets([]);
+    }
+  }, [pieces, selectedCell]);
+
+  useEffect(() => {
     let active = true;
 
     if (remoteImageUrls.length === 0) {
@@ -1990,6 +2139,12 @@ export function StageShogiScreen() {
       if (response.skillTriggered && response.selectedMove) {
         showSkillActivation('enemy', response.selectedMove);
       }
+      const patchedAiPosition = patchHandsForStarReturnSkill(
+        response.position,
+        'enemy',
+        response.selectedMove,
+        response.skillTriggered,
+      );
 
       let preservedMovedPiece: PreservedMovedPiece | undefined;
       let optimisticBaseline: BoardPiece[] | undefined;
@@ -2045,7 +2200,7 @@ export function StageShogiScreen() {
       }
 
       const nextWinner = syncFromCanonicalPosition(
-        response.position,
+        patchedAiPosition,
         response.game,
         preservedMovedPiece,
         optimisticBaseline,
@@ -2134,9 +2289,15 @@ export function StageShogiScreen() {
       if (result.skillTriggered) {
         showSkillActivation('player', result.move);
       }
+      const patchedPlayerPosition = patchHandsForStarReturnSkill(
+        result.position,
+        'player',
+        result.move,
+        result.skillTriggered,
+      );
 
       const nextWinner = syncFromCanonicalPosition(
-        result.position,
+        patchedPlayerPosition,
         result.game,
         preservedMovedPiece,
         optimisticBaseline,
@@ -2385,7 +2546,8 @@ export function StageShogiScreen() {
 
     setSelectedDropPieceCode(null);
     setSelectedCell({ row, col });
-    setLegalTargets(targets);
+    // 闇に覆われた駒は合法手はあるが移動先の緑ハイライトだけ出さない（二タップで指す）
+    setLegalTargets(piece.darkVeiled ? [] : targets);
     setEnemyPreviewTargets([]);
   }
 
@@ -2405,7 +2567,7 @@ export function StageShogiScreen() {
     setInspectingPiece({
       char: lookupChar,
       name: detail?.name ?? lookupChar,
-      desc: detail?.desc ?? '詳細は準備中です。',
+      desc: resolveInspectSkillDescription(lookupChar, detail?.desc),
       move: detail?.move ?? '準備中',
       imageSignedUrl: detail?.imageSignedUrl ?? target.imageSignedUrl ?? null,
     });
