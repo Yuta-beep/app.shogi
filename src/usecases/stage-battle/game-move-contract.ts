@@ -226,6 +226,8 @@ function parseSkillTriggered(rawSkillTriggered: unknown, rawMove: unknown): bool
   if (skillTriggered !== null) return skillTriggered;
   const move = parseMove(rawMove);
   if (!move.notation) return false;
+  if (move.notation === 'time_normal') return false;
+  if (move.notation === 'time_skill') return true;
   if (/^[1-9][a-i][1-9][a-i]\+?$/i.test(move.notation)) return false;
   return true;
 }

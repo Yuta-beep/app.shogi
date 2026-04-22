@@ -66,6 +66,11 @@ const RUST_ENGINE_ONE_CHAR_SFEN: Readonly<Record<string, string>> = {
   TIN: 'Z',
   LEAD: '!',
   TREASURE: '$',
+  ELECTRIC: '&',
+  THUNDER: '(',
+  TIME: '#',
+  ICE: '@',
+  SNOW: '^',
 };
 
 /** カタログに行が無い／sfen が未同期でも、エンジン SFEN 1 文字 → pieceCode を復元する */
@@ -75,6 +80,11 @@ const CODES_WITH_ENGINE_SFEN_FALLBACK: ReadonlySet<string> = new Set([
   'TIN',
   'LEAD',
   'TREASURE',
+  'ELECTRIC',
+  'THUNDER',
+  'TIME',
+  'ICE',
+  'SNOW',
 ]);
 
 /** `sfenCharToDisplayChar` 用（`a`→`A` と `!` の両方で引けるよう atom をキーにする） */
@@ -90,6 +100,11 @@ const ENGINE_SFEN_ATOM_TO_FALLBACK_CODE: Readonly<Record<string, string>> = (() 
   // 記号 SFEN の先後表現を分けるための別名（enemy 側）。
   out['%'] = 'TREASURE';
   out['?'] = 'LEAD';
+  out['*'] = 'ELECTRIC';
+  out[')'] = 'THUNDER';
+  out['~'] = 'TIME';
+  out['`'] = 'ICE';
+  out['_'] = 'SNOW';
   return out;
 })();
 
@@ -119,7 +134,7 @@ function resolveRustSfenAtom(
 ): string | null {
   const raw = rawFromCatalog ?? '';
   const core = raw.startsWith('+') ? raw.slice(1) : raw;
-  if (core.length === 1 && /^[A-Za-z]$/.test(core)) {
+  if (core.length === 1) {
     return core.toUpperCase();
   }
   return RUST_ENGINE_ONE_CHAR_SFEN[pieceCodeUpper] ?? null;
@@ -247,6 +262,11 @@ export const CODE_TO_CHAR: Readonly<Record<string, string>> = {
   TIN: '錫',
   LEAD: '鉛',
   TREASURE: '宝',
+  ELECTRIC: '電',
+  THUNDER: '雷',
+  TIME: '時',
+  ICE: '氷',
+  SNOW: '雪',
 };
 
 export const PROMOTED_CODE_TO_CHAR: Readonly<Record<string, string>> = {
@@ -288,6 +308,11 @@ export const CHAR_TO_CODE: Readonly<Record<string, string>> = {
   錫: 'TIN',
   鉛: 'LEAD',
   宝: 'TREASURE',
+  電: 'ELECTRIC',
+  雷: 'THUNDER',
+  時: 'TIME',
+  氷: 'ICE',
+  雪: 'SNOW',
 };
 
 // ── toSfenBoardPure ───────────────────────────────────────────────────────────
@@ -323,7 +348,15 @@ export function toSfenBoardPure(placements: SfenPiece[], mapping: PieceSfenMappi
       board[p.row][p.col] = withPromotion;
     } else {
       // 記号駒は toLowerCase では先後が表せないため、enemy 専用記号を使う。
-      board[p.row][p.col] = withPromotion.replaceAll('$', '%').replaceAll('!', '?').toLowerCase();
+      board[p.row][p.col] = withPromotion
+        .replaceAll('$', '%')
+        .replaceAll('!', '?')
+        .replaceAll('&', '*')
+        .replaceAll('(', ')')
+        .replaceAll('#', '~')
+        .replaceAll('@', '`')
+        .replaceAll('^', '_')
+        .toLowerCase();
     }
   }
 
@@ -380,7 +413,15 @@ export function toSfenHandsPure(hands: HandsState, mapping: PieceSfenMapping): s
     const enemyCount = enemyByAtom[atom] ?? 0;
     if (playerCount > 0) chunks.push(`${playerCount > 1 ? String(playerCount) : ''}${atom}`);
     if (enemyCount > 0) {
-      const enemyAtom = atom.replaceAll('$', '%').replaceAll('!', '?').toLowerCase();
+      const enemyAtom = atom
+        .replaceAll('$', '%')
+        .replaceAll('!', '?')
+        .replaceAll('&', '*')
+        .replaceAll('(', ')')
+        .replaceAll('#', '~')
+        .replaceAll('@', '`')
+        .replaceAll('^', '_')
+        .toLowerCase();
       chunks.push(`${enemyCount > 1 ? String(enemyCount) : ''}${enemyAtom}`);
     }
   }
@@ -395,7 +436,9 @@ function handTokenSideIsPlayer(token: string): boolean {
   const c = token[i];
   if (c == null) return true;
   if (c === '$' || c === '!') return true;
-  if (c === '%' || c === '?') return false;
+  if (c === '&' || c === '(' || c === '#' || c === '@' || c === '^') return true;
+  if (c === '%' || c === '?' || c === '*' || c === ')' || c === '~' || c === '`' || c === '_')
+    return false;
   if (c >= 'A' && c <= 'Z') return true;
   if (c >= 'a' && c <= 'z') return false;
   return false;

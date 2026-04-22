@@ -159,6 +159,8 @@ type PendingPromotion = {
   boardToCol: number;
 };
 
+type TimeActionMode = 'skill' | 'normal';
+
 /** 「成る」タップと同じ更新でローカル成り画像を最優先表示（RN / Expo Image の遅延を回避） */
 type PromotionImageFlash = {
   row: number;
@@ -298,8 +300,13 @@ function buildSfen(
   sideToMove: Side,
   moveNo: number,
   pieceSfenMapping: PieceSfenMapping,
+  pieceDefsByChar: Partial<Record<string, PieceCatalogItem>>,
 ) {
-  const board = toSfenBoardPure(placements, pieceSfenMapping);
+  const normalizedPlacements = placements.map((placement) => ({
+    ...placement,
+    pieceCode: pieceCodeFromPlacement(placement.pieceCode, placement.char, pieceDefsByChar),
+  }));
+  const board = toSfenBoardPure(normalizedPlacements, pieceSfenMapping);
   const side = sideToMove === 'player' ? 'b' : 'w';
   const sfenHands = toSfenHandsPure(hands, pieceSfenMapping);
   return `${board} ${side} ${sfenHands} ${Math.max(1, moveNo)}`;
@@ -359,6 +366,24 @@ function uniqueTargetsFromMoves(moves: BattleMove[]): BoardCell[] {
     out.push({ row: move.toRow, col: move.toCol });
   }
   return out;
+}
+
+function hasAdjacentEnemyPiece(
+  pieces: BoardPiece[],
+  centerRow: number,
+  centerCol: number,
+): boolean {
+  for (let dr = -1; dr <= 1; dr += 1) {
+    for (let dc = -1; dc <= 1; dc += 1) {
+      if (dr === 0 && dc === 0) continue;
+      const row = centerRow + dr;
+      const col = centerCol + dc;
+      if (row < 0 || row >= BOARD_SIZE || col < 0 || col >= BOARD_SIZE) continue;
+      const target = findPieceAt(pieces, row, col);
+      if (target?.side === 'enemy') return true;
+    }
+  }
+  return false;
 }
 
 /**
@@ -716,8 +741,26 @@ function piecesFromCanonicalPosition(
 
       // A–Z と一部記号を先手（player）として扱う。
       let side: Side = ch >= 'A' && ch <= 'Z' ? 'player' : 'enemy';
-      if (ch === '$' || ch === '!') side = 'player';
-      if (ch === '%' || ch === '?') side = 'enemy';
+      if (
+        ch === '$' ||
+        ch === '!' ||
+        ch === '&' ||
+        ch === '(' ||
+        ch === '#' ||
+        ch === '@' ||
+        ch === '^'
+      )
+        side = 'player';
+      if (
+        ch === '%' ||
+        ch === '?' ||
+        ch === '*' ||
+        ch === ')' ||
+        ch === '~' ||
+        ch === '`' ||
+        ch === '_'
+      )
+        side = 'enemy';
       // DB 由来 mapping から pieceCode を復元する（`+` プレフィックスの成り駒は第2引数が必要）。
       let pieceCode = sfenCharToDisplayChar(ch, promoted, pieceSfenMapping);
       if (!pieceCode && promoted) {
@@ -1769,6 +1812,8 @@ export function StageShogiScreen() {
   const [isLoadingPlayerLegalMoves, setIsLoadingPlayerLegalMoves] = useState(false);
   const [hands, setHands] = useState<HandsState>(createEmptyHandsState());
   const [pendingPromotion, setPendingPromotion] = useState<PendingPromotion | null>(null);
+  const [pendingTimeActionCell, setPendingTimeActionCell] = useState<BoardCell | null>(null);
+  const [timeActionMode, setTimeActionMode] = useState<TimeActionMode | null>(null);
   const [promotionImageFlash, setPromotionImageFlash] = useState<PromotionImageFlash | null>(null);
   const [stateHash, setStateHash] = useState<string | null>(null);
   const [pieceCatalog, setPieceCatalog] = useState<PieceCatalogItem[]>([]);
@@ -2080,7 +2125,7 @@ export function StageShogiScreen() {
           sideToMove,
           turnNumber: moveNo,
           moveCount: moveNo - 1,
-          sfen: buildSfen(pieces, hands, sideToMove, moveNo, pieceSfenMapping),
+          sfen: buildSfen(pieces, hands, sideToMove, moveNo, pieceSfenMapping, pieceDefsByChar),
           boardState: buildBoardState(pieces, pieceDefsByCode),
           hands,
         },
@@ -2547,6 +2592,41 @@ export function StageShogiScreen() {
       preservedMovedPiece,
       rollbackSnapshot,
     );
+    setTimeActionMode(null);
+  }
+
+  async function commitTimeSkillOnly(cell: BoardCell, piece: BoardPiece) {
+    if (!gameId || isAiThinking || isCreatingGame || isFinished) return;
+    const rollbackSnapshot = {
+      pieces: piecesRenderRef.current,
+      hands: handsRef.current,
+    };
+    const move: BattleMove = {
+      fromRow: cell.row,
+      fromCol: cell.col,
+      toRow: cell.row,
+      toCol: cell.col,
+      pieceCode: (piece.pieceCode ?? 'TIME').toUpperCase(),
+      promote: false,
+      dropPieceCode: null,
+      capturedPieceCode: null,
+      notation: 'time_skill_only',
+    };
+    setPendingTimeActionCell(null);
+    setTimeActionMode(null);
+    setSelectedCell(null);
+    setSelectedDropPieceCode(null);
+    setLegalTargets([]);
+    setEnemyPreviewTargets([]);
+    setPlayerLegalMoves([]);
+    setPendingPromotion(null);
+    setAiError(null);
+    await sendCommittedPlayerMoveToServer(
+      move,
+      piecesRenderRef.current,
+      undefined,
+      rollbackSnapshot,
+    );
   }
 
   /** 成り／不成: 盤上マスを正として楽観更新し、画像キャッシュ取りこぼし用に spriteEpoch を進める */
@@ -2667,6 +2747,7 @@ export function StageShogiScreen() {
       }
       setSelectedDropPieceCode(null);
       setLegalTargets([]);
+      setTimeActionMode(null);
     }
 
     if (selectedCell) {
@@ -2675,6 +2756,18 @@ export function StageShogiScreen() {
         tapped,
       );
       if (targetMoves.length > 0) {
+        const selectedPiece = findPieceAt(pieces, selectedCell.row, selectedCell.col);
+        const isTimeSelected =
+          selectedPiece?.side === 'player' &&
+          ((selectedPiece.pieceCode?.toUpperCase() ?? '') === 'TIME' ||
+            selectedPiece.char === '時');
+        const moveWithTimeAction = (m: BattleMove): BattleMove => {
+          if (!isTimeSelected || !timeActionMode) return m;
+          return {
+            ...m,
+            notation: timeActionMode === 'skill' ? 'time_skill' : 'time_normal',
+          };
+        };
         const promoteMove = targetMoves.find((move) => move.promote);
         const nonPromoteMove = targetMoves.find((move) => !move.promote);
         if (promoteMove && nonPromoteMove) {
@@ -2695,8 +2788,8 @@ export function StageShogiScreen() {
           setLegalTargets([]);
           setEnemyPreviewTargets([]);
           setPendingPromotion({
-            promoteMove,
-            nonPromoteMove,
+            promoteMove: moveWithTimeAction(promoteMove),
+            nonPromoteMove: moveWithTimeAction(nonPromoteMove),
             boardFromRow: selectedCell.row,
             boardFromCol: selectedCell.col,
             boardToRow: tapped.row,
@@ -2704,7 +2797,7 @@ export function StageShogiScreen() {
           });
           return;
         }
-        void commitPlayerMove(promoteMove ?? nonPromoteMove ?? targetMoves[0]);
+        void commitPlayerMove(moveWithTimeAction(promoteMove ?? nonPromoteMove ?? targetMoves[0]));
         return;
       }
     }
@@ -2735,7 +2828,19 @@ export function StageShogiScreen() {
       setSelectedCell(null);
       setLegalTargets([]);
       setEnemyPreviewTargets([]);
+      setPendingTimeActionCell(null);
+      setTimeActionMode(null);
       return;
+    }
+
+    const isTimePiece = (piece.pieceCode?.toUpperCase() ?? '') === 'TIME' || piece.char === '時';
+    if (isTimePiece && !selectedCell) {
+      // 周囲に敵がいない場合は通常移動のみ（選択UIを出さない）
+      if (hasAdjacentEnemyPiece(pieces, row, col)) {
+        setPendingTimeActionCell({ row, col });
+        return;
+      }
+      setTimeActionMode('normal');
     }
 
     const targets = uniqueTargetsFromMoves(legalMovesForBoardPiece(playerLegalMoves, row, col));
@@ -2743,6 +2848,8 @@ export function StageShogiScreen() {
       setSelectedCell(null);
       setLegalTargets([]);
       setEnemyPreviewTargets([]);
+      setPendingTimeActionCell(null);
+      setTimeActionMode(null);
       return;
     }
 
@@ -2751,6 +2858,36 @@ export function StageShogiScreen() {
     // 闇に覆われた駒は合法手はあるが移動先の緑ハイライトだけ出さない（二タップで指す）
     setLegalTargets(piece.darkVeiled ? [] : targets);
     setEnemyPreviewTargets([]);
+    setPendingTimeActionCell(null);
+  }
+
+  function confirmTimeAction(mode: TimeActionMode) {
+    const cell = pendingTimeActionCell;
+    if (!cell) return;
+    const piece = findPieceAt(pieces, cell.row, cell.col);
+    if (!piece || piece.side !== 'player') {
+      setPendingTimeActionCell(null);
+      setTimeActionMode(null);
+      return;
+    }
+    const targets = uniqueTargetsFromMoves(
+      legalMovesForBoardPiece(playerLegalMoves, cell.row, cell.col),
+    );
+    if (targets.length === 0) {
+      setPendingTimeActionCell(null);
+      setTimeActionMode(null);
+      return;
+    }
+    if (mode === 'skill') {
+      void commitTimeSkillOnly(cell, piece);
+      return;
+    }
+    setTimeActionMode(mode);
+    setSelectedDropPieceCode(null);
+    setSelectedCell(cell);
+    setLegalTargets(piece.darkVeiled ? [] : targets);
+    setEnemyPreviewTargets([]);
+    setPendingTimeActionCell(null);
   }
 
   function handleCellLongPress(row: number, col: number) {
@@ -3034,6 +3171,40 @@ export function StageShogiScreen() {
                 <Text className="text-center font-bold text-white">成らない</Text>
               </Pressable>
             </View>
+          </View>
+        </View>
+      ) : null}
+      {pendingTimeActionCell ? (
+        <View className="absolute inset-0 items-center justify-center bg-black/35 p-6">
+          <View className="w-full max-w-sm rounded-xl border border-[#8b5e34] bg-[#fffaf0] p-4">
+            <Text className="text-base font-black text-ink">「時」駒の行動を選択</Text>
+            <View className="mt-3 flex-row gap-3">
+              <Pressable
+                className="flex-1 rounded-md bg-[#166534] px-3 py-2"
+                onPress={() => {
+                  confirmTimeAction('skill');
+                }}
+              >
+                <Text className="text-center font-bold text-white">スキル使用</Text>
+              </Pressable>
+              <Pressable
+                className="flex-1 rounded-md bg-[#92400e] px-3 py-2"
+                onPress={() => {
+                  confirmTimeAction('normal');
+                }}
+              >
+                <Text className="text-center font-bold text-white">通常移動</Text>
+              </Pressable>
+            </View>
+            <Pressable
+              className="mt-3 rounded-md bg-[#6b7280] px-3 py-2"
+              onPress={() => {
+                setPendingTimeActionCell(null);
+                setTimeActionMode(null);
+              }}
+            >
+              <Text className="text-center font-bold text-white">キャンセル</Text>
+            </Pressable>
           </View>
         </View>
       ) : null}
