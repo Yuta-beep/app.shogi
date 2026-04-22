@@ -574,6 +574,8 @@ function reconcileExtendedPieceHandsAgainstBoard(
   function adjustBag(side: Side, bag: Record<string, number>): Record<string, number> {
     const next = { ...bag };
     for (const code of Object.keys(next)) {
+      // ICE は雪スキルで手駒増加するため、盤上枚数との差分補正をかけると手駒表示が消える。
+      if (code.toUpperCase() === 'ICE') continue;
       if (STANDARD_PIECE_CODES.has(code.toUpperCase())) continue;
       const raw = next[code];
       const hc = typeof raw === 'number' && Number.isFinite(raw) ? Math.max(0, Math.floor(raw)) : 0;
