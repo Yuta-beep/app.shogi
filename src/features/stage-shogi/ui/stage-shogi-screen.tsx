@@ -45,6 +45,7 @@ import {
   BattleMove,
   BattleGameStatus,
 } from '@/usecases/stage-battle/game-move-contract';
+import { LoadGameStateUseCase } from '@/usecases/stage-battle/load-game-state-usecase';
 import { LoadGameLegalMovesUseCase } from '@/usecases/stage-battle/load-game-legal-moves-usecase';
 import { RequestAiMoveUseCase } from '@/usecases/stage-battle/request-ai-move-usecase';
 import type { PieceCatalogItem } from '@/usecases/piece-info/load-piece-catalog-usecase';
@@ -713,14 +714,19 @@ function piecesFromCanonicalPosition(
         continue;
       }
 
-      // A–Z のみ先手（player）。記号駒（鉛 `!` など）は Rust 側と同様に後手扱いとする。
-      const side: Side = ch >= 'A' && ch <= 'Z' ? 'player' : 'enemy';
+      // A–Z と一部記号を先手（player）として扱う。
+      let side: Side = ch >= 'A' && ch <= 'Z' ? 'player' : 'enemy';
+      if (ch === '$' || ch === '!') side = 'player';
+      if (ch === '%' || ch === '?') side = 'enemy';
       // DB 由来 mapping から pieceCode を復元する（`+` プレフィックスの成り駒は第2引数が必要）。
       let pieceCode = sfenCharToDisplayChar(ch, promoted, pieceSfenMapping);
       if (!pieceCode && promoted) {
         pieceCode = sfenCharToDisplayChar(ch, false, pieceSfenMapping);
       }
       if (pieceCode && row >= 0 && row < BOARD_SIZE && col >= 0 && col < BOARD_SIZE) {
+        // SFEN の `$`/`!`（先手）と `%`/`?`（後手）で先後は一意に判定できるため、
+        // 直前手番(actorSide)での side 補正は行わない。
+        // （鉄スキル等の強制移動で新マス着地した宝/鉛が敵化する不具合を防ぐ）
         const pieceDef = promoted
           ? (promotedPieceDefsByCode[pieceCode] ?? pieceDefsByCode[pieceCode])
           : pieceDefsByCode[pieceCode];
@@ -1654,6 +1660,84 @@ function resolveInspectSkillDescription(char: string, desc: string | undefined):
   return normalized.length > 0 ? normalized : '詳細は準備中です。';
 }
 
+function toUserFacingBattleError(error: unknown): string {
+  if (error instanceof ApiClientError) {
+    const rawApiMessage = error.message ?? '';
+    const trimmedApiMessage = rawApiMessage.trim();
+    if (trimmedApiMessage.startsWith('{') && trimmedApiMessage.endsWith('}')) {
+      try {
+        const parsed = JSON.parse(trimmedApiMessage) as { code?: string; message?: string };
+        if (parsed.code === 'ILLEGAL_MOVE') {
+          return '通信中に局面がずれました。合法手を再取得するため、もう一度操作してください。';
+        }
+        if (typeof parsed.message === 'string' && parsed.message.trim().length > 0) {
+          return parsed.message.trim();
+        }
+      } catch {
+        // no-op
+      }
+    }
+    if (error.status === 502 || error.status === 503 || error.status === 504) {
+      return 'サーバーが一時的に混み合っています。少し待ってから再試行してください。';
+    }
+    if (error.code === 'INVALID_JSON_RESPONSE') {
+      return 'サーバー応答の解析に失敗しました。通信環境を確認して再試行してください。';
+    }
+    return error.message;
+  }
+  if (error instanceof Error) {
+    const raw = error.message ?? '';
+    const trimmed = raw.trim();
+    if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+      try {
+        const parsed = JSON.parse(trimmed) as { code?: string; message?: string };
+        if (parsed.code === 'ILLEGAL_MOVE') {
+          return '通信中に局面がずれました。合法手を再取得するため、もう一度操作してください。';
+        }
+        if (typeof parsed.message === 'string' && parsed.message.trim().length > 0) {
+          return parsed.message.trim();
+        }
+      } catch {
+        // no-op: fallback to plain text handling
+      }
+    }
+    if (/^\s*</.test(raw) || /<!DOCTYPE html>/i.test(raw)) {
+      return 'サーバーエラーが発生しました。時間をおいて再試行してください。';
+    }
+    const compact = raw.replace(/\s+/g, ' ').trim();
+    return compact.length > 160 ? `${compact.slice(0, 157)}...` : compact;
+  }
+  return String(error);
+}
+
+function isIllegalMoveError(error: unknown): boolean {
+  if (error instanceof ApiClientError) {
+    if (error.code === 'ILLEGAL_MOVE') return true;
+    const raw = (error.message ?? '').trim();
+    if (raw.startsWith('{') && raw.endsWith('}')) {
+      try {
+        const parsed = JSON.parse(raw) as { code?: string };
+        return parsed.code === 'ILLEGAL_MOVE';
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  }
+  if (error instanceof Error) {
+    const raw = (error.message ?? '').trim();
+    if (raw.startsWith('{') && raw.endsWith('}')) {
+      try {
+        const parsed = JSON.parse(raw) as { code?: string };
+        return parsed.code === 'ILLEGAL_MOVE';
+      } catch {
+        return false;
+      }
+    }
+  }
+  return false;
+}
+
 export function StageShogiScreen() {
   const params = useLocalSearchParams<{ stage?: string }>();
   const stageParam = Array.isArray(params.stage) ? params.stage[0] : params.stage;
@@ -1702,6 +1786,7 @@ export function StageShogiScreen() {
   const claimStageClearRewardUseCase = useMemo(() => createClaimStageClearRewardUseCase(), []);
   const createGameUseCase = useMemo(() => new CreateGameUseCase(), []);
   const commitGameMoveUseCase = useMemo(() => new CommitGameMoveUseCase(), []);
+  const loadGameStateUseCase = useMemo(() => new LoadGameStateUseCase(), []);
   const loadGameLegalMovesUseCase = useMemo(() => new LoadGameLegalMovesUseCase(), []);
   const requestAiMoveUseCase = useMemo(() => new RequestAiMoveUseCase(), []);
   const isMountedRef = useRef(true);
@@ -1718,6 +1803,10 @@ export function StageShogiScreen() {
   const lastSuccessfulAiKeyRef = useRef<string | null>(null);
   const clearRewardClaimedRef = useRef(false);
   const skillToastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isRecoveringFromIllegalMoveRef = useRef(false);
+  const pendingAiResumeRef = useRef<{ moveNo: number; side: Side } | null>(null);
+  const illegalRecoverSignatureRef = useRef<string | null>(null);
+  const illegalRecoverAttemptsRef = useRef(0);
   useScreenBgm('battle');
 
   useEffect(() => {
@@ -1951,6 +2040,9 @@ export function StageShogiScreen() {
     lastSuccessfulAiKeyRef.current = null;
     clearRewardClaimedRef.current = false;
     hasEnteredBattleRef.current = false;
+    pendingAiResumeRef.current = null;
+    illegalRecoverSignatureRef.current = null;
+    illegalRecoverAttemptsRef.current = 0;
   }, [gameId, pieceDefsByChar, snapshot, stageParam]);
 
   useEffect(() => {
@@ -1964,7 +2056,7 @@ export function StageShogiScreen() {
       })
       .catch((error: unknown) => {
         if (active) {
-          setAiError(error instanceof Error ? error.message : String(error));
+          setAiError(toUserFacingBattleError(error));
         }
       });
     return () => {
@@ -2000,7 +2092,7 @@ export function StageShogiScreen() {
       })
       .catch((error: unknown) => {
         if (isMountedRef.current) {
-          setAiError(error instanceof Error ? error.message : String(error));
+          setAiError(toUserFacingBattleError(error));
         }
       })
       .finally(() => {
@@ -2049,7 +2141,7 @@ export function StageShogiScreen() {
       })
       .catch((error: unknown) => {
         if (active) {
-          setAiError(error instanceof Error ? error.message : String(error));
+          setAiError(toUserFacingBattleError(error));
           setPlayerLegalMoves((prev) => (prev.length === 0 ? prev : []));
         }
       })
@@ -2215,7 +2307,19 @@ export function StageShogiScreen() {
         setAiError(null);
         void claimStageClearRewardIfNeeded();
       } else {
-        setAiError(error instanceof Error ? error.message : String(error));
+        if (isIllegalMoveError(error)) {
+          const recovered = await recoverFromIllegalMoveIfNeeded();
+          if (recovered) {
+            setAiError('局面を自動更新しました。対局を続行します。');
+            return;
+          }
+          pendingAiResumeRef.current = null;
+          setAiError(
+            '同じ局面で自動更新を複数回試しましたが復旧できませんでした。画面を開き直してください。',
+          );
+          return;
+        }
+        setAiError(toUserFacingBattleError(error));
       }
     } finally {
       setAiPreviewTarget(null);
@@ -2224,6 +2328,15 @@ export function StageShogiScreen() {
       setIsAiThinking(false);
     }
   };
+
+  useEffect(() => {
+    const pending = pendingAiResumeRef.current;
+    if (!pending) return;
+    if (!gameId || isAiThinking || isCreatingGame || isFinished) return;
+    if (sideToMove !== 'enemy') return;
+    pendingAiResumeRef.current = null;
+    void handleAiMove(pending.moveNo, pending.side);
+  }, [gameId, handleAiMove, isAiThinking, isCreatingGame, isFinished, sideToMove, moveNo]);
 
   async function claimStageClearRewardIfNeeded() {
     if (clearRewardClaimedRef.current) return;
@@ -2238,7 +2351,7 @@ export function StageShogiScreen() {
         `${result.firstClear ? '初回' : '周回'}報酬: 歩+${result.granted.pawn} 金+${result.granted.gold}${pieceSummary}`,
       );
     } catch (error: unknown) {
-      setAiError(error instanceof Error ? error.message : String(error));
+      setAiError(toUserFacingBattleError(error));
     }
   }
 
@@ -2271,10 +2384,61 @@ export function StageShogiScreen() {
     });
   }
 
+  async function recoverFromIllegalMoveIfNeeded(): Promise<boolean> {
+    if (!gameId || isRecoveringFromIllegalMoveRef.current) return false;
+    isRecoveringFromIllegalMoveRef.current = true;
+    try {
+      const latest = await loadGameStateUseCase.execute({ gameId });
+      const recoverSignature = `${latest.position.turnNumber}:${latest.position.sideToMove}:${latest.position.stateHash ?? '-'}`;
+      if (illegalRecoverSignatureRef.current !== recoverSignature) {
+        illegalRecoverSignatureRef.current = recoverSignature;
+        illegalRecoverAttemptsRef.current = 1;
+      } else {
+        illegalRecoverAttemptsRef.current += 1;
+      }
+      if (illegalRecoverAttemptsRef.current > 3) {
+        pendingAiResumeRef.current = null;
+        return false;
+      }
+      setStateHash(latest.position.stateHash ?? null);
+      const nextWinner = syncFromCanonicalPosition(latest.position, latest.game);
+      if (nextWinner) {
+        illegalRecoverSignatureRef.current = null;
+        illegalRecoverAttemptsRef.current = 0;
+        return true;
+      }
+
+      if (latest.position.sideToMove === 'player') {
+        try {
+          const legal = await loadGameLegalMovesUseCase.execute({ gameId });
+          setStateHash(legal.stateHash ?? latest.position.stateHash ?? null);
+          setPlayerLegalMoves(legal.legalMoves);
+          illegalRecoverSignatureRef.current = null;
+          illegalRecoverAttemptsRef.current = 0;
+        } catch {
+          setPlayerLegalMoves([]);
+        }
+      } else {
+        setPlayerLegalMoves([]);
+        pendingAiResumeRef.current = {
+          moveNo: latest.position.moveCount + 1,
+          side: latest.position.sideToMove,
+        };
+      }
+      setAiError(null);
+      return true;
+    } catch {
+      return false;
+    } finally {
+      isRecoveringFromIllegalMoveRef.current = false;
+    }
+  }
+
   async function sendCommittedPlayerMoveToServer(
     move: BattleMove,
     optimisticBaseline: BoardPiece[],
     preservedMovedPiece: PreservedMovedPiece | undefined,
+    rollbackSnapshot?: { pieces: BoardPiece[]; hands: HandsState },
   ) {
     if (!gameId) return;
     try {
@@ -2310,11 +2474,34 @@ export function StageShogiScreen() {
         void handleAiMove(result.position.moveCount + 1, result.position.sideToMove);
       }
     } catch (error: unknown) {
-      setAiError(error instanceof Error ? error.message : String(error));
+      if (isIllegalMoveError(error)) {
+        const recovered = await recoverFromIllegalMoveIfNeeded();
+        if (recovered) {
+          setAiError('局面を自動更新しました。対局を続行します。');
+          return;
+        }
+        pendingAiResumeRef.current = null;
+        setAiError(
+          '同じ局面で自動更新を複数回試しましたが復旧できませんでした。画面を開き直してください。',
+        );
+        return;
+      }
+      if (rollbackSnapshot) {
+        piecesRef.current = rollbackSnapshot.pieces;
+        handsRef.current = rollbackSnapshot.hands;
+        setPieces(rollbackSnapshot.pieces);
+        setHands(rollbackSnapshot.hands);
+      }
+      setAiError(toUserFacingBattleError(error));
     }
   }
 
   async function commitPlayerMove(move: BattleMove) {
+    const rollbackSnapshot = {
+      pieces: piecesRenderRef.current,
+      hands: handsRef.current,
+    };
+
     if (!gameId || isAiThinking || isCreatingGame) return;
 
     const preservedMovedPiece = buildPreservedMovedPieceForPlayer(
@@ -2354,7 +2541,12 @@ export function StageShogiScreen() {
       applyBoardAndClearSelection();
     }
 
-    await sendCommittedPlayerMoveToServer(move, optimisticBaseline, preservedMovedPiece);
+    await sendCommittedPlayerMoveToServer(
+      move,
+      optimisticBaseline,
+      preservedMovedPiece,
+      rollbackSnapshot,
+    );
   }
 
   /** 成り／不成: 盤上マスを正として楽観更新し、画像キャッシュ取りこぼし用に spriteEpoch を進める */
@@ -2441,7 +2633,17 @@ export function StageShogiScreen() {
     setPendingPromotion(null);
     setAiError(null);
 
-    void sendCommittedPlayerMoveToServer(move, optimisticBaseline, preservedMovedPiece);
+    const rollbackSnapshot = {
+      pieces: snapshot && snapshot.length > 0 ? snapshot : preBoard,
+      hands: handsRef.current,
+    };
+
+    void sendCommittedPlayerMoveToServer(
+      move,
+      optimisticBaseline,
+      preservedMovedPiece,
+      rollbackSnapshot,
+    );
   }
 
   function handleCellPress(row: number, col: number) {
