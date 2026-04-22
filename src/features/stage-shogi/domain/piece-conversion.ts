@@ -71,6 +71,8 @@ const RUST_ENGINE_ONE_CHAR_SFEN: Readonly<Record<string, string>> = {
   TIME: '#',
   ICE: '@',
   SNOW: '^',
+  SAND: '[',
+  WIND: '<',
 };
 
 /** カタログに行が無い／sfen が未同期でも、エンジン SFEN 1 文字 → pieceCode を復元する */
@@ -85,6 +87,8 @@ const CODES_WITH_ENGINE_SFEN_FALLBACK: ReadonlySet<string> = new Set([
   'TIME',
   'ICE',
   'SNOW',
+  'SAND',
+  'WIND',
 ]);
 
 /** `sfenCharToDisplayChar` 用（`a`→`A` と `!` の両方で引けるよう atom をキーにする） */
@@ -105,6 +109,8 @@ const ENGINE_SFEN_ATOM_TO_FALLBACK_CODE: Readonly<Record<string, string>> = (() 
   out['~'] = 'TIME';
   out['`'] = 'ICE';
   out['_'] = 'SNOW';
+  out[']'] = 'SAND';
+  out['>'] = 'WIND';
   return out;
 })();
 
@@ -267,6 +273,8 @@ export const CODE_TO_CHAR: Readonly<Record<string, string>> = {
   TIME: '時',
   ICE: '氷',
   SNOW: '雪',
+  SAND: '砂',
+  WIND: '風',
 };
 
 export const PROMOTED_CODE_TO_CHAR: Readonly<Record<string, string>> = {
@@ -313,6 +321,8 @@ export const CHAR_TO_CODE: Readonly<Record<string, string>> = {
   時: 'TIME',
   氷: 'ICE',
   雪: 'SNOW',
+  砂: 'SAND',
+  風: 'WIND',
 };
 
 // ── toSfenBoardPure ───────────────────────────────────────────────────────────
@@ -356,6 +366,8 @@ export function toSfenBoardPure(placements: SfenPiece[], mapping: PieceSfenMappi
         .replaceAll('#', '~')
         .replaceAll('@', '`')
         .replaceAll('^', '_')
+        .replaceAll('[', ']')
+        .replaceAll('<', '>')
         .toLowerCase();
     }
   }
@@ -421,6 +433,8 @@ export function toSfenHandsPure(hands: HandsState, mapping: PieceSfenMapping): s
         .replaceAll('#', '~')
         .replaceAll('@', '`')
         .replaceAll('^', '_')
+        .replaceAll('[', ']')
+        .replaceAll('<', '>')
         .toLowerCase();
       chunks.push(`${enemyCount > 1 ? String(enemyCount) : ''}${enemyAtom}`);
     }
@@ -436,8 +450,19 @@ function handTokenSideIsPlayer(token: string): boolean {
   const c = token[i];
   if (c == null) return true;
   if (c === '$' || c === '!') return true;
-  if (c === '&' || c === '(' || c === '#' || c === '@' || c === '^') return true;
-  if (c === '%' || c === '?' || c === '*' || c === ')' || c === '~' || c === '`' || c === '_')
+  if (c === '&' || c === '(' || c === '#' || c === '@' || c === '^' || c === '[' || c === '<')
+    return true;
+  if (
+    c === '%' ||
+    c === '?' ||
+    c === '*' ||
+    c === ')' ||
+    c === '~' ||
+    c === '`' ||
+    c === '_' ||
+    c === ']' ||
+    c === '>'
+  )
     return false;
   if (c >= 'A' && c <= 'Z') return true;
   if (c >= 'a' && c <= 'z') return false;
