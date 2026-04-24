@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { type Href, useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ImageBackground, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -50,7 +50,7 @@ export function TitleScreen() {
       return;
     }
     void playSe('tap');
-    router.push('/tutorial');
+    router.push('/tutorial' as Href);
   }
 
   if (!isReady || isTransitioning) {

@@ -36,6 +36,7 @@ import { useAssetPreload } from '@/hooks/common/use-asset-preload';
 import { useAuthSession } from '@/hooks/common/use-auth-session';
 import { useScreenBgm } from '@/hooks/common/use-screen-bgm';
 import { ApiClientError } from '@/infra/http/api-client';
+import { listLocalPieceImageModules, resolvePieceImageSource } from '@/lib/piece-image';
 import { createLoadPieceCatalogUseCase } from '@/usecases/piece-info/create-piece-info-usecases';
 import { createClaimStageClearRewardUseCase } from '@/usecases/stage-battle/create-stage-battle-usecases';
 import { CommitGameMoveUseCase } from '@/usecases/stage-battle/commit-game-move-usecase';
@@ -62,7 +63,6 @@ const KING_PIECE_SIZE_PERCENT = 136;
 const BOARD_PIECE_SIZE_OVERRIDES: Partial<Record<string, number>> = {
   波: 128,
 };
-const ENABLE_PIECE_IMAGES = process.env.EXPO_PUBLIC_ENABLE_PIECE_IMAGES !== 'false';
 const STANDARD_PIECE_CODES = new Set(['FU', 'KY', 'KE', 'GI', 'KI', 'KA', 'HI', 'OU']);
 const LEAF_SKILL_DESCRIPTION = '移動時10%の確率で「葉」駒を周囲1マスに召喚する。';
 /** プロジェクト直下 `assets/pieces/promoted/` の PNG（Metro の静的 require） */
@@ -194,16 +194,13 @@ function isKingChar(char: string) {
   return char === '王' || char === '玉';
 }
 
-function getPieceImageUri(imageSignedUrl: string | null) {
-  if (!ENABLE_PIECE_IMAGES) {
-    return null;
-  }
-  if (imageSignedUrl) return imageSignedUrl;
-  return null;
-}
-
-function hasRemoteBoardImages(placements: Array<{ imageSignedUrl: string | null }>) {
-  return placements.some((placement) => getPieceImageUri(placement.imageSignedUrl) !== null);
+function getPieceImageSource(piece: {
+  pieceId?: number;
+  pieceCode?: string | null;
+  char?: string | null;
+  imageSignedUrl?: string | null;
+}) {
+  return resolvePieceImageSource(piece);
 }
 
 function normalizeCellIndex(value: number) {
@@ -1402,12 +1399,9 @@ const BoardPieceSprite = memo(function BoardPieceSprite({
       : bundledPromoted != null
         ? bundledPromoted
         : resolvePromotedImageSource(piece);
-  const imageUri =
-    localPromotedImageSource != null
-      ? null
-      : failed
-        ? null
-        : getPieceImageUri(piece.imageSignedUrl);
+  const imageUri = localPromotedImageSource != null ? null : failed ? null : null;
+  const imageSource =
+    localPromotedImageSource ?? (failed ? null : getPieceImageSource(piece)) ?? null;
   const pieceImageRecyclingKey = `${instantPromotedKey ?? 'x'}-${piece.side}-r${piece.row}-c${piece.col}-p${piece.promoted ? 1 : 0}-ch${piece.char}-pc${piece.pieceCode ?? ''}-u${imageUri ?? 'local'}`;
 
   return (
@@ -1442,11 +1436,11 @@ const BoardPieceSprite = memo(function BoardPieceSprite({
               cachePolicy="memory-disk"
               style={{ width: '100%', height: '100%' }}
             />
-          ) : imageUri ? (
+          ) : imageSource ? (
             <Image
-              key={`uri-${piece.side}-${piece.row}-${piece.col}-${piece.promoted ? 1 : 0}-${piece.char}-${imageUri}`}
+              key={`uri-${piece.side}-${piece.row}-${piece.col}-${piece.promoted ? 1 : 0}-${piece.char}-${piece.pieceCode ?? ''}`}
               recyclingKey={pieceImageRecyclingKey}
-              source={{ uri: imageUri }}
+              source={imageSource}
               contentFit="contain"
               style={{ width: '100%', height: '100%' }}
               onError={onImageError}
@@ -1804,8 +1798,7 @@ export function StageShogiScreen() {
     stageParam,
     isAuthReady ? (userId ?? 'guest') : undefined,
   );
-  const { isReady: areAssetsReady } = useAssetPreload([]);
-  const [areBoardImagesReady, setAreBoardImagesReady] = useState(true);
+  const { isReady: areAssetsReady } = useAssetPreload(listLocalPieceImageModules());
   const [failedImageKeys, setFailedImageKeys] = useState<Record<string, true>>({});
   const [pieces, setPieces] = useState<BoardPiece[]>([]);
   /** レンダー直後の盤（ref より state に近い）。成り選択の onPress で即時に使う */
@@ -2073,7 +2066,6 @@ export function StageShogiScreen() {
       return;
     }
 
-    setAreBoardImagesReady(true);
     setPieces(next);
     setSideToMove('player');
     setMoveNo(1);
@@ -2216,20 +2208,12 @@ export function StageShogiScreen() {
     };
   }, [gameId, sideToMove, moveNo, isCreatingGame, isFinished, loadGameLegalMovesUseCase]);
 
-  const remoteImageUrls = useMemo(
-    () =>
-      pieces
-        .map((placement) => getPieceImageUri(placement.imageSignedUrl))
-        .filter((value): value is string => typeof value === 'string' && value.length > 0),
-    [pieces],
-  );
-
   useEffect(() => {
     if (Object.keys(failedImageKeys).length === 0) {
       return;
     }
     setFailedImageKeys({});
-  }, [failedImageKeys, remoteImageUrls]);
+  }, [failedImageKeys, pieces]);
 
   useEffect(() => {
     if (!selectedCell) return;
@@ -2240,28 +2224,6 @@ export function StageShogiScreen() {
       setEnemyPreviewTargets([]);
     }
   }, [pieces, selectedCell]);
-
-  useEffect(() => {
-    let active = true;
-
-    if (remoteImageUrls.length === 0) {
-      return () => {
-        active = false;
-      };
-    }
-
-    Image.prefetch(remoteImageUrls)
-      .catch(() => undefined)
-      .finally(() => {
-        if (active) {
-          setAreBoardImagesReady(true);
-        }
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [remoteImageUrls]);
 
   const handleAiMove = async (nextMoveNo: number, expectedSideToMove: Side = sideToMove) => {
     if (
@@ -2983,11 +2945,18 @@ export function StageShogiScreen() {
             isPlayer &&
             selectedDropPieceCode != null &&
             selectedDropPieceCode.toUpperCase() === codeKey;
-          const handImageUri = getPieceImageUri(
-            pieceDefsByCode[codeKey]?.imageSignedUrl ??
+          const handImageSource = getPieceImageSource({
+            pieceCode: codeKey,
+            char:
+              pieceDefsByCode[codeKey]?.char ??
+              pieceDefsByCode[entry.code]?.char ??
+              CODE_TO_CHAR[codeKey] ??
+              null,
+            imageSignedUrl:
+              pieceDefsByCode[codeKey]?.imageSignedUrl ??
               pieceDefsByCode[entry.code]?.imageSignedUrl ??
               null,
-          );
+          });
           return (
             <Pressable
               key={`${side}-${codeKey}`}
@@ -3000,9 +2969,9 @@ export function StageShogiScreen() {
             >
               <View className="flex-row items-center gap-0">
                 <View className="h-10 w-10 items-center justify-center">
-                  {handImageUri ? (
+                  {handImageSource ? (
                     <Image
-                      source={{ uri: handImageUri }}
+                      source={handImageSource}
                       contentFit="contain"
                       style={{ width: '100%', height: '100%' }}
                     />

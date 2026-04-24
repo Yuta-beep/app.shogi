@@ -21,6 +21,7 @@ import { getDeckBuilderPieceCost } from '@/features/deck-builder/lib/deck-builde
 import { useDeckBuilderScreen } from '@/features/deck-builder/ui/use-deck-builder-screen';
 import { useAssetPreload } from '@/hooks/common/use-asset-preload';
 import { useScreenBgm } from '@/hooks/common/use-screen-bgm';
+import { listLocalPieceImageModules, resolvePieceImageSource } from '@/lib/piece-image';
 import { playSe } from '@/lib/audio/audio-manager';
 
 const deckAssets = {
@@ -56,16 +57,12 @@ export function DeckBuilderScreen() {
   const longPressTriggeredRef = useRef(false);
   const startTouchRef = useRef({ x: 0, y: 0 });
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const remotePieceUrls = useMemo(
-    () =>
-      vm.ownedPieces
-        .map((piece) => piece.imageSignedUrl)
-        .filter((url): url is string => typeof url === 'string' && url.length > 0),
-    [vm.ownedPieces],
+  const { isReady: areAssetsReady } = useAssetPreload(
+    [deckAssets.bg, ...listLocalPieceImageModules()],
+    {
+      enabled: !vm.isLoading,
+    },
   );
-  const { isReady: areAssetsReady } = useAssetPreload([deckAssets.bg, ...remotePieceUrls], {
-    enabled: !vm.isLoading,
-  });
   useScreenBgm('deckBuilder');
 
   const getCellFromTouch = useCallback(
@@ -308,9 +305,9 @@ export function DeckBuilderScreen() {
                     }}
                   >
                     {placement ? (
-                      placement.piece.imageSignedUrl ? (
+                      resolvePieceImageSource(placement.piece) ? (
                         <Image
-                          source={{ uri: placement.piece.imageSignedUrl }}
+                          source={resolvePieceImageSource(placement.piece)!}
                           contentFit="contain"
                           style={{
                             width: `${pieceSizePercent}%`,
@@ -367,9 +364,9 @@ export function DeckBuilderScreen() {
                       : ''
                   }`}
                 >
-                  {piece.imageSignedUrl ? (
+                  {resolvePieceImageSource(piece) ? (
                     <Image
-                      source={{ uri: piece.imageSignedUrl }}
+                      source={resolvePieceImageSource(piece)!}
                       contentFit="contain"
                       style={{ width: 60, height: 60 }}
                     />
@@ -441,9 +438,9 @@ export function DeckBuilderScreen() {
       >
         <View className="flex-1 items-center justify-center bg-black/45 px-6">
           <View className="w-full max-w-sm rounded-xl bg-[#fff7e6] p-4">
-            {vm.selectedPiece?.imageSignedUrl ? (
+            {vm.selectedPiece && resolvePieceImageSource(vm.selectedPiece) ? (
               <Image
-                source={{ uri: vm.selectedPiece.imageSignedUrl }}
+                source={resolvePieceImageSource(vm.selectedPiece)!}
                 contentFit="contain"
                 style={{ width: 56, height: 56, alignSelf: 'center' }}
               />

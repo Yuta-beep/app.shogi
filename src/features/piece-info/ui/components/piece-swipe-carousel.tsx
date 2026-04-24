@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { Animated, FlatList, Pressable, Text, View, useWindowDimensions } from 'react-native';
 
 import type { PieceCatalogItem } from '@/domain/models/piece';
+import { resolvePieceImageSource } from '@/lib/piece-image';
 
 const LOOP_MULTIPLIER = 5;
 
@@ -16,7 +17,6 @@ type PieceSwipeCarouselProps = {
   selectedIndex: number;
   onSelectIndex: (index: number) => void;
   onChangeEffect?: () => void;
-  pieceImages: Record<string, number>;
   itemWidth?: number;
   itemGap?: number;
   cellHeight?: number;
@@ -31,7 +31,6 @@ export function PieceSwipeCarousel({
   selectedIndex,
   onSelectIndex,
   onChangeEffect,
-  pieceImages,
   itemWidth = 84,
   itemGap = 4,
   cellHeight = 80,
@@ -118,9 +117,7 @@ export function PieceSwipeCarousel({
         }
       }}
       renderItem={({ item: cell }) => {
-        const source = cell.piece.imageSignedUrl
-          ? { uri: cell.piece.imageSignedUrl }
-          : (pieceImages[cell.piece.char] ?? null);
+        const source = resolvePieceImageSource(cell.piece);
         const normalizedIndex = ((cell.rawIndex % baseCount) + baseCount) % baseCount;
         const inputRange = [
           (cell.rawIndex - 1) * snapInterval,

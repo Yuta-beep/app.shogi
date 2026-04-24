@@ -16,7 +16,9 @@ import {
 } from '@/constants/gacha-room-assets';
 import { homeAssets } from '@/constants/home-assets';
 import { GachaRoomVM, useGachaRoomScreen } from '@/features/gacha-room/ui/use-gacha-room-screen';
+import { useAssetPreload } from '@/hooks/common/use-asset-preload';
 import { useScreenBgm } from '@/hooks/common/use-screen-bgm';
+import { listLocalPieceImageModules, resolvePieceImageSource } from '@/lib/piece-image';
 import { playSe } from '@/lib/audio/audio-manager';
 import type { GachaBanner } from '@/usecases/gacha-room/load-gacha-lobby-usecase';
 
@@ -43,7 +45,7 @@ function ResultBlock({ vm, selected }: { vm: GachaRoomVM; selected: GachaBanner 
   if (vm.phase === 'done' && vm.lastResult) {
     const result = vm.lastResult;
     if (result.type === 'hit') {
-      const pieceSource = result.piece.imageSignedUrl ? { uri: result.piece.imageSignedUrl } : null;
+      const pieceSource = resolvePieceImageSource(result.piece);
       return (
         <View className="gap-2">
           <Text
@@ -131,15 +133,13 @@ function GachaVideoOverlay({ isHit, onEnd }: { isHit: boolean; onEnd: () => void
 }
 
 function PieceOverlay({
-  char,
-  imageSignedUrl,
+  piece,
   onDismiss,
 }: {
-  char: string;
-  imageSignedUrl?: string | null;
+  piece: { char: string; pieceCode?: string | null; pieceId?: number };
   onDismiss: () => void;
 }) {
-  const source = imageSignedUrl ? { uri: imageSignedUrl } : null;
+  const source = resolvePieceImageSource(piece);
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onDismiss}>
       <Pressable
@@ -154,7 +154,7 @@ function PieceOverlay({
         {source ? (
           <Image source={source} contentFit="contain" style={{ width: '80%', height: '70%' }} />
         ) : (
-          <Text style={{ fontSize: 120, color: 'white' }}>{char}</Text>
+          <Text style={{ fontSize: 120, color: 'white' }}>{piece.char}</Text>
         )}
         <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14, marginTop: 24 }}>
           タップで閉じる
@@ -217,17 +217,15 @@ export function GachaRoomScreen() {
     return introBanners.find((b) => b.key === sk) ?? introBanners[0];
   }, [vm.banners, vm.selectedKey, introBanners]);
 
+  const { isReady: areAssetsReady } = useAssetPreload(
+    [...(Object.values(gachaRoomAssets.bannerByKey) as number[]), ...listLocalPieceImageModules()],
+    {
+      enabled: !vm.isLoading,
+    },
+  );
   useScreenBgm('gacha');
 
-  useEffect(() => {
-    if (vm.lastResult?.type !== 'hit') return;
-    if (!vm.lastResult.piece.imageSignedUrl) return;
-    Image.prefetch(vm.lastResult.piece.imageSignedUrl)
-      .catch(() => undefined)
-      .finally(() => undefined);
-  }, [vm.lastResult]);
-
-  if (vm.isLoading) {
+  if (vm.isLoading || !areAssetsReady) {
     return <AppLoadingScreen imageSource={homeAssets.loadingImage} />;
   }
 
@@ -285,11 +283,7 @@ export function GachaRoomScreen() {
       {vm.phase === 'video' && <GachaVideoOverlay isHit={isHit} onEnd={vm.onVideoEnd} />}
 
       {vm.phase === 'pieceOverlay' && vm.lastResult?.type === 'hit' && (
-        <PieceOverlay
-          char={vm.lastResult.piece.char}
-          imageSignedUrl={vm.lastResult.piece.imageSignedUrl}
-          onDismiss={vm.onPieceOverlayDismiss}
-        />
+        <PieceOverlay piece={vm.lastResult.piece} onDismiss={vm.onPieceOverlayDismiss} />
       )}
 
       {/* HTML .gacha-currency-fixed に相当 */}

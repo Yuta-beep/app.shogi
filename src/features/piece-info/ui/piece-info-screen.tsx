@@ -12,17 +12,11 @@ import { PieceSwipeCarousel } from '@/features/piece-info/ui/components/piece-sw
 import { usePieceCatalogScreen } from '@/features/piece-info/ui/use-piece-catalog-screen';
 import { useAssetPreload } from '@/hooks/common/use-asset-preload';
 import { useScreenBgm } from '@/hooks/common/use-screen-bgm';
+import { listLocalPieceImageModules } from '@/lib/piece-image';
 import { playSe } from '@/lib/audio/audio-manager';
 import { MoveVector } from '@/domain/models/piece';
 
 const pieceInfoBackground = require('../../../../assets/piece-info/piece-info-bg.png');
-const pieceImages: Record<string, number> = {
-  香: require('../../../../assets/piece-info/pieces/香.png'),
-  桂: require('../../../../assets/piece-info/pieces/桂.png'),
-  銀: require('../../../../assets/piece-info/pieces/銀.png'),
-  忍: require('../../../../assets/piece-info/pieces/忍.png'),
-  竜: require('../../../../assets/piece-info/pieces/竜.png'),
-};
 
 // 5x5グリッド（中心 [2][2] = 駒位置）
 const GRID_SIZE = 5;
@@ -85,15 +79,8 @@ export function PieceInfoScreen() {
   const router = useRouter();
   const { piece, items, index, total, selectIndex, isLoading } = usePieceCatalogScreen();
   const carouselItems = useMemo(() => (items.length > 0 ? items : [piece]), [items, piece]);
-  const remotePieceUrls = useMemo(
-    () =>
-      items
-        .map((item) => item.imageSignedUrl)
-        .filter((url): url is string => typeof url === 'string' && url.length > 0),
-    [items],
-  );
   const { isReady: areAssetsReady } = useAssetPreload(
-    [pieceInfoBackground, ...Object.values(pieceImages), ...remotePieceUrls],
+    [pieceInfoBackground, ...listLocalPieceImageModules()],
     {
       enabled: !isLoading,
     },
@@ -157,7 +144,6 @@ export function PieceInfoScreen() {
                     onChangeEffect={() => {
                       void playSe('tap');
                     }}
-                    pieceImages={pieceImages}
                     itemWidth={144}
                     itemGap={0}
                     cellHeight={300}
