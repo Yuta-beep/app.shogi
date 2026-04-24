@@ -73,6 +73,10 @@ const RUST_ENGINE_ONE_CHAR_SFEN: Readonly<Record<string, string>> = {
   SNOW: '^',
   SAND: '[',
   WIND: '<',
+  MOSS: '{',
+  FISH: ':',
+  CLOUD: '.',
+  RAINBOW: '"',
 };
 
 /** カタログに行が無い／sfen が未同期でも、エンジン SFEN 1 文字 → pieceCode を復元する */
@@ -89,6 +93,10 @@ const CODES_WITH_ENGINE_SFEN_FALLBACK: ReadonlySet<string> = new Set([
   'SNOW',
   'SAND',
   'WIND',
+  'MOSS',
+  'FISH',
+  'CLOUD',
+  'RAINBOW',
 ]);
 
 /** `sfenCharToDisplayChar` 用（`a`→`A` と `!` の両方で引けるよう atom をキーにする） */
@@ -111,6 +119,10 @@ const ENGINE_SFEN_ATOM_TO_FALLBACK_CODE: Readonly<Record<string, string>> = (() 
   out['_'] = 'SNOW';
   out[']'] = 'SAND';
   out['>'] = 'WIND';
+  out['}'] = 'MOSS';
+  out[';'] = 'FISH';
+  out[','] = 'CLOUD';
+  out["'"] = 'RAINBOW';
   return out;
 })();
 
@@ -275,6 +287,10 @@ export const CODE_TO_CHAR: Readonly<Record<string, string>> = {
   SNOW: '雪',
   SAND: '砂',
   WIND: '風',
+  MOSS: '苔',
+  FISH: '魚',
+  CLOUD: '雲',
+  RAINBOW: '虹',
 };
 
 export const PROMOTED_CODE_TO_CHAR: Readonly<Record<string, string>> = {
@@ -323,6 +339,10 @@ export const CHAR_TO_CODE: Readonly<Record<string, string>> = {
   雪: 'SNOW',
   砂: 'SAND',
   風: 'WIND',
+  苔: 'MOSS',
+  魚: 'FISH',
+  雲: 'CLOUD',
+  虹: 'RAINBOW',
 };
 
 // ── toSfenBoardPure ───────────────────────────────────────────────────────────
@@ -368,6 +388,10 @@ export function toSfenBoardPure(placements: SfenPiece[], mapping: PieceSfenMappi
         .replaceAll('^', '_')
         .replaceAll('[', ']')
         .replaceAll('<', '>')
+        .replaceAll('{', '}')
+        .replaceAll(':', ';')
+        .replaceAll('.', ',')
+        .replaceAll('"', "'")
         .toLowerCase();
     }
   }
@@ -435,6 +459,10 @@ export function toSfenHandsPure(hands: HandsState, mapping: PieceSfenMapping): s
         .replaceAll('^', '_')
         .replaceAll('[', ']')
         .replaceAll('<', '>')
+        .replaceAll('{', '}')
+        .replaceAll(':', ';')
+        .replaceAll('.', ',')
+        .replaceAll('"', "'")
         .toLowerCase();
       chunks.push(`${enemyCount > 1 ? String(enemyCount) : ''}${enemyAtom}`);
     }
@@ -450,7 +478,19 @@ function handTokenSideIsPlayer(token: string): boolean {
   const c = token[i];
   if (c == null) return true;
   if (c === '$' || c === '!') return true;
-  if (c === '&' || c === '(' || c === '#' || c === '@' || c === '^' || c === '[' || c === '<')
+  if (
+    c === '&' ||
+    c === '(' ||
+    c === '#' ||
+    c === '@' ||
+    c === '^' ||
+    c === '[' ||
+    c === '<' ||
+    c === '{' ||
+    c === ':' ||
+    c === '.' ||
+    c === '"'
+  )
     return true;
   if (
     c === '%' ||
@@ -461,7 +501,11 @@ function handTokenSideIsPlayer(token: string): boolean {
     c === '`' ||
     c === '_' ||
     c === ']' ||
-    c === '>'
+    c === '>' ||
+    c === '}' ||
+    c === ';' ||
+    c === ',' ||
+    c === "'"
   )
     return false;
   if (c >= 'A' && c <= 'Z') return true;

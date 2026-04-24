@@ -576,7 +576,7 @@ function reconcileExtendedPieceHandsAgainstBoard(
     for (const code of Object.keys(next)) {
       // 一部特殊駒は盤上にも同種が残ることが正常なため、盤上枚数との差分補正をかけると手駒表示が消える。
       const codeU = code.toUpperCase();
-      if (codeU === 'ICE' || codeU === 'SAND' || codeU === 'WIND') continue;
+      if (codeU === 'ICE' || codeU === 'SAND' || codeU === 'WIND' || codeU === 'HIK') continue;
       if (STANDARD_PIECE_CODES.has(code.toUpperCase())) continue;
       const raw = next[code];
       const hc = typeof raw === 'number' && Number.isFinite(raw) ? Math.max(0, Math.floor(raw)) : 0;
@@ -753,7 +753,11 @@ function piecesFromCanonicalPosition(
         ch === '@' ||
         ch === '^' ||
         ch === '[' ||
-        ch === '<'
+        ch === '<' ||
+        ch === '{' ||
+        ch === ':' ||
+        ch === '.' ||
+        ch === '"'
       )
         side = 'player';
       if (
@@ -765,7 +769,11 @@ function piecesFromCanonicalPosition(
         ch === '`' ||
         ch === '_' ||
         ch === ']' ||
-        ch === '>'
+        ch === '>' ||
+        ch === '}' ||
+        ch === ';' ||
+        ch === ',' ||
+        ch === "'"
       )
         side = 'enemy';
       // DB 由来 mapping から pieceCode を復元する（`+` プレフィックスの成り駒は第2引数が必要）。
