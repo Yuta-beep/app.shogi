@@ -64,6 +64,7 @@ const KING_PIECE_SIZE_PERCENT = 136;
 const BOARD_PIECE_SIZE_OVERRIDES: Partial<Record<string, number>> = {
   波: 128,
 };
+const POISON_CELL_IMAGE_SOURCE = require('../../../../assets/cells/毒マス.png');
 const STANDARD_PIECE_CODES = new Set(['FU', 'KY', 'KE', 'GI', 'KI', 'KA', 'HI', 'OU']);
 const LEAF_SKILL_DESCRIPTION = '移動時10%の確率で「葉」駒を周囲1マスに召喚する。';
 /** プロジェクト直下 `assets/pieces/promoted/` の PNG（Metro の静的 require） */
@@ -637,6 +638,104 @@ function applyDarkVeilFromSkillStateToPieces(
   }));
 }
 
+function poisonHazardCellsForDisplay(
+  position: BattleCanonicalPosition,
+): BoardCell[] {
+  const boardState = asRecord(position.boardState);
+  if (!boardState) {
+    console.info('[poison-debug] boardState is empty');
+    return [];
+  }
+  const skillState = asRecord(boardState.skill_state ?? boardState.skillState);
+  const rawList = (skillState?.board_hazards ??
+    skillState?.boardHazards ??
+    boardState.board_hazards ??
+    boardState.boardHazards) as unknown;
+  if (!Array.isArray(rawList)) {
+    console.info('[poison-debug] board_hazards not found', {
+      boardStateKeys: Object.keys(boardState),
+      skillStateKeys: skillState ? Object.keys(skillState) : [],
+    });
+    return [];
+  }
+
+  const out: BoardCell[] = [];
+  const seen = new Set<string>();
+  const sampledHazards: Array<{
+    hazardType: string;
+    remaining: number;
+    row: number | null;
+    col: number | null;
+  }> = [];
+  for (const raw of rawList) {
+    const hazard = asRecord(raw);
+    if (!hazard) continue;
+    const hazardType = asString(hazard.hazard_type ?? hazard.hazardType) ?? '';
+    const remaining = Number(hazard.remaining_turns ?? hazard.remainingTurns ?? 1);
+    const row = normalizeCellIndex(Number(hazard.row));
+    const col = normalizeCellIndex(Number(hazard.col));
+    sampledHazards.push({
+      hazardType,
+      remaining,
+      row,
+      col,
+    });
+    if (hazardType !== 'poison_cell' && hazardType !== 'poison') continue;
+    if (!Number.isFinite(remaining) || remaining <= 0) continue;
+    if (row === null || col === null) continue;
+    const key = `${row}:${col}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ row, col });
+  }
+  console.info('[poison-debug] parsed hazards', {
+    total: rawList.length,
+    poisonCells: out.length,
+    samples: sampledHazards.slice(0, 12),
+  });
+  return out;
+}
+
+function movementRuleByCellFromCanonical(position: BattleCanonicalPosition): Map<string, string> {
+  const out = new Map<string, string>();
+  const boardState = asRecord(position.boardState);
+  if (!boardState) return out;
+  const skillState = asRecord(boardState.skill_state ?? boardState.skillState);
+  const rawList = (skillState?.movement_modifiers ??
+    skillState?.movementModifiers ??
+    boardState.movement_modifiers ??
+    boardState.movementModifiers) as unknown;
+  if (!Array.isArray(rawList)) return out;
+  for (const raw of rawList) {
+    const entry = asRecord(raw);
+    if (!entry) continue;
+    const remaining = Number(entry.remaining_turns ?? entry.remainingTurns ?? 1);
+    if (!Number.isFinite(remaining) || remaining <= 0) continue;
+    const side = normalizeSide(asString(entry.side) ?? 'player');
+    const row = normalizeCellIndex(Number(entry.row));
+    const col = normalizeCellIndex(Number(entry.col));
+    const movementRule = asString(entry.movement_rule ?? entry.movementRule);
+    if (row === null || col === null || !movementRule) continue;
+    out.set(`${side}:${row}:${col}`, movementRule);
+  }
+  return out;
+}
+
+function applyMovementRuleToTargets(
+  origin: BoardCell,
+  targets: BoardCell[],
+  movementRule: string | null,
+): BoardCell[] {
+  if (!movementRule) return targets;
+  if (movementRule === 'vertical_step_only') {
+    return targets.filter((t) => t.col === origin.col && Math.abs(t.row - origin.row) === 1);
+  }
+  if (movementRule === 'orthogonal_step_only') {
+    return targets.filter((t) => Math.abs(t.row - origin.row) + Math.abs(t.col - origin.col) === 1);
+  }
+  return targets;
+}
+
 function piecesFromCanonicalBoardState(
   position: BattleCanonicalPosition,
   pieceDefsByCode: Partial<Record<string, PieceCatalogItem>>,
@@ -755,7 +854,9 @@ function piecesFromCanonicalPosition(
         ch === '{' ||
         ch === ':' ||
         ch === '.' ||
-        ch === '"'
+        ch === '"' ||
+        ch === '=' ||
+        ch === '|'
       )
         side = 'player';
       if (
@@ -771,7 +872,9 @@ function piecesFromCanonicalPosition(
         ch === '}' ||
         ch === ';' ||
         ch === ',' ||
-        ch === "'"
+        ch === "'" ||
+        ch === '-' ||
+        ch === '\\'
       )
         side = 'enemy';
       // DB 由来 mapping から pieceCode を復元する（`+` プレフィックスの成り駒は第2引数が必要）。
@@ -779,6 +882,22 @@ function piecesFromCanonicalPosition(
       if (!pieceCode && promoted) {
         pieceCode = sfenCharToDisplayChar(ch, false, pieceSfenMapping);
       }
+      // 新規追加駒の SFEN マッピングが未同期でも、同一マスの既存駒を維持して
+      // 盤面同期時に駒が消えるのを防ぐ（例: 毒・沼など）
+      const preservedAtCellSameSide = existingPieces.find(
+        (p) => p.side === side && p.row === row && p.col === col,
+      );
+      const preservedAtCellAnySide =
+        preservedAtCellSameSide ??
+        existingPieces.find((p) => p.row === row && p.col === col) ??
+        null;
+      const usedPreservedCode = !pieceCode && preservedAtCellAnySide?.pieceCode != null;
+      if (usedPreservedCode && preservedAtCellAnySide?.pieceCode) {
+        pieceCode = preservedAtCellAnySide.pieceCode;
+      }
+      // 未知 SFEN 記号でも、同一マスに既存駒があれば side/char を既存値で維持する。
+      // （初回同期で毒・沼が消える問題の抑止）
+      const effectiveSide = usedPreservedCode ? (preservedAtCellAnySide?.side ?? side) : side;
       if (pieceCode && row >= 0 && row < BOARD_SIZE && col >= 0 && col < BOARD_SIZE) {
         // SFEN の `$`/`!`（先手）と `%`/`?`（後手）で先後は一意に判定できるため、
         // 直前手番(actorSide)での side 補正は行わない。
@@ -786,13 +905,13 @@ function piecesFromCanonicalPosition(
         const pieceDef = promoted
           ? (promotedPieceDefsByCode[pieceCode] ?? pieceDefsByCode[pieceCode])
           : pieceDefsByCode[pieceCode];
-        const char = pieceCharFromCode(pieceCode, side, promoted);
+        const char = preservedAtCellAnySide?.char ?? pieceCharFromCode(pieceCode, effectiveSide, promoted);
         const imageSignedUrl = preferBundledPromotedImageOverRemoteUrl(
           pieceCode,
           promoted,
           pieceDef?.imageSignedUrl ??
             findBestExistingImage(existingPieces, {
-              side,
+              side: effectiveSide,
               row,
               col,
               pieceCode,
@@ -803,7 +922,7 @@ function piecesFromCanonicalPosition(
         );
 
         next.push({
-          side,
+          side: effectiveSide,
           row,
           col,
           pieceCode,
@@ -1051,18 +1170,9 @@ function preserveMovedPieceIdentity(
     return updated;
   }
 
-  return [
-    ...nextPieces,
-    {
-      side: preserved.side,
-      row: preserved.toRow,
-      col: preserved.toCol,
-      pieceCode: preserved.pieceCode,
-      char: preserved.char,
-      imageSignedUrl: preserved.imageSignedUrl,
-      promoted: preserved.promoted ?? false,
-    },
-  ];
+  // 着手先に駒が存在しない canonical は「移動後に消滅した」可能性があるため、
+  // ここで駒を補完してしまうと毒マス侵入時の誤召喚になる。空マスはそのまま採用する。
+  return nextPieces;
 }
 
 function pieceIdentityKey(piece: BoardPiece) {
@@ -1102,6 +1212,65 @@ function reconcilePieceIdentity(
     if (isPromotedVisualPiece(piece) !== isPromotedVisualPiece(existing)) return piece;
     return existing;
   });
+}
+
+const PERSISTENT_HAZARD_CHARS = new Set(['毒', '沼']);
+
+/**
+ * canonical(SFEN/boardState) に一時的に載らないフレームが来ても、
+ * 毒・沼のような持続配置駒を直前盤面から補完して表示消失を防ぐ。
+ */
+function restoreMissingPersistentHazardPieces(
+  nextPieces: BoardPiece[],
+  existingPieces: BoardPiece[],
+): BoardPiece[] {
+  const nextByCell = new Map<string, BoardPiece>();
+  for (const p of nextPieces) {
+    nextByCell.set(`${p.row}:${p.col}`, p);
+  }
+  for (const p of existingPieces) {
+    if (!PERSISTENT_HAZARD_CHARS.has(p.char)) continue;
+    const cellKey = `${p.row}:${p.col}`;
+    const byCell = nextByCell.get(cellKey);
+    // 持続駒補完は「欠損セルのみ」。既に何か駒がいるセルは canonical を優先する。
+    // （毒/沼を取った直後に、捕獲先の味方駒が一時的に消える現象を防ぐ）
+    if (!byCell) {
+      nextByCell.set(cellKey, p);
+    }
+  }
+  return [...nextByCell.values()];
+}
+
+function enforcePersistentHazardCells(
+  nextPieces: BoardPiece[],
+  persistentHazards: readonly BoardPiece[],
+): BoardPiece[] {
+  if (persistentHazards.length === 0) return nextPieces;
+  const nextHazardCount = new Map<string, number>();
+  for (const p of nextPieces) {
+    if (!PERSISTENT_HAZARD_CHARS.has(p.char)) continue;
+    const key = `${p.side}:${p.char}`;
+    nextHazardCount.set(key, (nextHazardCount.get(key) ?? 0) + 1);
+  }
+  const byCell = new Map<string, BoardPiece>();
+  for (const p of nextPieces) {
+    byCell.set(`${p.row}:${p.col}`, p);
+  }
+  for (const hz of persistentHazards) {
+    const cellKey = `${hz.row}:${hz.col}`;
+    if (byCell.has(cellKey)) {
+      // 既に canonical 上で占有されているセルは上書きしない（捕獲駒が沼に化けるのを防止）
+      continue;
+    }
+    const kindKey = `${hz.side}:${hz.char}`;
+    const remaining = nextHazardCount.get(kindKey) ?? 0;
+    if (remaining > 0) {
+      nextHazardCount.set(kindKey, remaining - 1);
+      continue;
+    }
+    byCell.set(cellKey, hz);
+  }
+  return [...byCell.values()];
 }
 
 /**
@@ -1147,6 +1316,61 @@ function resolveBattleMovePlacements(
     }
   }
   return null;
+}
+
+function isSelfCaptureLikeMove(
+  prev: BoardPiece[],
+  move: BattleMove,
+  actorSide: Side,
+  persistentHazards: readonly BoardPiece[] = [],
+): boolean {
+  const targetVariants: Array<{ row: number; col: number }> = [];
+  const nRow = normalizeCellIndex(move.toRow);
+  const nCol = normalizeCellIndex(move.toCol);
+  if (nRow !== null && nCol !== null) {
+    targetVariants.push({ row: nRow, col: nCol });
+  }
+  targetVariants.push({ row: move.toRow, col: move.toCol });
+
+  const hasAllyAtTarget = targetVariants.some(
+    ({ row, col }) =>
+      prev.some((p) => p.side === actorSide && p.row === row && p.col === col) ||
+      persistentHazards.some((p) => p.side === actorSide && p.row === row && p.col === col),
+  );
+  if (!hasAllyAtTarget) return false;
+
+  // 同一座標へのノップ移動は除外（座標系ゆれの誤判定回避）
+  if (move.fromRow != null && move.fromCol != null) {
+    const fromVariants: Array<{ row: number; col: number }> = [];
+    const nFr = normalizeCellIndex(move.fromRow);
+    const nFc = normalizeCellIndex(move.fromCol);
+    if (nFr !== null && nFc !== null) {
+      fromVariants.push({ row: nFr, col: nFc });
+    }
+    fromVariants.push({ row: move.fromRow, col: move.fromCol });
+    const isSameCell = fromVariants.some((f) =>
+      targetVariants.some((t) => f.row === t.row && f.col === t.col),
+    );
+    if (isSameCell) return false;
+  }
+
+  return true;
+}
+
+function restorePieceAfterInvalidSelfCapture(
+  nextPieces: BoardPiece[],
+  resolvedBefore: { fromRow: number; fromCol: number; toRow: number; toCol: number; moving: BoardPiece },
+): BoardPiece[] {
+  const { fromRow, fromCol, toRow, toCol, moving } = resolvedBefore;
+  const target = nextPieces.find((p) => p.row === toRow && p.col === toCol);
+  if (!target || !PERSISTENT_HAZARD_CHARS.has(target.char)) {
+    return nextPieces;
+  }
+  const fromOccupied = nextPieces.some((p) => p.row === fromRow && p.col === fromCol);
+  if (fromOccupied) {
+    return nextPieces;
+  }
+  return [...nextPieces, { ...moving, row: fromRow, col: fromCol }];
 }
 
 /** 成り選択など、盤上で確定したマスがあるときは API 座標より優先する */
@@ -1277,6 +1501,12 @@ function computePiecesAfterOptimisticMove(
     const pieceDef = pieceDefsByCode[pieceCode] ?? pieceDefsByCode[rawCode];
     const tr = normalizeCellIndex(move.toRow) ?? move.toRow;
     const tc = normalizeCellIndex(move.toCol) ?? move.toCol;
+    const occupiedHazard = prev.find(
+      (p) => p.row === tr && p.col === tc && PERSISTENT_HAZARD_CHARS.has(p.char),
+    );
+    if (occupiedHazard) return prev;
+    const occupiedByAlly = prev.some((p) => p.row === tr && p.col === tc && p.side === actorSide);
+    if (occupiedByAlly) return prev;
     return [
       ...prev,
       {
@@ -1322,6 +1552,19 @@ function computePiecesAfterOptimisticMove(
   if (!resolved) return prev;
   const { fromRow, fromCol, toRow, toCol, moving } = resolved;
   if (moving.side !== actorSide) return prev;
+  const targetAtDestination = prev.find((p) => p.row === toRow && p.col === toCol);
+  const movingIsHazard = PERSISTENT_HAZARD_CHARS.has(moving.char);
+  if (
+    targetAtDestination &&
+    targetAtDestination.side === actorSide &&
+    PERSISTENT_HAZARD_CHARS.has(targetAtDestination.char) &&
+    !movingIsHazard
+  ) {
+    return prev;
+  }
+  if (targetAtDestination && targetAtDestination.side === actorSide) {
+    return prev;
+  }
 
   const resolvedPieceCode = pieceCodeFromPlacement(moving.pieceCode, moving.char, pieceDefsByChar);
   const codeKey = (resolvedPieceCode ?? moving.pieceCode ?? '').toUpperCase();
@@ -1340,7 +1583,7 @@ function computePiecesAfterOptimisticMove(
       ? null
       : (promotedDef?.imageSignedUrl ?? moving.imageSignedUrl);
   return prev
-    .filter((p) => !(p.row === toRow && p.col === toCol))
+    .filter((p) => !(p.row === toRow && p.col === toCol && p.side !== actorSide))
     .map((p) =>
       p.row === fromRow && p.col === fromCol
         ? {
@@ -1400,10 +1643,13 @@ const BoardPieceSprite = memo(function BoardPieceSprite({
       : bundledPromoted != null
         ? bundledPromoted
         : resolvePromotedImageSource(piece);
-  const imageUri = localPromotedImageSource != null ? null : failed ? null : null;
-  const imageSource =
+  const bundledOrLocalSource =
     localPromotedImageSource ?? (failed ? null : getPieceImageSource(piece)) ?? null;
-  const pieceImageRecyclingKey = `${instantPromotedKey ?? 'x'}-${piece.side}-r${piece.row}-c${piece.col}-p${piece.promoted ? 1 : 0}-ch${piece.char}-pc${piece.pieceCode ?? ''}-u${imageUri ?? 'local'}`;
+  // require() のモジュール ID をキーに含め、Expo Image の recycling で別駒テクスチャが再利用されるのを防ぐ
+  const imageAssetFingerprint =
+    typeof bundledOrLocalSource === 'number' ? `m${bundledOrLocalSource}` : failed ? 'fail' : 'none';
+  const imageSource = bundledOrLocalSource;
+  const pieceImageRecyclingKey = `${instantPromotedKey ?? 'x'}-${piece.side}-r${piece.row}-c${piece.col}-p${piece.promoted ? 1 : 0}-ch${piece.char}-pc${piece.pieceCode ?? ''}-src${imageAssetFingerprint}`;
 
   return (
     <View
@@ -1439,7 +1685,7 @@ const BoardPieceSprite = memo(function BoardPieceSprite({
             />
           ) : imageSource ? (
             <Image
-              key={`uri-${piece.side}-${piece.row}-${piece.col}-${piece.promoted ? 1 : 0}-${piece.char}-${piece.pieceCode ?? ''}`}
+              key={`uri-${piece.side}-${piece.row}-${piece.col}-${piece.promoted ? 1 : 0}-${piece.char}-${piece.pieceCode ?? ''}-src${imageAssetFingerprint}`}
               recyclingKey={pieceImageRecyclingKey}
               source={imageSource}
               contentFit="contain"
@@ -1549,13 +1795,45 @@ type BoardHighlightsLayerProps = {
   legalTargets: BoardCell[];
   aiPreviewTarget: BoardCell | null;
   enemyPreviewTargets: BoardCell[];
+  poisonHazards: BoardCell[];
 };
+
+type PoisonHazardLayerProps = {
+  poisonHazards: BoardCell[];
+};
+
+const PoisonHazardLayer = memo(function PoisonHazardLayer({ poisonHazards }: PoisonHazardLayerProps) {
+  return (
+    <View pointerEvents="none" style={{ position: 'absolute', inset: 0, zIndex: 20 }}>
+      {poisonHazards.map((cell) => (
+        <View
+          key={`poison-image-${cell.row}-${cell.col}`}
+          style={{
+            position: 'absolute',
+            top: `${cell.row * BOARD_CELL_INNER_RATIO * 100}%`,
+            left: `${cell.col * BOARD_CELL_INNER_RATIO * 100}%`,
+            width: `${BOARD_CELL_INNER_RATIO * 100}%`,
+            height: `${BOARD_CELL_INNER_RATIO * 100}%`,
+            backgroundColor: '#7c3aed33',
+          }}
+        >
+          <Image
+            source={POISON_CELL_IMAGE_SOURCE}
+            contentFit="cover"
+            style={{ width: '100%', height: '100%' }}
+          />
+        </View>
+      ))}
+    </View>
+  );
+});
 
 const BoardHighlightsLayer = memo(function BoardHighlightsLayer({
   selectedCell,
   legalTargets,
   aiPreviewTarget,
   enemyPreviewTargets,
+  poisonHazards,
 }: BoardHighlightsLayerProps) {
   return (
     <Svg
@@ -1612,6 +1890,7 @@ const BoardHighlightsLayer = memo(function BoardHighlightsLayer({
           strokeWidth={4}
         />
       ))}
+      {/* 毒マスは PoisonHazardLayer の画像描画を使用 */}
     </Svg>
   );
 });
@@ -1818,6 +2097,7 @@ export function StageShogiScreen() {
   const [aiPreviewTarget, setAiPreviewTarget] = useState<BoardCell | null>(null);
   const [playerLegalMoves, setPlayerLegalMoves] = useState<BattleMove[]>([]);
   const [enemyPreviewTargets, setEnemyPreviewTargets] = useState<BoardCell[]>([]);
+  const [poisonHazardCells, setPoisonHazardCells] = useState<BoardCell[]>([]);
   const [isLoadingPlayerLegalMoves, setIsLoadingPlayerLegalMoves] = useState(false);
   const [hands, setHands] = useState<HandsState>(createEmptyHandsState());
   const [pendingPromotion, setPendingPromotion] = useState<PendingPromotion | null>(null);
@@ -1831,6 +2111,7 @@ export function StageShogiScreen() {
   const [skillActivationText, setSkillActivationText] = useState<string | null>(null);
   const [inspectingPiece, setInspectingPiece] = useState<{
     char: string;
+    pieceCode?: string | null;
     name: string;
     desc: string;
     move: string;
@@ -1845,6 +2126,8 @@ export function StageShogiScreen() {
   const requestAiMoveUseCase = useMemo(() => new RequestAiMoveUseCase(), []);
   const isMountedRef = useRef(true);
   const piecesRef = useRef<BoardPiece[]>([]);
+  const persistentHazardsRef = useRef<BoardPiece[]>([]);
+  const latestMovementRuleByCellRef = useRef<Map<string, string>>(new Map());
   /** 成りダイアログを出す直前の盤（不成で先に動かす前）。「成る」確定時はここから楽観計算する */
   const piecesBeforePromotionDialogRef = useRef<BoardPiece[] | null>(null);
   const handsRef = useRef<HandsState>(createEmptyHandsState());
@@ -2002,11 +2285,21 @@ export function StageShogiScreen() {
     );
     const nextPieces = preserveMovedPieceIdentity(parsedPieces, preservedMovedPiece);
     const reconciledPieces = reconcilePieceIdentity(nextPieces, reconcileSource);
+    const withPersistentHazards = restoreMissingPersistentHazardPieces(
+      reconciledPieces,
+      reconcileSource,
+    );
     const withPromotionOverlay =
       optimisticBaseline && optimisticBaseline.length > 0
-        ? overlayPromotionFromOptimistic(reconciledPieces, optimisticBaseline)
-        : reconciledPieces;
-    const withDarkVeil = applyDarkVeilFromSkillStateToPieces(withPromotionOverlay, position);
+        ? overlayPromotionFromOptimistic(withPersistentHazards, optimisticBaseline)
+        : withPersistentHazards;
+    const withPersistentCells = enforcePersistentHazardCells(
+      withPromotionOverlay,
+      persistentHazardsRef.current,
+    );
+    const withDarkVeil = applyDarkVeilFromSkillStateToPieces(withPersistentCells, position);
+    const nextPoisonHazards = poisonHazardCellsForDisplay(position);
+    latestMovementRuleByCellRef.current = movementRuleByCellFromCanonical(position);
     // hands は canonical JSON を唯一の真実として扱う（SFEN 由来の手と混ぜると二重計上が起きやすい）
     const nextHands = remapHandsStateToDisplayPieceCodes(
       normalizeHandsStateKeys(handsFromCanonical(position)),
@@ -2016,8 +2309,12 @@ export function StageShogiScreen() {
       nextHands,
       withPromotionOverlay,
     );
+    const stabilizedPieces = enforcePersistentHazardCells(withDarkVeil, persistentHazardsRef.current);
     setPromotionImageFlash(null);
-    setPieces(withDarkVeil);
+    setPieces(stabilizedPieces);
+    // stale な永続ハザード参照で捕獲後に「沼」へ戻るのを防ぐため、canonical 同期ごとに更新する。
+    persistentHazardsRef.current = stabilizedPieces.filter((p) => PERSISTENT_HAZARD_CHARS.has(p.char));
+    setPoisonHazardCells(nextPoisonHazards);
     setHands(reconciledHands);
     setSideToMove(position.sideToMove);
     setMoveNo(position.turnNumber);
@@ -2062,6 +2359,13 @@ export function StageShogiScreen() {
         return piece;
       })
       .filter((value): value is BoardPiece => value !== null);
+    const snapshotPersistentHazards = next.filter((p) => PERSISTENT_HAZARD_CHARS.has(p.char));
+    const enemySwampCount = snapshotPersistentHazards.filter(
+      (p) => p.char === '沼' && p.side === 'enemy',
+    ).length;
+    if (Number(stageParam) === 18 && enemySwampCount === 0) {
+      console.warn('[stage18] enemy swamp is not recognized as enemy in initial snapshot');
+    }
 
     const stageChanged = prevStageRef.current !== stageParam;
     prevStageRef.current = stageParam;
@@ -2070,6 +2374,7 @@ export function StageShogiScreen() {
     }
 
     setPieces(next);
+    persistentHazardsRef.current = snapshotPersistentHazards;
     setSideToMove('player');
     setMoveNo(1);
     setGameId(null);
@@ -2078,6 +2383,7 @@ export function StageShogiScreen() {
     setSelectedDropPieceCode(null);
     setLegalTargets([]);
     setEnemyPreviewTargets([]);
+    setPoisonHazardCells([]);
     setAiPreviewTarget(null);
     setPlayerLegalMoves([]);
     setHands(createEmptyHandsState());
@@ -2279,8 +2585,23 @@ export function StageShogiScreen() {
       let preservedMovedPiece: PreservedMovedPiece | undefined;
       let optimisticBaseline: BoardPiece[] | undefined;
       const selectedMove = response.selectedMove;
-      if (selectedMove?.fromRow != null && selectedMove?.fromCol != null) {
-        const moved = findPieceAt(piecesRef.current, selectedMove.fromRow, selectedMove.fromCol);
+      const invalidSelfCaptureResolved =
+        selectedMove &&
+        isSelfCaptureLikeMove(piecesRef.current, selectedMove, 'enemy', persistentHazardsRef.current)
+          ? resolveBattleMovePlacements(piecesRef.current, selectedMove)
+          : null;
+      if (invalidSelfCaptureResolved) {
+        // 不正候補は盤面破壊を避けるため楽観更新に使わない。
+        // canonical をそのまま同期して矛盾を作らない。
+        setAiError('CPU の着手候補が不正なため、盤面同期のみ行いました。');
+      }
+      const selectedMoveForApply = invalidSelfCaptureResolved ? null : selectedMove;
+      if (selectedMoveForApply?.fromRow != null && selectedMoveForApply?.fromCol != null) {
+        const moved = findPieceAt(
+          piecesRef.current,
+          selectedMoveForApply.fromRow,
+          selectedMoveForApply.fromCol,
+        );
         if (moved && moved.side === 'enemy') {
           const resolvedPieceCode = pieceCodeFromPlacement(
             moved.pieceCode,
@@ -2288,8 +2609,8 @@ export function StageShogiScreen() {
             pieceDefsByChar,
           );
           const codeKey = (resolvedPieceCode ?? moved.pieceCode ?? '').toUpperCase();
-          const promoted = selectedMove.promote ? true : (moved.promoted ?? false);
-          const promotedDef = selectedMove.promote ? promotedPieceDefsByCode[codeKey] : null;
+          const promoted = selectedMoveForApply.promote ? true : (moved.promoted ?? false);
+          const promotedDef = selectedMoveForApply.promote ? promotedPieceDefsByCode[codeKey] : null;
           const imageSignedUrl = preferBundledPromotedImageOverRemoteUrl(
             resolvedPieceCode ?? moved.pieceCode,
             promoted,
@@ -2300,8 +2621,8 @@ export function StageShogiScreen() {
             : moved.char;
           preservedMovedPiece = {
             side: moved.side,
-            toRow: selectedMove.toRow,
-            toCol: selectedMove.toCol,
+            toRow: selectedMoveForApply.toRow,
+            toCol: selectedMoveForApply.toCol,
             pieceCode: resolvedPieceCode ?? moved.pieceCode,
             char,
             imageSignedUrl,
@@ -2310,22 +2631,22 @@ export function StageShogiScreen() {
         }
       }
 
-      if (selectedMove) {
+      if (selectedMoveForApply) {
         optimisticBaseline = computePiecesAfterOptimisticMove(
           piecesRef.current,
           'enemy',
-          selectedMove,
+          selectedMoveForApply,
           pieceDefsByCode,
           pieceDefsByChar,
           promotedPieceDefsByCode,
         );
         // CPU の着手先を 1 秒だけ先にハイライト表示する（通常移動・持ち駒打ちの両方）
-        setAiPreviewTarget({ row: selectedMove.toRow, col: selectedMove.toCol });
+        setAiPreviewTarget({ row: selectedMoveForApply.toRow, col: selectedMoveForApply.toCol });
         await new Promise<void>((resolve) => {
           setTimeout(resolve, 1000);
         });
         setAiPreviewTarget(null);
-        applyOptimisticMove('enemy', selectedMove);
+        applyOptimisticMove('enemy', selectedMoveForApply);
         await waitForAiMoveVisualCommit();
       }
 
@@ -2346,15 +2667,8 @@ export function StageShogiScreen() {
         void claimStageClearRewardIfNeeded();
       } else {
         if (isIllegalMoveError(error)) {
-          const recovered = await recoverFromIllegalMoveIfNeeded();
-          if (recovered) {
-            setAiError('局面を自動更新しました。対局を続行します。');
-            return;
-          }
           pendingAiResumeRef.current = null;
-          setAiError(
-            '同じ局面で自動更新を複数回試しましたが復旧できませんでした。画面を開き直してください。',
-          );
+          setAiError('CPU の着手が不正だったため失敗しました。次の候補選択で継続します。');
           return;
         }
         setAiError(toUserFacingBattleError(error));
@@ -2410,13 +2724,16 @@ export function StageShogiScreen() {
 
   function applyOptimisticMove(actorSide: Side, move: BattleMove) {
     setPieces((prev) =>
-      computePiecesAfterOptimisticMove(
-        prev,
-        actorSide,
-        move,
-        pieceDefsByCode,
-        pieceDefsByChar,
-        promotedPieceDefsByCode,
+      enforcePersistentHazardCells(
+        computePiecesAfterOptimisticMove(
+          prev,
+          actorSide,
+          move,
+          pieceDefsByCode,
+          pieceDefsByChar,
+          promotedPieceDefsByCode,
+        ),
+        persistentHazardsRef.current,
       ),
     );
     if (move.dropPieceCode) {
@@ -2819,11 +3136,18 @@ export function StageShogiScreen() {
             pieceDefsByChar[piece.char] ??
             null);
 
-      const targets = enemyPieceDef?.moveVectors?.length
+      const rawTargets = enemyPieceDef?.moveVectors?.length
         ? getLegalTargetsFromVectors(pieces, piece, enemyPieceDef.moveVectors, BOARD_SIZE, {
             canJump: enemyPieceDef.canJump === true,
           })
         : [];
+      const movementRule =
+        latestMovementRuleByCellRef.current.get(`${piece.side}:${piece.row}:${piece.col}`) ?? null;
+      const targets = applyMovementRuleToTargets(
+        { row: piece.row, col: piece.col },
+        rawTargets,
+        movementRule,
+      );
 
       setSelectedCell(null);
       setSelectedDropPieceCode(null);
@@ -2913,6 +3237,7 @@ export function StageShogiScreen() {
 
     setInspectingPiece({
       char: lookupChar,
+      pieceCode: target.pieceCode,
       name: detail?.name ?? lookupChar,
       desc: resolveInspectSkillDescription(lookupChar, detail?.desc),
       move: detail?.move ?? '準備中',
@@ -3116,10 +3441,7 @@ export function StageShogiScreen() {
                 legalTargets={legalTargets}
                 aiPreviewTarget={aiPreviewTarget}
                 enemyPreviewTargets={enemyPreviewTargets}
-              />
-              <BoardTouchLayer
-                onCellPress={handleBoardCellPress}
-                onCellLongPress={handleCellLongPress}
+                poisonHazards={poisonHazardCells}
               />
               <BoardPiecesLayer
                 pieces={pieces}
@@ -3127,6 +3449,11 @@ export function StageShogiScreen() {
                 onPieceImageError={handlePieceImageError}
                 spriteEpoch={boardSpriteEpoch}
                 promotionImageFlash={promotionImageFlash}
+              />
+              <PoisonHazardLayer poisonHazards={poisonHazardCells} />
+              <BoardTouchLayer
+                onCellPress={handleBoardCellPress}
+                onCellLongPress={handleCellLongPress}
               />
             </View>
           </View>
@@ -3246,7 +3573,24 @@ export function StageShogiScreen() {
       >
         <View className="flex-1 items-center justify-center bg-black/45 px-6">
           <View className="w-full max-w-sm rounded-xl bg-[#fff7e6] p-4">
-            {inspectingPiece?.imageSignedUrl ? (
+            {inspectingPiece &&
+            resolvePieceImageSource({
+              pieceCode: inspectingPiece.pieceCode,
+              char: inspectingPiece.char,
+              imageSignedUrl: inspectingPiece.imageSignedUrl,
+            }) ? (
+              <Image
+                source={
+                  resolvePieceImageSource({
+                    pieceCode: inspectingPiece.pieceCode,
+                    char: inspectingPiece.char,
+                    imageSignedUrl: inspectingPiece.imageSignedUrl,
+                  })!
+                }
+                contentFit="contain"
+                style={{ width: 56, height: 56, alignSelf: 'center' }}
+              />
+            ) : inspectingPiece?.imageSignedUrl ? (
               <Image
                 source={{ uri: inspectingPiece.imageSignedUrl }}
                 contentFit="contain"

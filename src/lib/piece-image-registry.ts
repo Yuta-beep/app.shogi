@@ -748,24 +748,37 @@ for (const [char, code] of Object.entries(CHAR_TO_CODE)) {
   }
 }
 
+// 王/玉 は同じ見た目アセットを使う。同期タイミングで「王」表記になっても画像が欠けないようにする。
+const kingSource = pieceImageByChar.get('玉');
+if (kingSource != null) {
+  pieceImageByChar.set('王', kingSource);
+  pieceImageByCode.set('OU', kingSource);
+}
+
 export function getLocalPieceImageSource(input: {
   pieceId?: number;
   pieceCode?: string | null;
   char?: string | null;
 }): number | null {
-  if (typeof input.pieceId === 'number') {
-    const byId = pieceImageById.get(input.pieceId);
-    if (byId) return byId;
-  }
-
+  // pieceCode / 表示文字を pieceId より先に見る。
+  // SFEN 同期後はマス上のコード・漢字が正で、DB の numeric id が古い／別駒とずれるケースがあるため。
   if (typeof input.pieceCode === 'string' && input.pieceCode.length > 0) {
+    const raw = input.pieceCode;
     const byCode =
-      pieceImageByCode.get(input.pieceCode) ?? pieceImageByCode.get(input.pieceCode.toUpperCase());
+      pieceImageByCode.get(raw) ??
+      pieceImageByCode.get(raw.toLowerCase()) ??
+      pieceImageByCode.get(raw.toUpperCase());
     if (byCode) return byCode;
   }
 
   if (typeof input.char === 'string' && input.char.length > 0) {
-    return pieceImageByChar.get(input.char) ?? null;
+    const byChar = pieceImageByChar.get(input.char);
+    if (byChar) return byChar;
+  }
+
+  if (typeof input.pieceId === 'number') {
+    const byId = pieceImageById.get(input.pieceId);
+    if (byId) return byId;
   }
 
   return null;

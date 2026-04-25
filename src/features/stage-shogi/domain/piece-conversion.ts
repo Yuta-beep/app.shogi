@@ -77,6 +77,8 @@ const RUST_ENGINE_ONE_CHAR_SFEN: Readonly<Record<string, string>> = {
   FISH: ':',
   CLOUD: '.',
   RAINBOW: '"',
+  POISON: '=',
+  SWAMP: '|',
 };
 
 /** カタログに行が無い／sfen が未同期でも、エンジン SFEN 1 文字 → pieceCode を復元する */
@@ -97,6 +99,8 @@ const CODES_WITH_ENGINE_SFEN_FALLBACK: ReadonlySet<string> = new Set([
   'FISH',
   'CLOUD',
   'RAINBOW',
+  'POISON',
+  'SWAMP',
 ]);
 
 /** `sfenCharToDisplayChar` 用（`a`→`A` と `!` の両方で引けるよう atom をキーにする） */
@@ -123,6 +127,8 @@ const ENGINE_SFEN_ATOM_TO_FALLBACK_CODE: Readonly<Record<string, string>> = (() 
   out[';'] = 'FISH';
   out[','] = 'CLOUD';
   out["'"] = 'RAINBOW';
+  out['-'] = 'POISON';
+  out['\\'] = 'SWAMP';
   return out;
 })();
 
@@ -291,6 +297,8 @@ export const CODE_TO_CHAR: Readonly<Record<string, string>> = {
   FISH: '魚',
   CLOUD: '雲',
   RAINBOW: '虹',
+  POISON: '毒',
+  SWAMP: '沼',
 };
 
 export const PROMOTED_CODE_TO_CHAR: Readonly<Record<string, string>> = {
@@ -343,6 +351,8 @@ export const CHAR_TO_CODE: Readonly<Record<string, string>> = {
   魚: 'FISH',
   雲: 'CLOUD',
   虹: 'RAINBOW',
+  毒: 'POISON',
+  沼: 'SWAMP',
 };
 
 // ── toSfenBoardPure ───────────────────────────────────────────────────────────
@@ -392,6 +402,8 @@ export function toSfenBoardPure(placements: SfenPiece[], mapping: PieceSfenMappi
         .replaceAll(':', ';')
         .replaceAll('.', ',')
         .replaceAll('"', "'")
+        .replaceAll('=', '-')
+        .replaceAll('|', '\\')
         .toLowerCase();
     }
   }
@@ -463,6 +475,8 @@ export function toSfenHandsPure(hands: HandsState, mapping: PieceSfenMapping): s
         .replaceAll(':', ';')
         .replaceAll('.', ',')
         .replaceAll('"', "'")
+        .replaceAll('=', '-')
+        .replaceAll('|', '\\')
         .toLowerCase();
       chunks.push(`${enemyCount > 1 ? String(enemyCount) : ''}${enemyAtom}`);
     }
@@ -489,7 +503,9 @@ function handTokenSideIsPlayer(token: string): boolean {
     c === '{' ||
     c === ':' ||
     c === '.' ||
-    c === '"'
+    c === '"' ||
+    c === '=' ||
+    c === '|'
   )
     return true;
   if (
@@ -505,7 +521,9 @@ function handTokenSideIsPlayer(token: string): boolean {
     c === '}' ||
     c === ';' ||
     c === ',' ||
-    c === "'"
+    c === "'" ||
+    c === '-' ||
+    c === '\\'
   )
     return false;
   if (c >= 'A' && c <= 'Z') return true;
