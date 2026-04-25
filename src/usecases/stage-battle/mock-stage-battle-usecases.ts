@@ -22,7 +22,11 @@ export class MockPrepareStageBattleUseCase implements PrepareStageBattleUseCase 
 }
 
 export class MockClaimStageClearRewardUseCase implements ClaimStageClearRewardUseCase {
-  async execute(input: { stageId?: string }): Promise<StageClearRewardResult | null> {
+  async execute(input: {
+    stageId?: string;
+    result?: 'cleared' | 'failed';
+  }): Promise<StageClearRewardResult | null> {
+    if (input.result === 'failed') return null;
     if (!input.stageId) return null;
     const stageNo = Number(input.stageId);
     if (!Number.isInteger(stageNo) || stageNo <= 0) return null;

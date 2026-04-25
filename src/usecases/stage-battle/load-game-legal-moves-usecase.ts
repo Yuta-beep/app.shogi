@@ -1,8 +1,6 @@
-import { getJson } from '@/infra/http/api-client';
-import {
-  BattleLegalMoves,
-  parseBattleLegalMoves,
-} from '@/usecases/stage-battle/game-move-contract';
+import { generateLocalLegalMoves } from '@/ai/local-engine';
+import { getLocalBattleGame } from '@/ai/local-battle-registry';
+import { BattleLegalMoves } from '@/usecases/stage-battle/game-move-contract';
 
 export type LoadGameLegalMovesInput = {
   gameId: string;
@@ -10,7 +8,13 @@ export type LoadGameLegalMovesInput = {
 
 export class LoadGameLegalMovesUseCase {
   async execute(input: LoadGameLegalMovesInput): Promise<BattleLegalMoves> {
-    const raw = await getJson<unknown>(`/api/v1/games/${input.gameId}/legal-moves`);
-    return parseBattleLegalMoves(raw);
+    const record = getLocalBattleGame(input.gameId);
+    if (!record) {
+      throw new Error(`local battle game not found: ${input.gameId}`);
+    }
+    return generateLocalLegalMoves({
+      position: record.position,
+      pieceCatalog: record.pieceCatalog,
+    });
   }
 }

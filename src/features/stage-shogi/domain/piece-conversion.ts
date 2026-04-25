@@ -515,12 +515,33 @@ function handTokenSideIsPlayer(token: string): boolean {
 
 type HandsPattern = { code: string; upper: string; len: number };
 
+function toEnemySfenAlias(atom: string): string {
+  return atom
+    .replaceAll('$', '%')
+    .replaceAll('!', '?')
+    .replaceAll('&', '*')
+    .replaceAll('(', ')')
+    .replaceAll('#', '~')
+    .replaceAll('@', '`')
+    .replaceAll('^', '_')
+    .replaceAll('[', ']')
+    .replaceAll('<', '>')
+    .replaceAll('{', '}')
+    .replaceAll(':', ';')
+    .replaceAll('.', ',')
+    .replaceAll('"', "'");
+}
+
 function buildHandsPatterns(mapping: PieceSfenMapping): HandsPattern[] {
   const patterns: HandsPattern[] = [];
   for (const [code, sfen] of Object.entries(mapping.codeToSfen)) {
     if (!sfen) continue;
     const upper = sfen.toUpperCase();
     patterns.push({ code, upper, len: upper.length });
+    const enemyUpper = toEnemySfenAlias(upper);
+    if (enemyUpper !== upper) {
+      patterns.push({ code, upper: enemyUpper, len: enemyUpper.length });
+    }
   }
   for (const [sfenLetter, code] of Object.entries(mapping.sfenToCode.promoted)) {
     const upper = `+${sfenLetter.toUpperCase()}`;

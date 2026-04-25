@@ -7,6 +7,7 @@ import { Modal, Pressable, Text, View } from 'react-native';
 import Svg, { Line, Polygon, Rect } from 'react-native-svg';
 
 import { AppLoadingScreen } from '@/components/organism/app-loading-screen';
+import { setLocalBattlePieceCatalog } from '@/ai/local-battle-registry';
 import { homeAssets } from '@/constants/home-assets';
 import { getNormalDungeonStagePreviewSource } from '@/constants/normal-dungeon-stage-previews';
 import { UiScreenShell } from '@/components/organism/ui-screen-shell';
@@ -1794,7 +1795,7 @@ export function StageShogiScreen() {
   const params = useLocalSearchParams<{ stage?: string }>();
   const stageParam = Array.isArray(params.stage) ? params.stage[0] : params.stage;
   const { isReady: isAuthReady, userId } = useAuthSession();
-  const { snapshot, isLoading } = useStageBattleScreen(
+  const { snapshot, isLoading, loadError } = useStageBattleScreen(
     stageParam,
     isAuthReady ? (userId ?? 'guest') : undefined,
   );
@@ -1855,6 +1856,7 @@ export function StageShogiScreen() {
   const inFlightAiKeyRef = useRef<string | null>(null);
   const lastSuccessfulAiKeyRef = useRef<string | null>(null);
   const clearRewardClaimedRef = useRef(false);
+  const battleSessionSettledRef = useRef(false);
   const skillToastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isRecoveringFromIllegalMoveRef = useRef(false);
   const pendingAiResumeRef = useRef<{ moveNo: number; side: Side } | null>(null);
@@ -2026,6 +2028,7 @@ export function StageShogiScreen() {
     setAiPreviewTarget(null);
     setPlayerLegalMoves([]);
     setPendingPromotion(null);
+    stateHashRef.current = position.stateHash;
     setStateHash(position.stateHash);
 
     if (game.status === 'finished') {
@@ -2091,6 +2094,7 @@ export function StageShogiScreen() {
     inFlightAiKeyRef.current = null;
     lastSuccessfulAiKeyRef.current = null;
     clearRewardClaimedRef.current = false;
+    battleSessionSettledRef.current = false;
     hasEnteredBattleRef.current = false;
     pendingAiResumeRef.current = null;
     illegalRecoverSignatureRef.current = null;
@@ -2104,6 +2108,7 @@ export function StageShogiScreen() {
       .then((items) => {
         if (active) {
           setPieceCatalog(items);
+          setLocalBattlePieceCatalog(items);
         }
       })
       .catch((error: unknown) => {
@@ -2117,7 +2122,17 @@ export function StageShogiScreen() {
   }, [loadPieceCatalogUseCase]);
 
   useEffect(() => {
-    if (isLoading || isCreatingGame || gameId || !userId) return;
+    if (!loadError) return;
+    setAiError(toUserFacingBattleError(loadError));
+    setGameId(null);
+    setWinner(null);
+    setIsCreatingGame(false);
+    setIsAiThinking(false);
+    setPlayerLegalMoves([]);
+  }, [loadError]);
+
+  useEffect(() => {
+    if (isLoading || loadError || isCreatingGame || gameId || !userId) return;
     if (Object.keys(pieceSfenMapping.codeToSfen).length === 0) return;
     if (snapshot.placements.length > 0 && pieces.length === 0) return;
 
@@ -2155,6 +2170,7 @@ export function StageShogiScreen() {
   }, [
     gameId,
     isCreatingGame,
+    loadError,
     isLoading,
     moveNo,
     stageParam,
@@ -2363,6 +2379,7 @@ export function StageShogiScreen() {
   async function claimStageClearRewardIfNeeded() {
     if (clearRewardClaimedRef.current) return;
     clearRewardClaimedRef.current = true;
+    battleSessionSettledRef.current = true;
     try {
       const result = await claimStageClearRewardUseCase.execute({ stageId: stageParam });
       if (!result) return;
@@ -2373,9 +2390,23 @@ export function StageShogiScreen() {
         `${result.firstClear ? '初回' : '周回'}報酬: 歩+${result.granted.pawn} 金+${result.granted.gold}${pieceSummary}`,
       );
     } catch (error: unknown) {
+      battleSessionSettledRef.current = false;
       setAiError(toUserFacingBattleError(error));
     }
   }
+
+  useEffect(() => {
+    if (winner !== 'enemy') return;
+    if (battleSessionSettledRef.current) return;
+    battleSessionSettledRef.current = true;
+    void claimStageClearRewardUseCase
+      .execute({ stageId: stageParam, result: 'failed' })
+      .catch(() => {
+        if (isMountedRef.current) {
+          battleSessionSettledRef.current = false;
+        }
+      });
+  }, [claimStageClearRewardUseCase, stageParam, winner]);
 
   function applyOptimisticMove(actorSide: Side, move: BattleMove) {
     setPieces((prev) =>
@@ -2469,7 +2500,7 @@ export function StageShogiScreen() {
         moveNo,
         actorSide: 'player',
         move,
-        stateHash,
+        stateHash: stateHashRef.current,
       });
 
       if (result.skillTriggered) {
@@ -2996,6 +3027,7 @@ export function StageShogiScreen() {
 
   const shouldBootstrapBattle =
     !isLoading &&
+    !loadError &&
     areAssetsReady &&
     isAuthReady &&
     !!userId &&
@@ -3006,7 +3038,7 @@ export function StageShogiScreen() {
     !isFinished;
 
   const isWaitingForGameId =
-    !isLoading && areAssetsReady && !gameId && isCreatingGame && aiError === null;
+    !isLoading && !loadError && areAssetsReady && !gameId && isCreatingGame && aiError === null;
 
   const isBootstrappingBattle =
     shouldBootstrapBattle ||

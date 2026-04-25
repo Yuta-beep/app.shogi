@@ -16,6 +16,7 @@ export function useStageBattleScreen(stageId?: string, reloadKey?: string) {
   const enabled = reloadKey !== undefined;
   const [snapshot, setSnapshot] = useState<StageBattleSnapshot>(emptySnapshot);
   const [isLoading, setIsLoading] = useState(enabled);
+  const [loadError, setLoadError] = useState<Error | null>(null);
 
   useEffect(() => {
     if (!enabled) {
@@ -25,11 +26,18 @@ export function useStageBattleScreen(stageId?: string, reloadKey?: string) {
 
     let active = true;
     setIsLoading(true);
+    setLoadError(null);
     useCase
       .execute({ stageId })
       .then((next) => {
         if (active) {
           setSnapshot(next);
+        }
+      })
+      .catch((error: unknown) => {
+        if (active) {
+          setSnapshot(emptySnapshot);
+          setLoadError(error instanceof Error ? error : new Error('Stage battle start failed'));
         }
       })
       .finally(() => {
@@ -42,5 +50,5 @@ export function useStageBattleScreen(stageId?: string, reloadKey?: string) {
     };
   }, [enabled, stageId, reloadKey, useCase]);
 
-  return { snapshot, isLoading };
+  return { snapshot, isLoading, loadError };
 }

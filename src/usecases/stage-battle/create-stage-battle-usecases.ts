@@ -1,9 +1,9 @@
 import { isApiDataSource } from '@/lib/config/data-source';
-import {
-  ApiClaimStageClearRewardUseCase,
-  ApiPrepareStageBattleUseCase,
-} from '@/usecases/stage-battle/api-stage-battle-usecases';
 import { ClaimStageClearRewardUseCase } from '@/usecases/stage-battle/claim-stage-clear-reward-usecase';
+import {
+  LocalClaimStageClearRewardUseCase,
+  LocalPrepareStageBattleUseCase,
+} from '@/usecases/stage-battle/local-stage-battle-usecases';
 import {
   MockClaimStageClearRewardUseCase,
   MockPrepareStageBattleUseCase,
@@ -12,12 +12,12 @@ import { PrepareStageBattleUseCase } from '@/usecases/stage-battle/prepare-stage
 
 export function createPrepareStageBattleUseCase(): PrepareStageBattleUseCase {
   return isApiDataSource()
-    ? new ApiPrepareStageBattleUseCase()
+    ? new LocalPrepareStageBattleUseCase()
     : new MockPrepareStageBattleUseCase();
 }
 
 export function createClaimStageClearRewardUseCase(): ClaimStageClearRewardUseCase {
   return isApiDataSource()
-    ? new ApiClaimStageClearRewardUseCase()
+    ? new LocalClaimStageClearRewardUseCase()
     : new MockClaimStageClearRewardUseCase();
 }

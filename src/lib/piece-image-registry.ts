@@ -1,3 +1,5 @@
+import { CHAR_TO_CODE } from '@/features/stage-shogi/domain/piece-conversion';
+
 export type PieceImageRecord = {
   pieceId?: number;
   pieceCode?: string | null;
@@ -732,9 +734,17 @@ for (const record of pieceImageRecords) {
   }
   if (typeof record.pieceCode === 'string' && record.pieceCode.length > 0) {
     pieceImageByCode.set(record.pieceCode, record.source);
+    pieceImageByCode.set(record.pieceCode.toUpperCase(), record.source);
   }
   if (record.char.length > 0) {
     pieceImageByChar.set(record.char, record.source);
+  }
+}
+
+for (const [char, code] of Object.entries(CHAR_TO_CODE)) {
+  const source = pieceImageByChar.get(char);
+  if (source != null && !pieceImageByCode.has(code)) {
+    pieceImageByCode.set(code, source);
   }
 }
 
@@ -749,7 +759,8 @@ export function getLocalPieceImageSource(input: {
   }
 
   if (typeof input.pieceCode === 'string' && input.pieceCode.length > 0) {
-    const byCode = pieceImageByCode.get(input.pieceCode);
+    const byCode =
+      pieceImageByCode.get(input.pieceCode) ?? pieceImageByCode.get(input.pieceCode.toUpperCase());
     if (byCode) return byCode;
   }
 

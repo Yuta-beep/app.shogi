@@ -59,7 +59,11 @@ export class ApiPrepareStageBattleUseCase implements PrepareStageBattleUseCase {
 export class ApiClaimStageClearRewardUseCase implements ClaimStageClearRewardUseCase {
   constructor(private readonly repository: StageRepository = new ApiStageRepository()) {}
 
-  async execute(input: { stageId?: string }): Promise<StageClearRewardResult | null> {
+  async execute(input: {
+    stageId?: string;
+    result?: 'cleared' | 'failed';
+  }): Promise<StageClearRewardResult | null> {
+    if (input.result === 'failed') return null;
     if (!input.stageId) return null;
     const stageNo = Number(input.stageId);
     if (!Number.isInteger(stageNo) || stageNo <= 0) return null;

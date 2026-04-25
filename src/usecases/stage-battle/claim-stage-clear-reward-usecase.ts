@@ -21,5 +21,8 @@ export type StageClearRewardResult = {
 };
 
 export interface ClaimStageClearRewardUseCase {
-  execute(input: { stageId?: string }): Promise<StageClearRewardResult | null>;
+  execute(input: {
+    stageId?: string;
+    result?: 'cleared' | 'failed';
+  }): Promise<StageClearRewardResult | null>;
 }

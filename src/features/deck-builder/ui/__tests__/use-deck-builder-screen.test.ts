@@ -114,7 +114,7 @@ describe('useDeckBuilderScreen', () => {
       });
     });
     act(() => {
-      result.current.placeSelectedPieceAt(6, 7); // UI行6 -> API行0
+      result.current.placeSelectedPieceAt(6, 7); // 飛は固定位置以外に置けず、既定配置(7,7)が使われる
     });
 
     act(() => {
@@ -140,13 +140,13 @@ describe('useDeckBuilderScreen', () => {
     expect(mockSaveExecute).toHaveBeenCalledWith({
       name: 'マイデッキ',
       placements: [
-        { rowNo: 0, colNo: 7, pieceId: 201 },
+        { rowNo: 1, colNo: 7, pieceId: 201 },
         { rowNo: 2, colNo: 4, pieceId: 202 },
       ],
     });
   });
 
-  it('所持数を超える配置はできず、残数が減る', async () => {
+  it('HTML版準拠で所持数では配置を制限せず、残数表示は無限扱いになる', async () => {
     const pawn = {
       pieceId: 301,
       char: '歩',
@@ -166,7 +166,7 @@ describe('useDeckBuilderScreen', () => {
     const { result } = renderHook(() => useDeckBuilderScreen());
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
-    expect(result.current.getRemainingCount(pawn)).toBe(2);
+    expect(result.current.getRemainingCount(pawn)).toBe(Infinity);
 
     act(() => {
       result.current.selectPieceForPlacement(pawn);
@@ -174,14 +174,14 @@ describe('useDeckBuilderScreen', () => {
     act(() => {
       result.current.placeSelectedPieceAt(6, 0);
       result.current.placeSelectedPieceAt(6, 1);
-      result.current.placeSelectedPieceAt(6, 2); // 3個目は在庫超過で拒否される
+      result.current.placeSelectedPieceAt(6, 2);
     });
 
-    expect(result.current.boardPlacements).toHaveLength(2);
-    expect(result.current.getRemainingCount(pawn)).toBe(0);
+    expect(result.current.boardPlacements).toHaveLength(9);
+    expect(result.current.getRemainingCount(pawn)).toBe(Infinity);
   });
 
-  it('コスト上限70を超える配置はできない', async () => {
+  it('特殊駒はHTML版の許可マスにしか配置できない', async () => {
     const piece = {
       pieceId: 401,
       char: '竜',
@@ -212,9 +212,12 @@ describe('useDeckBuilderScreen', () => {
       }
     });
 
-    expect(result.current.boardPlacements).toHaveLength(10);
-    expect(result.current.deckTotalCost).toBe(70);
-    expect(result.current.deckSpecialPieceCount).toBe(10);
+    expect(result.current.boardPlacements).toHaveLength(1);
+    expect(result.current.boardPlacements).toEqual(
+      expect.arrayContaining([expect.objectContaining({ row: 7, col: 1 })]),
+    );
+    expect(result.current.deckTotalCost).toBe(7);
+    expect(result.current.deckSpecialPieceCount).toBe(1);
   });
 
   it('読み込み時も上限なしで反映される', async () => {

@@ -317,7 +317,7 @@ describe('piece conversion via DB-derived mapping', () => {
 
   it('resolveHandsStateFromCanonicalSfenAndJson falls back to JSON when SFEN parses empty but JSON has pieces', () => {
     const json: HandsState = { player: { FU: 1 }, enemy: {} };
-    const sfen = '9/9/9/9/9/9/9/9/9 b ??? 1';
+    const sfen = '9/9/9/9/9/9/9/9/9 b 3= 1';
     expect(resolveHandsStateFromCanonicalSfenAndJson(sfen, pieceSfenMapping, json)).toEqual(json);
   });
 
@@ -374,7 +374,7 @@ describe('piece conversion via DB-derived mapping', () => {
       { side: 'enemy', row: 0, col: 0, pieceCode: 'COPPER', char: '銅' },
       { side: 'enemy', row: 0, col: 1, pieceCode: 'LEAD', char: '鉛' },
     ];
-    expect(toSfenBoardPure(pieces, mineralMapping)).toBe('a!7/9/9/9/9/9/9/9/9');
+    expect(toSfenBoardPure(pieces, mineralMapping)).toBe('a?7/9/9/9/9/9/9/9/9');
   });
 
   it('resolves mineral SFEN even when the catalog has no m_piece rows (fallback)', () => {
@@ -401,6 +401,6 @@ describe('piece conversion via DB-derived mapping', () => {
         isRepeatable: false,
       },
     ]);
-    expect(parseSfenHandsPart('2!', mineralMapping)).toEqual({ player: {}, enemy: { LEAD: 2 } });
+    expect(parseSfenHandsPart('2?', mineralMapping)).toEqual({ player: {}, enemy: { LEAD: 2 } });
   });
 });

@@ -299,7 +299,7 @@ function canPlacePieceAt(
 }
 
 function pieceMatchesAlias(piece: OwnedPiece, aliases: readonly string[]): boolean {
-  return aliases.some((alias) => piece.char === alias || piece.name.includes(alias));
+  return aliases.some((alias) => piece.char === alias || piece.name === alias);
 }
 
 function findOwnedByAliases(
