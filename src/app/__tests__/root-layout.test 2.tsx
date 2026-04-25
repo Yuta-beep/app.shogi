@@ -32,7 +32,8 @@ jest.mock('@/components/organism/app-loading-screen', () => {
   };
 });
 
-jest.mock('@/hooks/common/use-auth-session', () => ({
+jest.mock('@/hooks/common/auth-session-context', () => ({
+  AuthSessionProvider: ({ children }: { children: React.ReactNode }) => children,
   useAuthSession: (...args: unknown[]) => mockUseAuthSession(...args),
 }));
 

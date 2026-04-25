@@ -1,4 +1,6 @@
+import React from 'react';
 import { renderHook, waitFor } from '@testing-library/react-native';
+import { AuthSessionProvider } from '../auth-session-context';
 import { useAuthSession } from '../use-auth-session';
 
 const mockEnsureSession = jest.fn();
@@ -7,10 +9,14 @@ jest.mock('@/usecases/auth/ensure-session-usecase', () => ({
   ensureSession: (...args: unknown[]) => mockEnsureSession(...args),
 }));
 
+function wrapper({ children }: { children: React.ReactNode }) {
+  return React.createElement(AuthSessionProvider, null, children);
+}
+
 describe('useAuthSession', () => {
   it('初期状態は isReady: false', () => {
     mockEnsureSession.mockReturnValue(new Promise(() => {})); // pending
-    const { result } = renderHook(() => useAuthSession());
+    const { result } = renderHook(() => useAuthSession(), { wrapper });
 
     expect(result.current.isReady).toBe(false);
     expect(result.current.userId).toBeNull();
@@ -25,7 +31,7 @@ describe('useAuthSession', () => {
       needsUsernameSetup: false,
     });
 
-    const { result } = renderHook(() => useAuthSession());
+    const { result } = renderHook(() => useAuthSession(), { wrapper });
 
     await waitFor(() => expect(result.current.isReady).toBe(true));
 
@@ -41,7 +47,7 @@ describe('useAuthSession', () => {
       needsUsernameSetup: true,
     });
 
-    const { result } = renderHook(() => useAuthSession());
+    const { result } = renderHook(() => useAuthSession(), { wrapper });
 
     await waitFor(() => expect(result.current.isReady).toBe(true));
 
@@ -53,7 +59,7 @@ describe('useAuthSession', () => {
     const err = new Error('network error');
     mockEnsureSession.mockRejectedValueOnce(err);
 
-    const { result } = renderHook(() => useAuthSession());
+    const { result } = renderHook(() => useAuthSession(), { wrapper });
 
     await waitFor(() => expect(result.current.isReady).toBe(true));
 
@@ -65,7 +71,7 @@ describe('useAuthSession', () => {
   it('Error以外のthrowもErrorに変換される', async () => {
     mockEnsureSession.mockRejectedValueOnce('string error');
 
-    const { result } = renderHook(() => useAuthSession());
+    const { result } = renderHook(() => useAuthSession(), { wrapper });
 
     await waitFor(() => expect(result.current.isReady).toBe(true));
 
@@ -81,7 +87,7 @@ describe('useAuthSession', () => {
       hint: 'Sign in again',
     });
 
-    const { result } = renderHook(() => useAuthSession());
+    const { result } = renderHook(() => useAuthSession(), { wrapper });
 
     await waitFor(() => expect(result.current.isReady).toBe(true));
 

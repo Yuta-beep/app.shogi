@@ -1,12 +1,9 @@
 import type { StageNodeData } from '@/domain/models/stage-select';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 
 import { stageRanges } from '@/constants/stage-select-data';
-import {
-  createLoadStageSelectUseCase,
-  createSelectStageUseCase,
-} from '@/usecases/stage-select/create-stage-select-usecases';
+import { createLoadStageSelectUseCase } from '@/usecases/stage-select/create-stage-select-usecases';
 import { LoadStageSelectWithProgressUseCase } from '@/usecases/stage-select/load-stage-select-with-progress-usecase';
 
 export type StageSelectScreenVM = {
@@ -39,13 +36,13 @@ export function useStageSelectScreen(): StageSelectScreenVM {
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedStageId, setSelectedStageId] = useState<number | null>(null);
   const [nodes, setNodes] = useState<StageNodeData[]>([]);
+  const [isSelectingStage, setIsSelectingStage] = useState(false);
 
   const loadStageSelectUseCase = useMemo(() => createLoadStageSelectUseCase(), []);
   const loadStageSelectWithProgressUseCase = useMemo(
     () => new LoadStageSelectWithProgressUseCase(loadStageSelectUseCase),
     [loadStageSelectUseCase],
   );
-  const selectStageUseCase = useMemo(() => createSelectStageUseCase(), []);
 
   const loadStageNodes = useCallback(() => {
     let active = true;
@@ -73,7 +70,6 @@ export function useStageSelectScreen(): StageSelectScreenVM {
     };
   }, [loadStageSelectWithProgressUseCase]);
 
-  useEffect(() => loadStageNodes(), [loadStageNodes]);
   useFocusEffect(loadStageNodes);
 
   const nodesInPage = useMemo(
@@ -86,19 +82,19 @@ export function useStageSelectScreen(): StageSelectScreenVM {
   );
 
   async function selectStage(stageId: number) {
+    if (isSelectingStage) return;
     const stage = nodes.find((node) => node.id === stageId);
     if (!stage || !stage.isUnlocked) {
       return;
     }
 
-    /** タップのたびに全画面ローディングにすると画面が切り替わって見えるため使わない */
     try {
-      const result = await selectStageUseCase.execute({ stageId });
-      if (result.canStart) {
-        setSelectedStageId(stageId);
-      }
+      setIsSelectingStage(true);
+      setSelectedStageId(stageId);
     } catch {
       // API 失敗時は選択を変えない
+    } finally {
+      setIsSelectingStage(false);
     }
   }
 

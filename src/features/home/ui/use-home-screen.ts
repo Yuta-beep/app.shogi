@@ -1,8 +1,12 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useSyncExternalStore } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 
 import { HomeSnapshot } from '@/domain/models/home';
-import { createLoadHomeSnapshotUseCase } from '@/usecases/home/create-home-usecases';
+import {
+  getHomeSnapshotState,
+  loadHomeSnapshot,
+  subscribeHomeSnapshot,
+} from '@/hooks/common/home-snapshot-store';
 
 export type HomeScreenVM = {
   snapshot: HomeSnapshot;
@@ -22,31 +26,16 @@ const emptySnapshot: HomeSnapshot = {
 };
 
 export function useHomeScreen(): HomeScreenVM {
-  const [snapshot, setSnapshot] = useState<HomeSnapshot>(emptySnapshot);
-  const [isLoading, setIsLoading] = useState(true);
-  const loadUseCase = useMemo(() => createLoadHomeSnapshotUseCase(), []);
+  const state = useSyncExternalStore(subscribeHomeSnapshot, getHomeSnapshotState);
 
   useFocusEffect(
     useCallback(() => {
-      let active = true;
-      setIsLoading(true);
-      loadUseCase
-        .execute()
-        .then((next) => {
-          if (active) {
-            setSnapshot(next);
-          }
-        })
-        .finally(() => {
-          if (active) {
-            setIsLoading(false);
-          }
-        });
-      return () => {
-        active = false;
-      };
-    }, [loadUseCase]),
+      void loadHomeSnapshot();
+    }, []),
   );
 
-  return { snapshot, isLoading };
+  return {
+    snapshot: state.snapshot,
+    isLoading: state.isLoading && state.snapshot.playerName.length === 0,
+  };
 }

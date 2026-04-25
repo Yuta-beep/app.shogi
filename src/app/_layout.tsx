@@ -7,12 +7,12 @@ import { View, Text } from 'react-native';
 import 'react-native-reanimated';
 
 import { AppLoadingScreen } from '@/components/organism/app-loading-screen';
-import { useAuthSession } from '@/hooks/common/use-auth-session';
+import { AuthSessionProvider, useAuthSession } from '@/hooks/common/auth-session-context';
 import { releaseAudioPlayers } from '@/lib/audio/audio-manager';
 
 import '../../global.css';
 
-export default function RootLayout() {
+function RootLayoutInner() {
   const router = useRouter();
   const [fontsLoaded] = useFonts({
     ShipporiMincho_700Bold,
@@ -60,5 +60,13 @@ export default function RootLayout() {
       <Stack screenOptions={{ headerShown: false }} />
       <StatusBar style="light" />
     </>
+  );
+}
+
+export default function RootLayout() {
+  return (
+    <AuthSessionProvider>
+      <RootLayoutInner />
+    </AuthSessionProvider>
   );
 }

@@ -6,7 +6,9 @@
  * 複数レイヤーを通したフローを検証する。
  */
 
+import React from 'react';
 import { renderHook, waitFor } from '@testing-library/react-native';
+import { AuthSessionProvider } from '@/hooks/common/auth-session-context';
 import { useAuthSession } from '@/hooks/common/use-auth-session';
 import { setupUsername } from '@/usecases/player/setup-username-usecase';
 
@@ -31,6 +33,10 @@ jest.mock('@/infra/http/api-client', () => ({
   deleteJson: jest.fn(),
 }));
 
+function wrapper({ children }: { children: React.ReactNode }) {
+  return React.createElement(AuthSessionProvider, null, children);
+}
+
 const NEW_USER_ID = 'new-user-uuid';
 const EXISTING_USER_ID = 'existing-user-uuid';
 
@@ -44,7 +50,7 @@ describe('認証フロー 統合テスト', () => {
       });
       mockGetJson.mockResolvedValueOnce({ displayName: null });
 
-      const { result } = renderHook(() => useAuthSession());
+      const { result } = renderHook(() => useAuthSession(), { wrapper });
 
       await waitFor(() => expect(result.current.isReady).toBe(true));
 
@@ -61,7 +67,7 @@ describe('認証フロー 統合テスト', () => {
       });
       mockGetJson.mockResolvedValueOnce({ displayName: '将棋太郎' });
 
-      const { result } = renderHook(() => useAuthSession());
+      const { result } = renderHook(() => useAuthSession(), { wrapper });
 
       await waitFor(() => expect(result.current.isReady).toBe(true));
 
@@ -75,7 +81,7 @@ describe('認証フロー 統合テスト', () => {
       });
       mockGetJson.mockResolvedValueOnce({ displayName: null });
 
-      const { result } = renderHook(() => useAuthSession());
+      const { result } = renderHook(() => useAuthSession(), { wrapper });
 
       await waitFor(() => expect(result.current.isReady).toBe(true));
 
@@ -108,7 +114,7 @@ describe('認証フロー 統合テスト', () => {
       });
       mockGetJson.mockResolvedValueOnce({ displayName: '新プレイヤー' });
 
-      const { result } = renderHook(() => useAuthSession());
+      const { result } = renderHook(() => useAuthSession(), { wrapper });
 
       await waitFor(() => expect(result.current.isReady).toBe(true));
 
@@ -120,7 +126,7 @@ describe('認証フロー 統合テスト', () => {
     it('ネットワークエラー時は error にセットされる', async () => {
       mockGetSession.mockRejectedValueOnce(new Error('network error'));
 
-      const { result } = renderHook(() => useAuthSession());
+      const { result } = renderHook(() => useAuthSession(), { wrapper });
 
       await waitFor(() => expect(result.current.isReady).toBe(true));
 
@@ -136,7 +142,7 @@ describe('認証フロー 統合テスト', () => {
         error: { message: 'Anonymous sign-in failed' },
       });
 
-      const { result } = renderHook(() => useAuthSession());
+      const { result } = renderHook(() => useAuthSession(), { wrapper });
 
       await waitFor(() => expect(result.current.isReady).toBe(true));
 
