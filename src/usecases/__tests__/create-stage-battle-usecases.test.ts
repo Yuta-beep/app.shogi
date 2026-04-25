@@ -6,7 +6,13 @@ describe('create stage battle usecases', () => {
 
   it('returns local implementations in api mode', () => {
     process.env.EXPO_PUBLIC_DATA_SOURCE = 'api';
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    jest.doMock('@/lib/supabase/supabase-client', () => ({
+      supabase: {
+        auth: {
+          getSession: jest.fn(),
+        },
+      },
+    }));
     const mod = require('@/usecases/stage-battle/create-stage-battle-usecases');
 
     expect(mod.createPrepareStageBattleUseCase().constructor.name).toBe(
@@ -19,7 +25,13 @@ describe('create stage battle usecases', () => {
 
   it('returns mock implementations in local mode', () => {
     process.env.EXPO_PUBLIC_DATA_SOURCE = 'local';
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    jest.doMock('@/lib/supabase/supabase-client', () => ({
+      supabase: {
+        auth: {
+          getSession: jest.fn(),
+        },
+      },
+    }));
     const mod = require('@/usecases/stage-battle/create-stage-battle-usecases');
 
     expect(mod.createPrepareStageBattleUseCase().constructor.name).toBe(

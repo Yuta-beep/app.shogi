@@ -1,3 +1,11 @@
+jest.mock('@/lib/supabase/supabase-client', () => ({
+  supabase: {
+    auth: {
+      getSession: jest.fn(),
+    },
+  },
+}));
+
 import { resetLocalBattleRegistry } from '@/ai/local-battle-registry';
 import {
   LocalClaimStageClearRewardUseCase,
