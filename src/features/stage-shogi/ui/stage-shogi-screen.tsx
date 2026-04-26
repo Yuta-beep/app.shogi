@@ -148,7 +148,7 @@ function toBasePieceCode(pieceCode: string | null | undefined): string | null {
 
 type BoardPiece = RuleBoardPiece & {
   imageSignedUrl: string | null;
-  /** 闇の `dark_blind`（boardState.skill_state.piece_statuses）。敵に取られるまで維持 */
+  /** 闇の `dark_blind`（boardState.skill_state.piece_statuses）。2ターン持続 */
   darkVeiled?: boolean;
 };
 type PendingPromotion = {
@@ -642,31 +642,16 @@ function poisonHazardCellsForDisplay(
   position: BattleCanonicalPosition,
 ): BoardCell[] {
   const boardState = asRecord(position.boardState);
-  if (!boardState) {
-    console.info('[poison-debug] boardState is empty');
-    return [];
-  }
+  if (!boardState) return [];
   const skillState = asRecord(boardState.skill_state ?? boardState.skillState);
   const rawList = (skillState?.board_hazards ??
     skillState?.boardHazards ??
     boardState.board_hazards ??
     boardState.boardHazards) as unknown;
-  if (!Array.isArray(rawList)) {
-    console.info('[poison-debug] board_hazards not found', {
-      boardStateKeys: Object.keys(boardState),
-      skillStateKeys: skillState ? Object.keys(skillState) : [],
-    });
-    return [];
-  }
+  if (!Array.isArray(rawList)) return [];
 
   const out: BoardCell[] = [];
   const seen = new Set<string>();
-  const sampledHazards: Array<{
-    hazardType: string;
-    remaining: number;
-    row: number | null;
-    col: number | null;
-  }> = [];
   for (const raw of rawList) {
     const hazard = asRecord(raw);
     if (!hazard) continue;
@@ -674,12 +659,6 @@ function poisonHazardCellsForDisplay(
     const remaining = Number(hazard.remaining_turns ?? hazard.remainingTurns ?? 1);
     const row = normalizeCellIndex(Number(hazard.row));
     const col = normalizeCellIndex(Number(hazard.col));
-    sampledHazards.push({
-      hazardType,
-      remaining,
-      row,
-      col,
-    });
     if (hazardType !== 'poison_cell' && hazardType !== 'poison') continue;
     if (!Number.isFinite(remaining) || remaining <= 0) continue;
     if (row === null || col === null) continue;
@@ -688,11 +667,6 @@ function poisonHazardCellsForDisplay(
     seen.add(key);
     out.push({ row, col });
   }
-  console.info('[poison-debug] parsed hazards', {
-    total: rawList.length,
-    poisonCells: out.length,
-    samples: sampledHazards.slice(0, 12),
-  });
   return out;
 }
 
@@ -1000,6 +974,10 @@ function isPromotedVisualPiece(piece: BoardPiece) {
   if ((piece.pieceCode?.toUpperCase() ?? '') === 'RYU' && !piece.promoted) {
     return false;
   }
+  // pieceCode が欠ける同期タイミングでも、未成の「竜」は成り駒として扱わない。
+  if (!piece.promoted && piece.char === '竜') {
+    return false;
+  }
   if (piece.promoted) return true;
   if (PROMOTED_DISPLAY_CHARS.has(piece.char)) return true;
   const pc = piece.pieceCode?.toUpperCase() ?? '';
@@ -1048,6 +1026,10 @@ function localPromotedModuleFromBaseCodeCandidates(candidates: Iterable<string>)
 function resolvePromotedImageSource(piece: BoardPiece) {
   // Stage 4 の「竜」駒（char=竜, pieceCode=RYU）は通常の特殊駒画像を使う。
   if ((piece.pieceCode?.toUpperCase() ?? '') === 'RYU' && piece.char === '竜') {
+    return null;
+  }
+  // pieceCode が未設定でも、未成の「竜」は通常駒画像を使う。
+  if (!piece.promoted && piece.char === '竜') {
     return null;
   }
   if (!isPromotedVisualPiece(piece)) return null;
@@ -1990,6 +1972,12 @@ function resolveInspectSkillDescription(char: string, desc: string | undefined):
   if (char === '葉') return LEAF_SKILL_DESCRIPTION;
   const normalized = (desc ?? '').trim();
   return normalized.length > 0 ? normalized : '詳細は準備中です。';
+}
+
+function resolveInspectMoveDescription(char: string, move: string | undefined): string {
+  if (char === '闇') return '全方向に1マス';
+  const normalized = (move ?? '').trim();
+  return normalized.length > 0 ? normalized : '準備中';
 }
 
 function toUserFacingBattleError(error: unknown): string {
@@ -3142,7 +3130,9 @@ export function StageShogiScreen() {
           })
         : [];
       const movementRule =
-        latestMovementRuleByCellRef.current.get(`${piece.side}:${piece.row}:${piece.col}`) ?? null;
+        (piece.pieceCode?.toUpperCase() === 'OU' || isKingChar(piece.char))
+          ? null
+          : (latestMovementRuleByCellRef.current.get(`${piece.side}:${piece.row}:${piece.col}`) ?? null);
       const targets = applyMovementRuleToTargets(
         { row: piece.row, col: piece.col },
         rawTargets,
@@ -3240,7 +3230,7 @@ export function StageShogiScreen() {
       pieceCode: target.pieceCode,
       name: detail?.name ?? lookupChar,
       desc: resolveInspectSkillDescription(lookupChar, detail?.desc),
-      move: detail?.move ?? '準備中',
+      move: resolveInspectMoveDescription(lookupChar, detail?.move),
       imageSignedUrl: detail?.imageSignedUrl ?? target.imageSignedUrl ?? null,
     });
   }

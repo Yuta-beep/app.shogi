@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import type { OwnedPiece, SavedDeck } from '@/domain/models/deck-builder';
 import {
@@ -9,6 +9,7 @@ import {
 import { isApiDataSource } from '@/lib/config/data-source';
 import { supabase } from '@/lib/supabase/supabase-client';
 import { getDeckBuilderPieceCost } from '@/features/deck-builder/lib/deck-builder-piece-cost';
+import { normalizeDeckBuilderPieceChar } from '@/features/deck-builder/lib/deck-builder-piece-char';
 import { CHAR_TO_CODE } from '@/features/stage-shogi/domain/piece-conversion';
 
 type BoardPlacement = {
@@ -30,6 +31,10 @@ const MY_DECK_NAME = 'マイデッキ';
 
 const STANDARD_PIECE_CODES = new Set(['FU', 'KY', 'KE', 'GI', 'KI', 'KA', 'HI', 'OU']);
 const ALL_COLS = [0, 1, 2, 3, 4, 5, 6, 7, 8] as const;
+/** deck_builder.html: 闇は (9,2)(9,8) のみ＝1始まりの段・筋。UI 0始まりでは row=8, col=1 または col=7 */
+const DARK_DECK_ALLOWED_POSITIONS = new Set(rowCols(8, [1, 7]));
+/** deck_builder.html: 魔は (9,2)(9,8) のみ（闇と同マス） */
+const DEMON_DECK_ALLOWED_POSITIONS = new Set(rowCols(8, [1, 7]));
 
 function posKey(row: number, col: number): string {
   return `${row}:${col}`;
@@ -59,8 +64,8 @@ const SPECIAL_PIECE_ALLOWED_POSITIONS = new Map<string, ReadonlySet<string>>([
   ['葉', new Set(rowCols(8, [1, 7]))],
   ['光', new Set(rowCols(8, [1, 7]))],
   ['星', new Set(rowCols(8, [1, 7]))],
-  ['闇', new Set(rowCols(8, [1, 7]))],
-  ['魔', new Set(rowCols(8, [1, 7]))],
+  ['闇', DARK_DECK_ALLOWED_POSITIONS],
+  ['魔', DEMON_DECK_ALLOWED_POSITIONS],
   ['銅', new Set(rowCols(8, [2, 6]))],
   ['鉄', new Set(rowCols(8, [2, 6]))],
   ['錫', new Set(rowCols(8, [2, 6]))],
@@ -143,25 +148,26 @@ const SPECIAL_PIECE_ALLOWED_POSITIONS = new Map<string, ReadonlySet<string>>([
   ['定', new Set(rowCols(8, [0, 8]))],
 ]);
 
-function isDeckBuilderSpecialChar(char: string | null | undefined): boolean {
-  if (!char) return false;
+function isDeckBuilderSpecialChar(char: string | null | undefined, nameHint?: string | null): boolean {
+  if (!char && !(nameHint ?? '').trim()) return false;
+  const key = normalizeDeckBuilderPieceChar(char, nameHint);
   // 標準駒は特殊に含めない（deck_builder.html の customCount 相当）
   if (
-    char === '王' ||
-    char === '玉' ||
-    char === '歩' ||
-    char === '香' ||
-    char === '桂' ||
-    char === '銀' ||
-    char === '金' ||
-    char === '飛' ||
-    char === '角'
+    key === '王' ||
+    key === '玉' ||
+    key === '歩' ||
+    key === '香' ||
+    key === '桂' ||
+    key === '銀' ||
+    key === '金' ||
+    key === '飛' ||
+    key === '角'
   ) {
     return false;
   }
 
   // 標準コードに該当するなら特殊ではない。それ以外は特殊扱い。
-  const code = CHAR_TO_CODE[char];
+  const code = CHAR_TO_CODE[key];
   if (!code) return true;
   return !STANDARD_PIECE_CODES.has(code);
 }
@@ -232,8 +238,9 @@ function isDeckAreaRow(row: number): boolean {
   return row >= DECK_ROW_OFFSET && row < BOARD_ROWS;
 }
 
-function isAllowedDeckPlacementByHtmlRules(pieceChar: string, row: number, col: number): boolean {
-  const allowed = SPECIAL_PIECE_ALLOWED_POSITIONS.get(pieceChar);
+function isAllowedDeckPlacementByHtmlRules(piece: OwnedPiece, row: number, col: number): boolean {
+  const ruleChar = normalizeDeckBuilderPieceChar(piece.char, piece.name);
+  const allowed = SPECIAL_PIECE_ALLOWED_POSITIONS.get(ruleChar);
   if (!allowed) return true;
   return allowed.has(posKey(row, col));
 }
@@ -246,15 +253,23 @@ function canPlacePieceAtByRules(
 ): boolean {
   if (!isDeckAreaRow(row)) return false;
 
-  // HTML版準拠: 標準駒の固定配置
-  if (piece.char === '角') return row === 7 && col === 1;
-  if (piece.char === '飛') return row === 7 && col === 7;
-  if (piece.char === '王' || piece.char === '玉') return row === 8 && col === 4;
-  if (piece.char === '金') return row === 8 && (col === 3 || col === 5);
-  if (piece.char === '銀') return row === 8 && (col === 2 || col === 6);
-  if (piece.char === '桂') return row === 8 && (col === 1 || col === 7);
-  if (piece.char === '香') return row === 8 && (col === 0 || col === 8);
-  if (piece.char === '歩') {
+  const ruleChar = normalizeDeckBuilderPieceChar(piece.char, piece.name);
+
+  // 光・闇・属性駒など HTML 版の特殊マス：名前で正規化したうえで先に判定（誤った char でも許可マスと一致させる）
+  const specialAllowed = SPECIAL_PIECE_ALLOWED_POSITIONS.get(ruleChar);
+  if (specialAllowed) {
+    return specialAllowed.has(posKey(row, col));
+  }
+
+  // HTML版準拠: 標準駒の固定配置（通称「角行」等は normalize で一字に寄せる）
+  if (ruleChar === '角') return row === 7 && col === 1;
+  if (ruleChar === '飛') return row === 7 && col === 7;
+  if (ruleChar === '王' || ruleChar === '玉') return row === 8 && col === 4;
+  if (ruleChar === '金') return row === 8 && (col === 3 || col === 5);
+  if (ruleChar === '銀') return row === 8 && (col === 2 || col === 6);
+  if (ruleChar === '桂') return row === 8 && (col === 1 || col === 7);
+  if (ruleChar === '香') return row === 8 && (col === 0 || col === 8);
+  if (ruleChar === '歩') {
     if (row !== 6) return false;
     // HTML版の二歩ルール
     const nifu = placements.some(
@@ -262,14 +277,14 @@ function canPlacePieceAtByRules(
         p.col === col &&
         p.row >= DECK_ROW_OFFSET &&
         p.row < BOARD_ROWS &&
-        p.piece.char === '歩' &&
+        normalizeDeckBuilderPieceChar(p.piece.char, p.piece.name) === '歩' &&
         !(p.row === row && p.col === col),
     );
     if (nifu) return false;
     return true;
   }
 
-  return isAllowedDeckPlacementByHtmlRules(piece.char, row, col);
+  return isAllowedDeckPlacementByHtmlRules(piece, row, col);
 }
 
 function simulatePlacement(
@@ -284,18 +299,17 @@ function simulatePlacement(
   return [...withoutCell, { row, col, piece }];
 }
 
+/**
+ * 盤上での配置可否（HTML 版マスルール・二歩等のみ）。
+ * 合計コスト上限はここでは見ない（編集中は一時的に 70 を超えてよい。保存・デッキ反映で弾く）。
+ */
 function canPlacePieceAt(
   placements: BoardPlacement[],
   piece: OwnedPiece,
   row: number,
   col: number,
 ): boolean {
-  if (!canPlacePieceAtByRules(piece, row, col, placements)) return false;
-  const nextPlacements = simulatePlacement(placements, piece, row, col);
-  const nextDeckCost = nextPlacements
-    .filter((placement) => isDeckAreaRow(placement.row))
-    .reduce((sum, placement) => sum + getDeckBuilderPieceCost(placement.piece.char), 0);
-  return nextDeckCost <= DECK_COST_LIMIT;
+  return canPlacePieceAtByRules(piece, row, col, placements);
 }
 
 function pieceMatchesAlias(piece: OwnedPiece, aliases: readonly string[]): boolean {
@@ -531,13 +545,70 @@ export function useDeckBuilderScreen() {
 
   const deckAreaPlacements = boardPlacements.filter((placement) => isDeckAreaRow(placement.row));
   const deckTotalCost = deckAreaPlacements.reduce(
-    (sum, placement) => sum + getDeckBuilderPieceCost(placement.piece.char),
+    (sum, placement) => sum + getDeckBuilderPieceCost(placement.piece.char, placement.piece.name),
     0,
   );
   const deckSpecialPieceCount = deckAreaPlacements.filter((placement) =>
-    isDeckBuilderSpecialChar(placement.piece.char),
+    isDeckBuilderSpecialChar(placement.piece.char, placement.piece.name),
   ).length;
   const isDeckCostOverLimit = deckTotalCost > DECK_COST_LIMIT;
+
+  const isValidPlacementAt = useCallback(
+    (row: number, col: number) => {
+      if (!selectedPieceForPlacement) return false;
+      return canPlacePieceAt(boardPlacements, selectedPieceForPlacement, row, col);
+    },
+    [boardPlacements, selectedPieceForPlacement],
+  );
+
+  const selectPieceForPlacement = useCallback(
+    (piece: OwnedPiece) => {
+      setSelectedPieceForPlacement(piece);
+      if (typeof __DEV__ !== 'undefined' && __DEV__) {
+        const ruleChar = normalizeDeckBuilderPieceChar(piece.char, piece.name);
+        const validCells: Array<{ row: number; col: number }> = [];
+        for (let row = DECK_ROW_OFFSET; row < BOARD_ROWS; row += 1) {
+          for (let col = 0; col < BOARD_ROWS; col += 1) {
+            if (canPlacePieceAt(boardPlacements, piece, row, col)) {
+              validCells.push({ row, col });
+            }
+          }
+        }
+        const pieceCost = getDeckBuilderPieceCost(piece.char, piece.name);
+        const code = CHAR_TO_CODE[ruleChar];
+        let nextDeckCostSample: number | null = null;
+        if (validCells.length > 0) {
+          const c0 = validCells[0]!;
+          const next = simulatePlacement(boardPlacements, piece, c0.row, c0.col);
+          nextDeckCostSample = next
+            .filter((placement) => isDeckAreaRow(placement.row))
+            .reduce(
+              (sum, placement) =>
+                sum + getDeckBuilderPieceCost(placement.piece.char, placement.piece.name),
+              0,
+            );
+        }
+        console.log('[deck-builder][placement-debug]', {
+          pieceId: piece.pieceId,
+          char: piece.char,
+          name: piece.name,
+          ruleChar,
+          catalogCode: code ?? null,
+          pieceCost,
+          deckTotalCost,
+          deckCostLimit: DECK_COST_LIMIT,
+          isDeckCostOverLimit,
+          nextDeckCostSample,
+          exceedsCostAfterSamplePlacement:
+            nextDeckCostSample != null && nextDeckCostSample > DECK_COST_LIMIT,
+          validCellCount: validCells.length,
+          validCellsRowCol0: validCells.map((c) => `${c.row}:${c.col}`).join(', '),
+          validCells1Based: validCells.map((c) => ({ 段: c.row + 1, 筋: c.col + 1 })),
+        });
+      }
+    },
+    [boardPlacements, deckTotalCost, isDeckCostOverLimit],
+  );
 
   return {
     ownedPieces,
@@ -546,12 +617,9 @@ export function useDeckBuilderScreen() {
     boardPlacements,
     isLoading,
     selectedPiece,
-    selectPieceForPlacement: (piece: OwnedPiece) => setSelectedPieceForPlacement(piece),
+    selectPieceForPlacement,
     getRemainingCount,
-    isValidPlacementAt: (row: number, col: number) => {
-      if (!selectedPieceForPlacement) return false;
-      return canPlacePieceAt(boardPlacements, selectedPieceForPlacement, row, col);
-    },
+    isValidPlacementAt,
     placeSelectedPieceAt: (row: number, col: number) => {
       if (!selectedPieceForPlacement) {
         setBoardPlacements((prev) =>

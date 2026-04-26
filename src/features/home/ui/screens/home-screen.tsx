@@ -1,8 +1,9 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Animated,
   ImageBackground,
   Modal,
   Platform,
@@ -24,6 +25,15 @@ import { useHomeScreen } from '@/features/home/ui/use-home-screen';
 import { useAssetPreload } from '@/hooks/common/use-asset-preload';
 import { useScreenBgm } from '@/hooks/common/use-screen-bgm';
 import { playSe } from '@/lib/audio/audio-manager';
+import { resolvePieceImageSource } from '@/lib/piece-image';
+import { supabase } from '@/lib/supabase/supabase-client';
+import { createLoadDeckBuilderUseCase } from '@/usecases/deck-builder/create-deck-builder-usecases';
+
+const MY_DECK_NAME = 'マイデッキ';
+const FADE_IN_MS = 520;
+const FADE_HOLD_MS = 920;
+const FADE_OUT_MS = 520;
+const NEXT_PIECE_DELAY_MS = 140;
 
 const GACHA_BALL_COLOR_ROWS: { label: string; source: number }[] = [
   { label: '白', source: homeAssets.gachaBallColors.white },
@@ -35,12 +45,22 @@ const GACHA_BALL_COLOR_ROWS: { label: string; source: number }[] = [
 
 type GachaModalPanel = 'viewer' | 'help';
 
+type DeckCarouselPiece = {
+  key: string;
+  char: string;
+  name: string;
+};
+
 export function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [gachaModalOpen, setGachaModalOpen] = useState(false);
   const [gachaModalPanel, setGachaModalPanel] = useState<GachaModalPanel>('viewer');
   const [viewerBallSource, setViewerBallSource] = useState<number | null>(null);
+  const [deckPieces, setDeckPieces] = useState<DeckCarouselPiece[]>([]);
+  const [carouselIndex, setCarouselIndex] = useState(0);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const cycleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { snapshot, isLoading } = useHomeScreen();
   const { isReady: areAssetsReady } = useAssetPreload(homeAssets.preloadTargets);
   useScreenBgm('home');
@@ -78,6 +98,112 @@ export function HomeScreen() {
     }
   }, [gachaModalPanel, closeGachaModalCompletely]);
 
+  useEffect(() => {
+    let active = true;
+
+    const loadDeckPieces = async () => {
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        const loadDeckUseCase = createLoadDeckBuilderUseCase(session?.access_token);
+        const deckSnapshot = await loadDeckUseCase.execute();
+        const targetDeck =
+          deckSnapshot.savedDecks.find(
+            (deck) => deck.name === MY_DECK_NAME && (deck.placements?.length ?? 0) > 0,
+          ) ?? deckSnapshot.savedDecks.find((deck) => (deck.placements?.length ?? 0) > 0);
+        const nextPieces =
+          targetDeck?.placements
+            ?.slice()
+            .sort((a, b) => a.rowNo - b.rowNo || a.colNo - b.colNo)
+            .map((placement, idx) => ({
+              key: `${placement.pieceId}-${placement.rowNo}-${placement.colNo}-${idx}`,
+              char: placement.char,
+              name: placement.name,
+            })) ?? [];
+        if (active) {
+          setDeckPieces(nextPieces);
+          setCarouselIndex(0);
+        }
+      } catch {
+        if (active) {
+          setDeckPieces([]);
+          setCarouselIndex(0);
+        }
+      }
+    };
+
+    void loadDeckPieces();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange(() => {
+      void loadDeckPieces();
+    });
+
+    return () => {
+      active = false;
+      authListener.subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (deckPieces.length === 0) return;
+    let active = true;
+
+    const playCycle = () => {
+      fadeAnim.setValue(0);
+      Animated.sequence([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: FADE_IN_MS,
+          useNativeDriver: true,
+        }),
+        Animated.delay(FADE_HOLD_MS),
+        Animated.timing(fadeAnim, {
+          toValue: 0,
+          duration: FADE_OUT_MS,
+          useNativeDriver: true,
+        }),
+      ]).start(({ finished }) => {
+        if (!finished || !active) return;
+        setCarouselIndex((prev) => {
+          if (deckPieces.length <= 1) return 0;
+          const prevPiece = deckPieces[prev % deckPieces.length];
+          if (!prevPiece) return (prev + 1) % deckPieces.length;
+          for (let step = 1; step < deckPieces.length; step += 1) {
+            const candidateIndex = (prev + step) % deckPieces.length;
+            const candidate = deckPieces[candidateIndex];
+            if (!candidate) continue;
+            if (candidate.char !== prevPiece.char) return candidateIndex;
+          }
+          return (prev + 1) % deckPieces.length;
+        });
+        cycleTimerRef.current = setTimeout(playCycle, NEXT_PIECE_DELAY_MS);
+      });
+    };
+
+    playCycle();
+
+    return () => {
+      active = false;
+      if (cycleTimerRef.current) {
+        clearTimeout(cycleTimerRef.current);
+        cycleTimerRef.current = null;
+      }
+      fadeAnim.stopAnimation();
+    };
+  }, [deckPieces, fadeAnim]);
+
+  const currentDeckPiece = useMemo(() => {
+    if (deckPieces.length === 0) return null;
+    return deckPieces[carouselIndex % deckPieces.length] ?? null;
+  }, [deckPieces, carouselIndex]);
+  const currentDeckPieceImageSource = useMemo(() => {
+    if (!currentDeckPiece) return null;
+    return resolvePieceImageSource({
+      char: currentDeckPiece.char,
+    });
+  }, [currentDeckPiece]);
+
   if (isLoading || !areAssetsReady) {
     return <AppLoadingScreen imageSource={homeAssets.loadingImage} />;
   }
@@ -112,6 +238,23 @@ export function HomeScreen() {
         <SafeAreaView edges={['left', 'right', 'bottom']} className="flex-1 bg-black/10">
           <View className="flex-1">
             <HomeBackgroundSection />
+            {currentDeckPiece ? (
+              <View pointerEvents="none" style={styles.deckCarouselLayer}>
+                <Animated.View style={[styles.deckCarouselCard, { opacity: fadeAnim }]}>
+                  {currentDeckPieceImageSource ? (
+                    <Image
+                      source={currentDeckPieceImageSource}
+                      contentFit="contain"
+                      style={styles.deckCarouselImage}
+                    />
+                  ) : (
+                    <View style={styles.deckFallbackBadge}>
+                      <Text style={styles.deckFallbackChar}>{currentDeckPiece.char}</Text>
+                    </View>
+                  )}
+                </Animated.View>
+              </View>
+            ) : null}
             <HomeActionGridSection />
           </View>
         </SafeAreaView>
@@ -218,3 +361,36 @@ export function HomeScreen() {
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  deckCarouselLayer: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 8,
+    paddingTop: 0,
+  },
+  deckCarouselCard: {
+    width: 340,
+    height: 360,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+  },
+  deckCarouselImage: {
+    width: 300,
+    height: 320,
+  },
+  deckFallbackBadge: {
+    width: 300,
+    height: 320,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deckFallbackChar: {
+    fontSize: 108,
+    fontWeight: '900',
+    color: '#f7e9c5',
+  },
+});

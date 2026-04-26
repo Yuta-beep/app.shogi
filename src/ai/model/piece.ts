@@ -50,6 +50,14 @@ export function buildPieceLookups(pieceCatalog: AiPieceDefinition[]): AiPieceLoo
     }
   }
 
+  // 王/玉は同一駒として扱う。同期揺れで文字が入れ替わっても定義解決できるようにする。
+  if (pieceDefsByChar['王'] && !pieceDefsByChar['玉']) {
+    pieceDefsByChar['玉'] = pieceDefsByChar['王']!;
+  }
+  if (pieceDefsByChar['玉'] && !pieceDefsByChar['王']) {
+    pieceDefsByChar['王'] = pieceDefsByChar['玉']!;
+  }
+
   return {
     pieceDefsByCode,
     promotedPieceDefsByCode,

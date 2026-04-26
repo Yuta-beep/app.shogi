@@ -29,6 +29,12 @@ function resolveDisplaySkillText(char: string, skill: string | null | undefined)
   return normalized.length > 0 ? normalized : '-';
 }
 
+function resolveDisplayMoveText(char: string, move: string | null | undefined): string {
+  if (char === '闇') return '全方向に1マス';
+  const normalized = (move ?? '').trim();
+  return normalized.length > 0 ? normalized : '-';
+}
+
 function MovementGrid({ vectors, isRepeatable }: { vectors: MoveVector[]; isRepeatable: boolean }) {
   // グリッドセルに移動可能かどうかをマーク
   const grid: boolean[][] = Array.from({ length: GRID_SIZE }, () => Array(GRID_SIZE).fill(false));
@@ -167,7 +173,9 @@ export function PieceInfoScreen() {
                 </Text>
 
                 <Text className="mt-3 text-sm font-black text-[#7f1d1d]">【移動】</Text>
-                <Text className="mt-1 text-base leading-6 text-[#1f2937]">{piece.move}</Text>
+                <Text className="mt-1 text-base leading-6 text-[#1f2937]">
+                  {resolveDisplayMoveText(piece.char, piece.move)}
+                </Text>
                 {piece.canJump && (
                   <Text className="mt-1 text-xs font-bold text-[#92400e]">
                     障害物を飛び越えて移動可能

@@ -183,5 +183,11 @@ export function resolvePieceDef(
   if (normalized && lookups.pieceDefsByCode[normalized]) {
     return lookups.pieceDefsByCode[normalized];
   }
+  if (piece.char === '玉') {
+    return lookups.pieceDefsByChar['玉'] ?? lookups.pieceDefsByChar['王'] ?? null;
+  }
+  if (piece.char === '王') {
+    return lookups.pieceDefsByChar['王'] ?? lookups.pieceDefsByChar['玉'] ?? null;
+  }
   return lookups.pieceDefsByChar[piece.char] ?? null;
 }

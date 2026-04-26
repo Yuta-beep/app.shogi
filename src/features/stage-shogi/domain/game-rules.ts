@@ -52,11 +52,11 @@ function isBackwardDiagonalForSide(
   const colDelta = targetCol - piece.col;
   if (Math.abs(colDelta) !== 1) return false;
   if (piece.side === 'enemy') {
-    // enemy の後ろ方向は +row。金は斜め後ろ不可
-    return rowDelta > 0;
+    // enemy の後ろ方向は -row。金は斜め後ろ不可
+    return rowDelta < 0;
   }
-  // player の後ろ方向は -row。金は斜め後ろ不可
-  return rowDelta < 0;
+  // player の後ろ方向は +row。金は斜め後ろ不可
+  return rowDelta > 0;
 }
 
 export function sameCell(a: BoardCell, b: BoardCell) {

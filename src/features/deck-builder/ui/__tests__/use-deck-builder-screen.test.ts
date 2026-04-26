@@ -220,6 +220,87 @@ describe('useDeckBuilderScreen', () => {
     expect(result.current.deckSpecialPieceCount).toBe(1);
   });
 
+  it('char が HIK でも光として許可マス(9,2)(9,8)に配置できる', async () => {
+    const ownedPieces = [
+      { pieceId: 301, char: '歩', name: '歩兵', imageSignedUrl: null, desc: '', skill: '', move: '' },
+      { pieceId: 302, char: '香', name: '香車', imageSignedUrl: null, desc: '', skill: '', move: '' },
+      { pieceId: 303, char: '桂', name: '桂馬', imageSignedUrl: null, desc: '', skill: '', move: '' },
+      { pieceId: 304, char: '銀', name: '銀将', imageSignedUrl: null, desc: '', skill: '', move: '' },
+      { pieceId: 305, char: '金', name: '金将', imageSignedUrl: null, desc: '', skill: '', move: '' },
+      { pieceId: 306, char: '角', name: '角行', imageSignedUrl: null, desc: '', skill: '', move: '' },
+      { pieceId: 307, char: '飛', name: '飛車', imageSignedUrl: null, desc: '', skill: '', move: '' },
+      { pieceId: 308, char: '玉', name: '玉将', imageSignedUrl: null, desc: '', skill: '', move: '' },
+      { pieceId: 309, char: 'HIK', name: '光神', imageSignedUrl: null, desc: '', skill: '', move: '' },
+    ];
+    mockLoadExecute.mockResolvedValue({ ownedPieces, savedDecks: [] });
+
+    const { result } = renderHook(() => useDeckBuilderScreen());
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    const light = ownedPieces[8]!;
+    act(() => {
+      result.current.selectPieceForPlacement(light);
+    });
+
+    expect(result.current.isValidPlacementAt(8, 1)).toBe(true);
+    expect(result.current.isValidPlacementAt(8, 7)).toBe(true);
+    expect(result.current.isValidPlacementAt(6, 0)).toBe(false);
+  });
+
+  it('char が標準駒でも名前が光神なら光の許可マスに配置できる', async () => {
+    const ownedPieces = [
+      { pieceId: 301, char: '歩', name: '歩兵', imageSignedUrl: null, desc: '', skill: '', move: '' },
+      { pieceId: 302, char: '香', name: '香車', imageSignedUrl: null, desc: '', skill: '', move: '' },
+      { pieceId: 303, char: '桂', name: '桂馬', imageSignedUrl: null, desc: '', skill: '', move: '' },
+      { pieceId: 304, char: '銀', name: '銀将', imageSignedUrl: null, desc: '', skill: '', move: '' },
+      { pieceId: 305, char: '金', name: '金将', imageSignedUrl: null, desc: '', skill: '', move: '' },
+      { pieceId: 306, char: '角', name: '角行', imageSignedUrl: null, desc: '', skill: '', move: '' },
+      { pieceId: 307, char: '飛', name: '飛車', imageSignedUrl: null, desc: '', skill: '', move: '' },
+      { pieceId: 308, char: '玉', name: '玉将', imageSignedUrl: null, desc: '', skill: '', move: '' },
+      { pieceId: 309, char: '歩', name: '光神', imageSignedUrl: null, desc: '', skill: '', move: '' },
+    ];
+    mockLoadExecute.mockResolvedValue({ ownedPieces, savedDecks: [] });
+
+    const { result } = renderHook(() => useDeckBuilderScreen());
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    const light = ownedPieces[8]!;
+    act(() => {
+      result.current.selectPieceForPlacement(light);
+    });
+
+    expect(result.current.isValidPlacementAt(8, 1)).toBe(true);
+    expect(result.current.isValidPlacementAt(8, 7)).toBe(true);
+    expect(result.current.isValidPlacementAt(6, 0)).toBe(false);
+  });
+
+  it('char が歩でも名前が闇神なら闇の許可マスに配置できる', async () => {
+    const ownedPieces = [
+      { pieceId: 301, char: '歩', name: '歩兵', imageSignedUrl: null, desc: '', skill: '', move: '' },
+      { pieceId: 302, char: '香', name: '香車', imageSignedUrl: null, desc: '', skill: '', move: '' },
+      { pieceId: 303, char: '桂', name: '桂馬', imageSignedUrl: null, desc: '', skill: '', move: '' },
+      { pieceId: 304, char: '銀', name: '銀将', imageSignedUrl: null, desc: '', skill: '', move: '' },
+      { pieceId: 305, char: '金', name: '金将', imageSignedUrl: null, desc: '', skill: '', move: '' },
+      { pieceId: 306, char: '角', name: '角行', imageSignedUrl: null, desc: '', skill: '', move: '' },
+      { pieceId: 307, char: '飛', name: '飛車', imageSignedUrl: null, desc: '', skill: '', move: '' },
+      { pieceId: 308, char: '玉', name: '玉将', imageSignedUrl: null, desc: '', skill: '', move: '' },
+      { pieceId: 310, char: '歩', name: '闇神', imageSignedUrl: null, desc: '', skill: '', move: '' },
+    ];
+    mockLoadExecute.mockResolvedValue({ ownedPieces, savedDecks: [] });
+
+    const { result } = renderHook(() => useDeckBuilderScreen());
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    const dark = ownedPieces[8]!;
+    act(() => {
+      result.current.selectPieceForPlacement(dark);
+    });
+
+    expect(result.current.isValidPlacementAt(8, 1)).toBe(true);
+    expect(result.current.isValidPlacementAt(8, 7)).toBe(true);
+    expect(result.current.isValidPlacementAt(6, 0)).toBe(false);
+  });
+
   it('読み込み時も上限なしで反映される', async () => {
     const placements = Array.from({ length: 21 }, (_, i) => ({
       rowNo: Math.floor(i / 9),

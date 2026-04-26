@@ -1,3 +1,5 @@
+import { normalizeDeckBuilderPieceChar } from '@/features/deck-builder/lib/deck-builder-piece-char';
+
 /** HTML版 deck_builder.html の PIECE_COST_OVERRIDES と同系。未定義は {@link DEFAULT_DECK_PIECE_COST} */
 export const DEFAULT_DECK_PIECE_COST = 8;
 
@@ -34,8 +36,12 @@ const PIECE_COST_OVERRIDES: Partial<Record<string, number>> = {
   魔: 8,
 };
 
-export function getDeckBuilderPieceCost(char: string | null | undefined): number {
-  if (!char) return 0;
-  if (char === '王' || char === '玉') return 0;
-  return PIECE_COST_OVERRIDES[char] ?? DEFAULT_DECK_PIECE_COST;
+export function getDeckBuilderPieceCost(
+  char: string | null | undefined,
+  nameHint?: string | null,
+): number {
+  const key = normalizeDeckBuilderPieceChar(char, nameHint);
+  if (!key) return 0;
+  if (key === '王' || key === '玉') return 0;
+  return PIECE_COST_OVERRIDES[key] ?? DEFAULT_DECK_PIECE_COST;
 }

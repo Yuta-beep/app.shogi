@@ -16,7 +16,6 @@ export class LoadGameStateUseCase {
     if (!record) {
       throw new Error(`local battle game not found: ${input.gameId}`);
     }
-
     return {
       gameId: record.gameId,
       position: record.position,

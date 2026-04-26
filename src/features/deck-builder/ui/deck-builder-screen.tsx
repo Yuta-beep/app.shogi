@@ -168,7 +168,7 @@ export function DeckBuilderScreen() {
       }
     }
     return cells;
-  }, [vm.selectedPieceForPlacement, vm.isValidPlacementAt]);
+  }, [vm.selectedPieceForPlacement, vm.boardPlacements, vm.isValidPlacementAt]);
 
   if (vm.isLoading || !areAssetsReady) {
     return <AppLoadingScreen imageSource={homeAssets.loadingImage} />;
@@ -307,6 +307,7 @@ export function DeckBuilderScreen() {
                     {placement ? (
                       resolvePieceImageSource(placement.piece) ? (
                         <Image
+                          pointerEvents="none"
                           source={resolvePieceImageSource(placement.piece)!}
                           contentFit="contain"
                           style={{
@@ -366,6 +367,7 @@ export function DeckBuilderScreen() {
                 >
                   {resolvePieceImageSource(piece) ? (
                     <Image
+                      pointerEvents="none"
                       source={resolvePieceImageSource(piece)!}
                       contentFit="contain"
                       style={{ width: 60, height: 60 }}
@@ -375,7 +377,7 @@ export function DeckBuilderScreen() {
                   )}
                 </Pressable>
                 <Text className="mt-0.5 text-[10px] font-black text-[#6b4532]">
-                  {`コスト ${getDeckBuilderPieceCost(piece.char)}`}
+                  {`コスト ${getDeckBuilderPieceCost(piece.char, piece.name)}`}
                 </Text>
               </View>
             );
@@ -440,6 +442,7 @@ export function DeckBuilderScreen() {
           <View className="w-full max-w-sm rounded-xl bg-[#fff7e6] p-4">
             {vm.selectedPiece && resolvePieceImageSource(vm.selectedPiece) ? (
               <Image
+                pointerEvents="none"
                 source={resolvePieceImageSource(vm.selectedPiece)!}
                 contentFit="contain"
                 style={{ width: 56, height: 56, alignSelf: 'center' }}
