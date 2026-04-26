@@ -12,11 +12,17 @@ type SkillStateRecord = {
 const FLAME_PIECE_CODES = new Set(['ENN', 'FLAME', '炎']);
 const FIRE_PIECE_CODES = new Set(['FIRE', 'FIR', '火']);
 const WATER_PIECE_CODES = new Set(['WATER', 'SUI', '水']);
+const TREASURE_PIECE_CODES = new Set(['TREASURE', '宝']);
+const IRON_PIECE_CODES = new Set(['IRON', '鉄']);
 const WAVE_PIECE_CODES = new Set(['WAVE', 'NAM', '波']);
+const TIN_PIECE_CODES = new Set(['TIN', '錫']);
+const ELECTRIC_PIECE_CODES = new Set(['ELECTRIC', '電']);
+const THUNDER_PIECE_CODES = new Set(['THUNDER', '雷']);
 const WOOD_PIECE_CODES = new Set(['WOOD', 'MOK', '木']);
 const LEAF_PIECE_CODES = new Set(['LEAF', 'HAA', '葉']);
 const DEMON_PIECE_CODES = new Set(['DEMON', 'MAK', '魔']);
 const DARK_PIECE_CODES = new Set(['DARK', 'YAM', '闇']);
+const TREASURE_REWARD_CODES = ['KI', 'GI', 'COPPER'] as const;
 
 function normalizeSkillPieceCode(raw: string | null | undefined): string {
   if (!raw) return '';
@@ -259,6 +265,25 @@ function decrementFirstHandPiece(position: AiBattlePosition, side: Side): boolea
   return false;
 }
 
+function removeRandomHandPiece(position: AiBattlePosition, side: Side): string | null {
+  const bag = { ...(position.hands[side] ?? {}) };
+  const keys = Object.keys(bag).filter((key) => {
+    const qty = bag[key];
+    return typeof qty === 'number' && Number.isFinite(qty) && qty > 0;
+  });
+  if (keys.length === 0) return null;
+  const selectedKey = keys[Math.floor(Math.random() * keys.length)]!;
+  const current = Math.max(0, Math.floor((bag[selectedKey] as number) ?? 0));
+  const next = current - 1;
+  if (next <= 0) delete bag[selectedKey];
+  else bag[selectedKey] = next;
+  position.hands = {
+    ...position.hands,
+    [side]: bag,
+  };
+  return selectedKey;
+}
+
 function readSkillState(position: AiBattlePosition): SkillStateRecord {
   const boardState = asRecord(position.boardState) ?? {};
   const skillState = asRecord(boardState.skill_state ?? boardState.skillState) ?? {};
@@ -445,8 +470,18 @@ export function applyMoveSkillEffects(input: {
   const isWaterMover =
     WATER_PIECE_CODES.has(movedCode) ||
     normalizeSkillPieceCode(input.move.pieceCode) === '水';
+  const isTreasureMover =
+    TREASURE_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '宝';
+  const isIronMover =
+    IRON_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '鉄';
   const isWaveMover =
     WAVE_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '波';
+  const isTinMover =
+    TIN_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '錫';
+  const isElectricMover =
+    ELECTRIC_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '電';
+  const isThunderMover =
+    THUNDER_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '雷';
   const isWoodMover =
     WOOD_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '木';
   const isLeafMover =
@@ -478,8 +513,41 @@ export function applyMoveSkillEffects(input: {
       decrementFirstHandPiece(input.position, sideOpposite(input.actorSide));
     }
   }
+  // 宝: 移動時20%で手持ちに金・銀・銅のいずれか1つを加える。
+  if (isTreasureMover && input.move.fromRow != null && input.move.fromCol != null) {
+    const procChance = 0.2;
+    const roll = Math.random();
+    const triggered = roll <= procChance;
+    let grantedCode: string | null = null;
+    if (triggered) {
+      const idx = Math.floor(Math.random() * TREASURE_REWARD_CODES.length);
+      grantedCode = TREASURE_REWARD_CODES[idx] ?? null;
+      if (grantedCode) {
+        incrementHand(input.position, input.actorSide, grantedCode, 1);
+      }
+    }
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      console.info('[treasure-skill-debug]', {
+        moveCount: input.position.moveCount,
+        turnNumber: input.position.turnNumber,
+        pieceCode: movedCode,
+        procChance,
+        roll,
+        triggered,
+        grantedCode,
+      });
+    }
+  }
   // 水: 移動時に周囲8マスの敵駒を1マス押し流す。
   if (isWaterMover && input.move.fromRow != null && input.move.fromCol != null && input.movedPiece) {
+    pushAdjacentEnemyPiecesOneStep({
+      pieces: input.pieces,
+      center: input.movedPiece,
+      actorSide: input.actorSide,
+    });
+  }
+  // 鉄: 水と同様、移動時に周囲8マスの敵駒を1マス押し流す。
+  if (isIronMover && input.move.fromRow != null && input.move.fromCol != null && input.movedPiece) {
     pushAdjacentEnemyPiecesOneStep({
       pieces: input.pieces,
       center: input.movedPiece,
@@ -493,6 +561,112 @@ export function applyMoveSkillEffects(input: {
       center: input.movedPiece,
       actorSide: input.actorSide,
     });
+  }
+  // 錫: 移動時10%で周囲8マスの敵駒（玉除く）を2ターン行動不能（stun）。
+  if (isTinMover && input.move.fromRow != null && input.move.fromCol != null && input.movedPiece) {
+    const procChance = 0.1;
+    const roll = Math.random();
+    const triggered = roll <= procChance;
+    if (triggered) {
+      for (let dr = -1; dr <= 1; dr += 1) {
+        for (let dc = -1; dc <= 1; dc += 1) {
+          if (dr === 0 && dc === 0) continue;
+          const row = input.movedPiece.row + dr;
+          const col = input.movedPiece.col + dc;
+          if (row < 0 || row > 8 || col < 0 || col > 8) continue;
+          const targetPiece = input.pieces.find((piece) => piece.row === row && piece.col === col);
+          if (!targetPiece || targetPiece.side === input.actorSide) continue;
+          if (
+            targetPiece.char === '王' ||
+            targetPiece.char === '玉' ||
+            toBasePieceCode(targetPiece.pieceCode) === 'OU'
+          ) {
+            continue;
+          }
+          state.piece_statuses.push({
+            row,
+            col,
+            side: targetPiece.side,
+            status_type: 'stun',
+            remaining_turns: 2,
+          });
+        }
+      }
+    }
+  }
+  // 電: 移動時20%で周囲8マスの敵駒1体（玉除く）を3ターン行動不能（stun）。
+  if (
+    isElectricMover &&
+    input.move.fromRow != null &&
+    input.move.fromCol != null &&
+    input.movedPiece
+  ) {
+    const procChance = 0.2;
+    const roll = Math.random();
+    const triggered = roll <= procChance;
+    let selectedTarget: { row: number; col: number; side: Side } | null = null;
+    if (triggered) {
+      const candidates = input.pieces.filter((piece) => {
+        if (piece.side === input.actorSide) return false;
+        if (Math.abs(piece.row - input.movedPiece.row) > 1 || Math.abs(piece.col - input.movedPiece.col) > 1) {
+          return false;
+        }
+        if (piece.row === input.movedPiece.row && piece.col === input.movedPiece.col) return false;
+        const base = toBasePieceCode(piece.pieceCode);
+        if (base === 'OU' || piece.char === '王' || piece.char === '玉') return false;
+        return true;
+      });
+      if (candidates.length > 0) {
+        const target = candidates[Math.floor(Math.random() * candidates.length)]!;
+        selectedTarget = { row: target.row, col: target.col, side: target.side };
+        state.piece_statuses.push({
+          row: target.row,
+          col: target.col,
+          side: target.side,
+          status_type: 'stun',
+          remaining_turns: 3,
+        });
+      }
+    }
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      console.info('[electric-skill-debug]', {
+        moveCount: input.position.moveCount,
+        turnNumber: input.position.turnNumber,
+        pieceCode: movedCode,
+        procChance,
+        roll,
+        triggered,
+        selectedTarget,
+        stunTurns: selectedTarget ? 3 : 0,
+      });
+    }
+  }
+  // 雷: 移動時10%で相手手持ち駒を最大2つランダム消滅。
+  if (isThunderMover && input.move.fromRow != null && input.move.fromCol != null) {
+    const procChance = 0.1;
+    const roll = Math.random();
+    const triggered = roll <= procChance;
+    const removedHandCodes: string[] = [];
+    if (triggered) {
+      const targetSide = sideOpposite(input.actorSide);
+      for (let i = 0; i < 2; i += 1) {
+        const removed = removeRandomHandPiece(input.position, targetSide);
+        if (!removed) break;
+        removedHandCodes.push(removed);
+      }
+    }
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      console.info('[thunder-skill-debug]', {
+        moveCount: input.position.moveCount,
+        turnNumber: input.position.turnNumber,
+        pieceCode: movedCode,
+        procChance,
+        roll,
+        triggered,
+        removedHandCount: removedHandCodes.length,
+        removedHandCodes,
+      });
+    }
   }
   // 木: 移動時10%で周囲8マスのランダム1マスに木を召喚。
   if (isWoodMover && input.move.fromRow != null && input.move.fromCol != null && input.movedPiece) {

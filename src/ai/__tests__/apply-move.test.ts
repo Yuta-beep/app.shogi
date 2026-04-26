@@ -64,6 +64,71 @@ const pieceCatalog: AiPieceDefinition[] = [
     isRepeatable: true,
   },
   {
+    pieceCode: 'IRON',
+    canonicalCode: 'IRON',
+    sfenCode: 'O',
+    char: '鉄',
+    name: '鉄',
+    unlock: 'default',
+    desc: '',
+    skill: '',
+    move: '',
+    moveVectors: [{ dx: 0, dy: -1, maxStep: 1 }],
+    isRepeatable: true,
+  },
+  {
+    pieceCode: 'TIN',
+    canonicalCode: 'TIN',
+    sfenCode: 'Z',
+    char: '錫',
+    name: '錫',
+    unlock: 'default',
+    desc: '',
+    skill: '',
+    move: '',
+    moveVectors: [{ dx: 0, dy: -1, maxStep: 1 }],
+    isRepeatable: true,
+  },
+  {
+    pieceCode: 'ELECTRIC',
+    canonicalCode: 'ELECTRIC',
+    sfenCode: '&',
+    char: '電',
+    name: '電',
+    unlock: 'default',
+    desc: '',
+    skill: '',
+    move: '',
+    moveVectors: [{ dx: 0, dy: -1, maxStep: 1 }],
+    isRepeatable: true,
+  },
+  {
+    pieceCode: 'THUNDER',
+    canonicalCode: 'THUNDER',
+    sfenCode: '(',
+    char: '雷',
+    name: '雷',
+    unlock: 'default',
+    desc: '',
+    skill: '',
+    move: '',
+    moveVectors: [{ dx: 0, dy: -1, maxStep: 1 }],
+    isRepeatable: true,
+  },
+  {
+    pieceCode: 'TREASURE',
+    canonicalCode: 'TREASURE',
+    sfenCode: '$',
+    char: '宝',
+    name: '宝',
+    unlock: 'default',
+    desc: '',
+    skill: '',
+    move: '',
+    moveVectors: [{ dx: 0, dy: -1, maxStep: 1 }],
+    isRepeatable: true,
+  },
+  {
     pieceCode: 'NAM',
     canonicalCode: 'NAM',
     sfenCode: 'N',
@@ -682,6 +747,232 @@ describe('ai engine apply move', () => {
     );
     expect(enemyAt42?.pieceCode).toBe('FU');
     expect(enemyAt46?.pieceCode).toBe('FU');
+  });
+
+  it('iron skill pushes adjacent enemy pieces by one cell like water', () => {
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: '4k4/9/9/9/3p1p3/4O4/9/9/4K4 b - 1',
+      stateHash: 'seed',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'enemy', row: 4, col: 3, pieceCode: 'FU', char: '歩', promoted: false },
+          { side: 'enemy', row: 4, col: 5, pieceCode: 'FU', char: '歩', promoted: false },
+          { side: 'player', row: 5, col: 4, pieceCode: 'IRON', char: '鉄', promoted: false },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+      },
+      hands: { player: {}, enemy: {} },
+    };
+
+    const committed = applyMove({
+      position,
+      pieceCatalog,
+      move: {
+        fromRow: 5,
+        fromCol: 4,
+        toRow: 4,
+        toCol: 4,
+        pieceCode: 'IRON',
+        promote: false,
+        dropPieceCode: null,
+        capturedPieceCode: null,
+        notation: null,
+      },
+    });
+
+    const enemyAt42 = committed.position.boardState.pieces?.find(
+      (piece) => piece.side === 'enemy' && piece.row === 4 && piece.col === 2,
+    );
+    const enemyAt46 = committed.position.boardState.pieces?.find(
+      (piece) => piece.side === 'enemy' && piece.row === 4 && piece.col === 6,
+    );
+    expect(enemyAt42?.pieceCode).toBe('FU');
+    expect(enemyAt46?.pieceCode).toBe('FU');
+  });
+
+  it('tin skill applies stun to adjacent enemies when 10% proc succeeds', () => {
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: '4k4/9/9/9/3p1p3/4Z4/9/9/4K4 b - 1',
+      stateHash: 'seed',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'enemy', row: 4, col: 3, pieceCode: 'FU', char: '歩', promoted: false },
+          { side: 'enemy', row: 4, col: 5, pieceCode: 'FU', char: '歩', promoted: false },
+          { side: 'player', row: 5, col: 4, pieceCode: 'TIN', char: '錫', promoted: false },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+      },
+      hands: { player: {}, enemy: {} },
+    };
+
+    const randomSpy = jest.spyOn(Math, 'random').mockReturnValue(0.05);
+    const committed = applyMove({
+      position,
+      pieceCatalog,
+      move: {
+        fromRow: 5,
+        fromCol: 4,
+        toRow: 4,
+        toCol: 4,
+        pieceCode: 'TIN',
+        promote: false,
+        dropPieceCode: null,
+        capturedPieceCode: null,
+        notation: null,
+      },
+    });
+    randomSpy.mockRestore();
+
+    const skillState = committed.position.boardState.skill_state as
+      | { piece_statuses?: Array<Record<string, unknown>> }
+      | undefined;
+    const statuses = skillState?.piece_statuses ?? [];
+    const stuns = statuses.filter((s) => (s.status_type as string) === 'stun');
+    expect(stuns.length).toBeGreaterThanOrEqual(1);
+    expect(stuns.every((s) => (s.remaining_turns as number) === 2)).toBe(true);
+  });
+
+  it('treasure skill adds one random KI/GI/COPPER to hand when 20% proc succeeds', () => {
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: '4k4/9/9/9/9/4$4/9/9/4K4 b - 1',
+      stateHash: 'seed',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'player', row: 5, col: 4, pieceCode: 'TREASURE', char: '宝', promoted: false },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+      },
+      hands: { player: {}, enemy: {} },
+    };
+
+    const randomSpy = jest.spyOn(Math, 'random');
+    randomSpy.mockReturnValueOnce(0.05); // 20% 発動成功
+    randomSpy.mockReturnValueOnce(0.8); // reward index => COPPER
+    const committed = applyMove({
+      position,
+      pieceCatalog,
+      move: {
+        fromRow: 5,
+        fromCol: 4,
+        toRow: 4,
+        toCol: 4,
+        pieceCode: 'TREASURE',
+        promote: false,
+        dropPieceCode: null,
+        capturedPieceCode: null,
+        notation: null,
+      },
+    });
+    randomSpy.mockRestore();
+
+    expect(committed.position.hands.player.COPPER).toBe(1);
+    expect(committed.position.hands.player.KI).toBeUndefined();
+    expect(committed.position.hands.player.GI).toBeUndefined();
+  });
+
+  it('electric skill stuns one adjacent enemy for 3 turns when 20% proc succeeds', () => {
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: '4k4/9/9/9/3p1p3/4&4/9/9/4K4 b - 1',
+      stateHash: 'seed',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'enemy', row: 4, col: 3, pieceCode: 'FU', char: '歩', promoted: false },
+          { side: 'enemy', row: 4, col: 5, pieceCode: 'FU', char: '歩', promoted: false },
+          { side: 'player', row: 5, col: 4, pieceCode: 'ELECTRIC', char: '電', promoted: false },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+      },
+      hands: { player: {}, enemy: {} },
+    };
+
+    const randomSpy = jest.spyOn(Math, 'random');
+    randomSpy.mockReturnValueOnce(0.05); // 20% 発動成功
+    randomSpy.mockReturnValueOnce(0.0); // adjacent target index
+    const committed = applyMove({
+      position,
+      pieceCatalog,
+      move: {
+        fromRow: 5,
+        fromCol: 4,
+        toRow: 4,
+        toCol: 4,
+        pieceCode: 'ELECTRIC',
+        promote: false,
+        dropPieceCode: null,
+        capturedPieceCode: null,
+        notation: null,
+      },
+    });
+    randomSpy.mockRestore();
+
+    const skillState = committed.position.boardState.skill_state as
+      | { piece_statuses?: Array<Record<string, unknown>> }
+      | undefined;
+    const statuses = skillState?.piece_statuses ?? [];
+    const stuns = statuses.filter((s) => (s.status_type as string) === 'stun');
+    expect(stuns).toHaveLength(1);
+    expect(stuns[0]?.remaining_turns).toBe(3);
+  });
+
+  it('thunder skill removes up to two random enemy hand pieces when 10% proc succeeds', () => {
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: '4k4/9/9/9/9/4(4/9/9/4K4 b - 1',
+      stateHash: 'seed',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'player', row: 5, col: 4, pieceCode: 'THUNDER', char: '雷', promoted: false },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+      },
+      hands: { player: {}, enemy: { FU: 1, GI: 1, KI: 1 } },
+    };
+
+    const randomSpy = jest.spyOn(Math, 'random');
+    randomSpy.mockReturnValueOnce(0.05); // 10% 発動成功
+    randomSpy.mockReturnValueOnce(0.0); // first remove key index
+    randomSpy.mockReturnValueOnce(0.0); // second remove key index (recomputed keys)
+    const committed = applyMove({
+      position,
+      pieceCatalog,
+      move: {
+        fromRow: 5,
+        fromCol: 4,
+        toRow: 4,
+        toCol: 4,
+        pieceCode: 'THUNDER',
+        promote: false,
+        dropPieceCode: null,
+        capturedPieceCode: null,
+        notation: null,
+      },
+    });
+    randomSpy.mockRestore();
+
+    const enemyHandTotal = Object.values(committed.position.hands.enemy).reduce(
+      (sum, value) => sum + (typeof value === 'number' ? value : 0),
+      0,
+    );
+    expect(enemyHandTotal).toBe(1);
   });
 
   it('wood skill summons one wood piece when proc succeeds', () => {

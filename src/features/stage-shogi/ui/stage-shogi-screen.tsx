@@ -67,6 +67,7 @@ const BOARD_PIECE_SIZE_OVERRIDES: Partial<Record<string, number>> = {
 const POISON_CELL_IMAGE_SOURCE = require('../../../../assets/cells/毒マス.png');
 const STANDARD_PIECE_CODES = new Set(['FU', 'KY', 'KE', 'GI', 'KI', 'KA', 'HI', 'OU']);
 const LEAF_SKILL_DESCRIPTION = '移動時10%の確率で「葉」駒を周囲1マスに召喚する。';
+const ELECTRIC_SKILL_DESCRIPTION = '移動時20%の確率で周囲8マスの敵駒1体を3ターン行動不能にする。';
 /** プロジェクト直下 `assets/pieces/promoted/` の PNG（Metro の静的 require） */
 const LOCAL_PROMOTED_PIECE_IMAGE_BY_CODE: Partial<Record<string, number>> = {
   FU: require('../../../../assets/pieces/promoted/tokin.png'),
@@ -879,7 +880,11 @@ function piecesFromCanonicalPosition(
         const pieceDef = promoted
           ? (promotedPieceDefsByCode[pieceCode] ?? pieceDefsByCode[pieceCode])
           : pieceDefsByCode[pieceCode];
-        const char = preservedAtCellAnySide?.char ?? pieceCharFromCode(pieceCode, effectiveSide, promoted);
+        // 既存 char の引き継ぎは「未知 SFEN を既存コードで補完したとき」のみ許可する。
+        // そうしないと、移動先にいた別駒の char（例: 歩）が王へ誤って残る。
+        const char =
+          (usedPreservedCode ? preservedAtCellAnySide?.char : null) ??
+          pieceCharFromCode(pieceCode, effectiveSide, promoted);
         const imageSignedUrl = preferBundledPromotedImageOverRemoteUrl(
           pieceCode,
           promoted,
@@ -1970,6 +1975,7 @@ function normalizeSkillName(skill: string | undefined): string | null {
 
 function resolveInspectSkillDescription(char: string, desc: string | undefined): string {
   if (char === '葉') return LEAF_SKILL_DESCRIPTION;
+  if (char === '電') return ELECTRIC_SKILL_DESCRIPTION;
   const normalized = (desc ?? '').trim();
   return normalized.length > 0 ? normalized : '詳細は準備中です。';
 }

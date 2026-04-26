@@ -561,55 +561,6 @@ export function useDeckBuilderScreen() {
     [boardPlacements, selectedPieceForPlacement],
   );
 
-  const selectPieceForPlacement = useCallback(
-    (piece: OwnedPiece) => {
-      setSelectedPieceForPlacement(piece);
-      if (typeof __DEV__ !== 'undefined' && __DEV__) {
-        const ruleChar = normalizeDeckBuilderPieceChar(piece.char, piece.name);
-        const validCells: Array<{ row: number; col: number }> = [];
-        for (let row = DECK_ROW_OFFSET; row < BOARD_ROWS; row += 1) {
-          for (let col = 0; col < BOARD_ROWS; col += 1) {
-            if (canPlacePieceAt(boardPlacements, piece, row, col)) {
-              validCells.push({ row, col });
-            }
-          }
-        }
-        const pieceCost = getDeckBuilderPieceCost(piece.char, piece.name);
-        const code = CHAR_TO_CODE[ruleChar];
-        let nextDeckCostSample: number | null = null;
-        if (validCells.length > 0) {
-          const c0 = validCells[0]!;
-          const next = simulatePlacement(boardPlacements, piece, c0.row, c0.col);
-          nextDeckCostSample = next
-            .filter((placement) => isDeckAreaRow(placement.row))
-            .reduce(
-              (sum, placement) =>
-                sum + getDeckBuilderPieceCost(placement.piece.char, placement.piece.name),
-              0,
-            );
-        }
-        console.log('[deck-builder][placement-debug]', {
-          pieceId: piece.pieceId,
-          char: piece.char,
-          name: piece.name,
-          ruleChar,
-          catalogCode: code ?? null,
-          pieceCost,
-          deckTotalCost,
-          deckCostLimit: DECK_COST_LIMIT,
-          isDeckCostOverLimit,
-          nextDeckCostSample,
-          exceedsCostAfterSamplePlacement:
-            nextDeckCostSample != null && nextDeckCostSample > DECK_COST_LIMIT,
-          validCellCount: validCells.length,
-          validCellsRowCol0: validCells.map((c) => `${c.row}:${c.col}`).join(', '),
-          validCells1Based: validCells.map((c) => ({ 段: c.row + 1, 筋: c.col + 1 })),
-        });
-      }
-    },
-    [boardPlacements, deckTotalCost, isDeckCostOverLimit],
-  );
-
   return {
     ownedPieces,
     selectedPieceForPlacement,
@@ -617,7 +568,7 @@ export function useDeckBuilderScreen() {
     boardPlacements,
     isLoading,
     selectedPiece,
-    selectPieceForPlacement,
+    selectPieceForPlacement: (piece: OwnedPiece) => setSelectedPieceForPlacement(piece),
     getRemainingCount,
     isValidPlacementAt,
     placeSelectedPieceAt: (row: number, col: number) => {
