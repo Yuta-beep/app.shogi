@@ -91,13 +91,36 @@ export function applyMove(input: {
     if (movingIndex < 0) {
       throw new Error('moving piece not found');
     }
+    const movingPiece = nextPieces[movingIndex];
+    const movingCode = toBasePieceCode(movingPiece?.pieceCode);
+    const isCloudMover = movingCode === 'CLOUD' || movingPiece?.char === '雲';
 
     const captured = findPieceAt(nextPieces, move.toRow, move.toCol);
-    if (captured && captured.side !== actorSide) {
+    if (captured) {
+      const captureOwnPiece = captured.side === actorSide;
+      if (captureOwnPiece && !isCloudMover) {
+        throw new Error('friendly capture is only allowed for CLOUD');
+      }
+      if (isCloudMover && !captureOwnPiece) {
+        throw new Error('CLOUD cannot capture enemy pieces');
+      }
+      if (isCloudMover && captureOwnPiece) {
+        const capturedBase = toBasePieceCode(captured.pieceCode);
+        if (capturedBase === 'OU' || captured.char === '王' || captured.char === '玉') {
+          throw new Error('CLOUD cannot capture allied king');
+        }
+      }
       didCapture = true;
       nextPieces = nextPieces.filter(
         (piece) => !(piece.row === move.toRow && piece.col === move.toCol),
       );
+      if (captureOwnPiece) {
+        // 雲の味方捕獲は自分の手駒に加える。
+        const capturedCode = toBasePieceCode(capturedToHandPieceCode(captured));
+        if (capturedCode) {
+          hands = addHandPiece(hands, actorSide, capturedCode, 1);
+        }
+      } else {
       const capturedBaseCode = toBasePieceCode(captured.pieceCode);
       const isStarCaptured = capturedBaseCode === 'HOS' || captured.char === '星';
       if (isStarCaptured) {
@@ -118,6 +141,7 @@ export function applyMove(input: {
         if (capturedCode) {
           hands = addHandPiece(hands, actorSide, capturedCode, 1);
         }
+      }
       }
     }
 

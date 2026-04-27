@@ -36,6 +36,11 @@ function isReflectivePiece(piece: AiBoardPiece): boolean {
   return code === 'HIK' || piece.char === '光';
 }
 
+function isCloudPiece(piece: AiBoardPiece): boolean {
+  const code = toBasePieceCode(piece.pieceCode);
+  return code === 'CLOUD' || piece.char === '雲';
+}
+
 function generateReflectiveTargets(pieces: AiBoardPiece[], piece: AiBoardPiece): Array<{ row: number; col: number }> {
   const out: Array<{ row: number; col: number }> = [];
   const seen = new Set<string>();
@@ -201,6 +206,45 @@ function generateLeapOverOneTargets(
   return out;
 }
 
+function generateCloudTargetsFromVectors(
+  pieces: AiBoardPiece[],
+  piece: AiBoardPiece,
+  vectors: AiPieceDefinition['moveVectors'],
+): Array<{ row: number; col: number }> {
+  const out: Array<{ row: number; col: number }> = [];
+  const seen = new Set<string>();
+  const orient = piece.side === 'player' ? 1 : -1;
+  for (const vector of vectors) {
+    const maxStep = Math.max(1, vector.maxStep);
+    const dx = vector.dx * orient;
+    const dy = vector.dy * orient;
+    for (let step = 1; step <= maxStep; step += 1) {
+      const row = piece.row + dy * step;
+      const col = piece.col + dx * step;
+      if (row < 0 || row > 8 || col < 0 || col > 8) break;
+      const occupied = findPieceAt(pieces, row, col);
+      if (occupied && occupied.side !== piece.side) {
+        // 雲は敵駒を取れないため、敵駒マスは移動不可。
+        break;
+      }
+      if (occupied && isKingPiece(occupied)) {
+        // 雲でも味方の王/玉は取れない。
+        break;
+      }
+      const key = `${row}:${col}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        out.push({ row, col });
+      }
+      if (occupied) {
+        // 味方駒を取った地点で停止。
+        break;
+      }
+    }
+  }
+  return out;
+}
+
 function generateBoardPieceMoves(input: {
   pieces: AiBoardPiece[];
   piece: AiBoardPiece;
@@ -216,9 +260,11 @@ function generateBoardPieceMoves(input: {
 
   const leapVectors = effectiveVectors.filter((v) => isLeapOverOneMode(v.captureMode));
   const normalVectors = effectiveVectors.filter((v) => !isLeapOverOneMode(v.captureMode));
-  const normalTargets = getLegalTargetsFromVectors(input.pieces, input.piece, normalVectors, 9, {
-    canJump: pieceDef.canJump === true,
-  });
+  const normalTargets = isCloudPiece(input.piece)
+    ? generateCloudTargetsFromVectors(input.pieces, input.piece, normalVectors)
+    : getLegalTargetsFromVectors(input.pieces, input.piece, normalVectors, 9, {
+        canJump: pieceDef.canJump === true,
+      });
   const leapTargets = generateLeapOverOneTargets(input.pieces, input.piece, leapVectors);
   const reflectiveTargets = isReflectivePiece(input.piece)
     ? generateReflectiveTargets(input.pieces, input.piece)
@@ -244,7 +290,12 @@ function generateBoardPieceMoves(input: {
         : targets;
   const captureFilteredTargets = filteredTargets.filter((target) => {
     const captured = findPieceAt(input.pieces, target.row, target.col);
-    if (!captured || captured.side === input.piece.side) return true;
+    if (!captured) return true;
+    if (isCloudPiece(input.piece)) {
+      // 雲: 敵は取れず、味方のみ取れる（ただし味方王/玉は不可）。
+      return captured.side === input.piece.side && !isKingPiece(captured);
+    }
+    if (captured.side === input.piece.side) return false;
     return !isCaptureBlockedByDarkBlind(
       input.position,
       captured.side,

@@ -23,6 +23,9 @@ const ICE_PIECE_CODES = new Set(['ICE', '氷']);
 const SNOW_PIECE_CODES = new Set(['SNOW', '雪']);
 const SAND_PIECE_CODES = new Set(['SAND', '砂']);
 const WIND_PIECE_CODES = new Set(['WIND', '風']);
+const FISH_PIECE_CODES = new Set(['FISH', '魚']);
+const MOSS_PIECE_CODES = new Set(['MOSS', '苔']);
+const RAINBOW_PIECE_CODES = new Set(['RAINBOW', '虹']);
 const WOOD_PIECE_CODES = new Set(['WOOD', 'MOK', '木']);
 const LEAF_PIECE_CODES = new Set(['LEAF', 'HAA', '葉']);
 const DEMON_PIECE_CODES = new Set(['DEMON', 'MAK', '魔']);
@@ -425,17 +428,6 @@ export function movementRuleAt(
   row: number,
   col: number,
 ): string | null {
-  const currentPiece = piecesFromBoardState(position).find(
-    (piece) => piece.side === side && piece.row === row && piece.col === col,
-  );
-  if (
-    currentPiece &&
-    (toBasePieceCode(currentPiece.pieceCode) === 'OU' ||
-      currentPiece.char === '王' ||
-      currentPiece.char === '玉')
-  ) {
-    return null;
-  }
   const state = readSkillState(position);
   for (const entry of state.movement_modifiers) {
     const eSide = (asString(entry.side) ?? 'player') === 'enemy' ? 'enemy' : 'player';
@@ -574,6 +566,12 @@ export function applyMoveSkillEffects(input: {
     SAND_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '砂';
   const isWindMover =
     WIND_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '風';
+  const isFishMover =
+    FISH_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '魚';
+  const isMossMover =
+    MOSS_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '苔';
+  const isRainbowMover =
+    RAINBOW_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '虹';
   const isWoodMover =
     WOOD_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '木';
   const isLeafMover =
@@ -673,6 +671,71 @@ export function applyMoveSkillEffects(input: {
       center: input.movedPiece,
       actorSide: input.actorSide,
     });
+  }
+  // 魚: 移動時30%で周囲の敵駒1体（玉除く）を3ターン行動不能（stun）。
+  if (isFishMover && input.move.fromRow != null && input.move.fromCol != null && input.movedPiece) {
+    const procChance = 0.3;
+    const roll = Math.random();
+    const triggered = roll <= procChance;
+    if (triggered) {
+      const candidates = input.pieces.filter((piece) => {
+        if (piece.side === input.actorSide) return false;
+        if (Math.abs(piece.row - input.movedPiece.row) > 1 || Math.abs(piece.col - input.movedPiece.col) > 1) {
+          return false;
+        }
+        if (piece.row === input.movedPiece.row && piece.col === input.movedPiece.col) return false;
+        const base = toBasePieceCode(piece.pieceCode);
+        if (base === 'OU' || piece.char === '王' || piece.char === '玉') return false;
+        return true;
+      });
+      if (candidates.length > 0) {
+        const target = candidates[Math.floor(Math.random() * candidates.length)]!;
+        state.piece_statuses.push({
+          row: target.row,
+          col: target.col,
+          side: target.side,
+          status_type: 'stun',
+          remaining_turns: 3,
+        });
+      }
+    }
+  }
+  // 苔: 移動時30%で周囲の空きマスに苔駒（MOSS）を1体召喚。
+  if (isMossMover && input.move.fromRow != null && input.move.fromCol != null && input.movedPiece) {
+    const procChance = 0.3;
+    const roll = Math.random();
+    const triggered = roll <= procChance;
+    if (triggered) {
+      summonRandomAdjacentEmptyPiece({
+        pieces: input.pieces,
+        center: input.movedPiece,
+        actorSide: input.actorSide,
+        summonCode: 'MOSS',
+        summonChar: '苔',
+      });
+    }
+  }
+  // 虹: 周囲8マスの敵駒の移動範囲を縦横1マスに制限する。
+  if (isRainbowMover && input.move.fromRow != null && input.move.fromCol != null && input.movedPiece) {
+    let affectedCount = 0;
+    for (let dr = -1; dr <= 1; dr += 1) {
+      for (let dc = -1; dc <= 1; dc += 1) {
+        if (dr === 0 && dc === 0) continue;
+        const row = input.movedPiece.row + dr;
+        const col = input.movedPiece.col + dc;
+        if (row < 0 || row > 8 || col < 0 || col > 8) continue;
+        const target = input.pieces.find((piece) => piece.row === row && piece.col === col);
+        if (!target || target.side === input.actorSide) continue;
+        state.movement_modifiers.push({
+          row,
+          col,
+          side: target.side,
+          movement_rule: 'orthogonal_step_only',
+          remaining_turns: 2,
+        });
+        affectedCount += 1;
+      }
+    }
   }
   // 錫: 移動時10%で周囲8マスの敵駒（玉除く）を2ターン行動不能（stun）。
   if (isTinMover && input.move.fromRow != null && input.move.fromCol != null && input.movedPiece) {

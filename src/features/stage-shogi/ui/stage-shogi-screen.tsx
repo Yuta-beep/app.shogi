@@ -69,6 +69,10 @@ const STANDARD_PIECE_CODES = new Set(['FU', 'KY', 'KE', 'GI', 'KI', 'KA', 'HI', 
 const LEAF_SKILL_DESCRIPTION = '移動時10%の確率で「葉」駒を周囲1マスに召喚する。';
 const ELECTRIC_SKILL_DESCRIPTION = '移動時20%の確率で周囲8マスの敵駒1体を3ターン行動不能にする。';
 const ICE_SKILL_DESCRIPTION = '移動時30%の確率で周囲の敵駒1体を2ターン行動不能にする。';
+const FISH_SKILL_DESCRIPTION = '移動時30%の確率で周囲の敵駒1体を3ターン行動不能にする。';
+const MOSS_SKILL_DESCRIPTION = '移動時30%の確率で周囲の空きマスに「苔」駒を1体召喚する。';
+const RAINBOW_SKILL_DESCRIPTION =
+  'この駒の周囲8マスにいる敵駒の移動範囲は縦横1マスのみに制限される。';
 /** プロジェクト直下 `assets/pieces/promoted/` の PNG（Metro の静的 require） */
 const LOCAL_PROMOTED_PIECE_IMAGE_BY_CODE: Partial<Record<string, number>> = {
   FU: require('../../../../assets/pieces/promoted/tokin.png'),
@@ -693,6 +697,32 @@ function movementRuleByCellFromCanonical(position: BattleCanonicalPosition): Map
     const movementRule = asString(entry.movement_rule ?? entry.movementRule);
     if (row === null || col === null || !movementRule) continue;
     out.set(`${side}:${row}:${col}`, movementRule);
+  }
+  return out;
+}
+
+function immobilizedKeysFromCanonical(position: BattleCanonicalPosition): Set<string> {
+  const out = new Set<string>();
+  const boardState = asRecord(position.boardState);
+  if (!boardState) return out;
+  const skillState = asRecord(boardState.skill_state ?? boardState.skillState);
+  const rawList = (skillState?.piece_statuses ??
+    skillState?.pieceStatuses ??
+    boardState.piece_statuses ??
+    boardState.pieceStatuses) as unknown;
+  if (!Array.isArray(rawList)) return out;
+  for (const raw of rawList) {
+    const entry = asRecord(raw);
+    if (!entry) continue;
+    const remaining = Number(entry.remaining_turns ?? entry.remainingTurns ?? 1);
+    if (!Number.isFinite(remaining) || remaining <= 0) continue;
+    const statusType = asString(entry.status_type ?? entry.statusType) ?? '';
+    if (statusType !== 'stun' && statusType !== 'time_stop' && statusType !== 'dark_blind') continue;
+    const side = normalizeSide(asString(entry.side) ?? 'player');
+    const row = normalizeCellIndex(Number(entry.row));
+    const col = normalizeCellIndex(Number(entry.col));
+    if (row === null || col === null) continue;
+    out.add(`${side}:${row}:${col}`);
   }
   return out;
 }
@@ -1978,6 +2008,9 @@ function resolveInspectSkillDescription(char: string, desc: string | undefined):
   if (char === '葉') return LEAF_SKILL_DESCRIPTION;
   if (char === '電') return ELECTRIC_SKILL_DESCRIPTION;
   if (char === '氷') return ICE_SKILL_DESCRIPTION;
+  if (char === '魚') return FISH_SKILL_DESCRIPTION;
+  if (char === '苔') return MOSS_SKILL_DESCRIPTION;
+  if (char === '虹') return RAINBOW_SKILL_DESCRIPTION;
   const normalized = (desc ?? '').trim();
   return normalized.length > 0 ? normalized : '詳細は準備中です。';
 }
@@ -2124,6 +2157,7 @@ export function StageShogiScreen() {
   const piecesRef = useRef<BoardPiece[]>([]);
   const persistentHazardsRef = useRef<BoardPiece[]>([]);
   const latestMovementRuleByCellRef = useRef<Map<string, string>>(new Map());
+  const latestImmobilizedByCellRef = useRef<Set<string>>(new Set());
   /** 成りダイアログを出す直前の盤（不成で先に動かす前）。「成る」確定時はここから楽観計算する */
   const piecesBeforePromotionDialogRef = useRef<BoardPiece[] | null>(null);
   const handsRef = useRef<HandsState>(createEmptyHandsState());
@@ -2296,6 +2330,7 @@ export function StageShogiScreen() {
     const withDarkVeil = applyDarkVeilFromSkillStateToPieces(withPersistentCells, position);
     const nextPoisonHazards = poisonHazardCellsForDisplay(position);
     latestMovementRuleByCellRef.current = movementRuleByCellFromCanonical(position);
+    latestImmobilizedByCellRef.current = immobilizedKeysFromCanonical(position);
     // hands は canonical JSON を唯一の真実として扱う（SFEN 由来の手と混ぜると二重計上が起きやすい）
     const nextHands = remapHandsStateToDisplayPieceCodes(
       normalizeHandsStateKeys(handsFromCanonical(position)),
@@ -3139,19 +3174,20 @@ export function StageShogiScreen() {
           })
         : [];
       const movementRule =
-        (piece.pieceCode?.toUpperCase() === 'OU' || isKingChar(piece.char))
-          ? null
-          : (latestMovementRuleByCellRef.current.get(`${piece.side}:${piece.row}:${piece.col}`) ?? null);
+        latestMovementRuleByCellRef.current.get(`${piece.side}:${piece.row}:${piece.col}`) ?? null;
+      const pieceKey = `${piece.side}:${piece.row}:${piece.col}`;
+      const immobilizedBySkill = latestImmobilizedByCellRef.current.has(pieceKey);
       const targets = applyMovementRuleToTargets(
         { row: piece.row, col: piece.col },
         rawTargets,
         movementRule,
       );
+      const previewTargets = immobilizedBySkill ? [{ row: piece.row, col: piece.col }] : targets;
 
       setSelectedCell(null);
       setSelectedDropPieceCode(null);
       setLegalTargets([]);
-      setEnemyPreviewTargets(targets);
+      setEnemyPreviewTargets(previewTargets);
       return;
     }
 
@@ -3175,7 +3211,21 @@ export function StageShogiScreen() {
     }
 
     const targets = uniqueTargetsFromMoves(legalMovesForBoardPiece(playerLegalMoves, row, col));
+    const pieceKey = `${piece.side}:${piece.row}:${piece.col}`;
+    const movementRule = latestMovementRuleByCellRef.current.get(pieceKey) ?? null;
+    const immobilizedBySkill = latestImmobilizedByCellRef.current.has(pieceKey);
+    const affectedBySkill = movementRule != null || immobilizedBySkill || Boolean(piece.darkVeiled);
     if (targets.length === 0) {
+      if (affectedBySkill) {
+        setSelectedDropPieceCode(null);
+        setSelectedCell({ row, col });
+        setLegalTargets([]);
+        // スキルによる行動不能は、タップ時に赤ハイライトで分かるようにする。
+        setEnemyPreviewTargets([{ row, col }]);
+        setPendingTimeActionCell(null);
+        setTimeActionMode(null);
+        return;
+      }
       setSelectedCell(null);
       setLegalTargets([]);
       setEnemyPreviewTargets([]);
@@ -3186,9 +3236,14 @@ export function StageShogiScreen() {
 
     setSelectedDropPieceCode(null);
     setSelectedCell({ row, col });
-    // 闇に覆われた駒は合法手はあるが移動先の緑ハイライトだけ出さない（二タップで指す）
-    setLegalTargets(piece.darkVeiled ? [] : targets);
-    setEnemyPreviewTargets([]);
+    // スキル影響下（移動制限/行動不能/闇）の駒は赤ハイライトで可視化する。
+    if (affectedBySkill) {
+      setLegalTargets([]);
+      setEnemyPreviewTargets(targets);
+    } else {
+      setLegalTargets(piece.darkVeiled ? [] : targets);
+      setEnemyPreviewTargets([]);
+    }
     setPendingTimeActionCell(null);
   }
 

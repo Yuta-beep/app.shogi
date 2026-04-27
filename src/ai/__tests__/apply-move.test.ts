@@ -181,6 +181,58 @@ const pieceCatalog: AiPieceDefinition[] = [
     isRepeatable: true,
   },
   {
+    pieceCode: 'FISH',
+    canonicalCode: 'FISH',
+    sfenCode: ':',
+    char: '魚',
+    name: '魚',
+    unlock: 'default',
+    desc: '',
+    skill: '',
+    move: '',
+    moveVectors: [{ dx: 0, dy: -1, maxStep: 1 }],
+    isRepeatable: true,
+  },
+  {
+    pieceCode: 'MOSS',
+    canonicalCode: 'MOSS',
+    sfenCode: '{',
+    char: '苔',
+    name: '苔',
+    unlock: 'default',
+    desc: '',
+    skill: '',
+    move: '',
+    moveVectors: [{ dx: 0, dy: -1, maxStep: 1 }],
+    isRepeatable: true,
+  },
+  {
+    pieceCode: 'RAINBOW',
+    canonicalCode: 'RAINBOW',
+    sfenCode: '"',
+    char: '虹',
+    name: '虹',
+    unlock: 'default',
+    desc: '',
+    skill: '',
+    move: '',
+    moveVectors: [{ dx: 0, dy: -1, maxStep: 1 }],
+    isRepeatable: true,
+  },
+  {
+    pieceCode: 'CLOUD',
+    canonicalCode: 'CLOUD',
+    sfenCode: ',',
+    char: '雲',
+    name: '雲',
+    unlock: 'default',
+    desc: '',
+    skill: '',
+    move: '',
+    moveVectors: [{ dx: 0, dy: -1, maxStep: 1 }],
+    isRepeatable: true,
+  },
+  {
     pieceCode: 'TREASURE',
     canonicalCode: 'TREASURE',
     sfenCode: '$',
@@ -1291,6 +1343,185 @@ describe('ai engine apply move', () => {
       (piece) => piece.side === 'enemy' && piece.col === 8 && piece.row === 4,
     );
     expect(pushedRight?.pieceCode).toBe('FU');
+  });
+
+  it('fish skill stuns one adjacent enemy for 3 turns when 30% proc succeeds', () => {
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: '4k4/9/9/9/3p1p3/4:4/9/9/4K4 b - 1',
+      stateHash: 'seed',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'enemy', row: 4, col: 3, pieceCode: 'FU', char: '歩', promoted: false },
+          { side: 'enemy', row: 4, col: 5, pieceCode: 'FU', char: '歩', promoted: false },
+          { side: 'player', row: 5, col: 4, pieceCode: 'FISH', char: '魚', promoted: false },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+      },
+      hands: { player: {}, enemy: {} },
+    };
+
+    const randomSpy = jest.spyOn(Math, 'random');
+    randomSpy.mockReturnValueOnce(0.1); // 30% 発動成功
+    randomSpy.mockReturnValueOnce(0.0); // target index
+    const committed = applyMove({
+      position,
+      pieceCatalog,
+      move: {
+        fromRow: 5,
+        fromCol: 4,
+        toRow: 4,
+        toCol: 4,
+        pieceCode: 'FISH',
+        promote: false,
+        dropPieceCode: null,
+        capturedPieceCode: null,
+        notation: null,
+      },
+    });
+    randomSpy.mockRestore();
+
+    const skillState = committed.position.boardState.skill_state as
+      | { piece_statuses?: Array<Record<string, unknown>> }
+      | undefined;
+    const statuses = skillState?.piece_statuses ?? [];
+    const stuns = statuses.filter((s) => (s.status_type as string) === 'stun');
+    expect(stuns).toHaveLength(1);
+    expect(stuns[0]?.remaining_turns).toBe(3);
+  });
+
+  it('moss skill summons one moss piece when 30% proc succeeds', () => {
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: '4k4/9/9/9/9/4{4/9/9/4K4 b - 1',
+      stateHash: 'seed',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'player', row: 5, col: 4, pieceCode: 'MOSS', char: '苔', promoted: false },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+      },
+      hands: { player: {}, enemy: {} },
+    };
+
+    const randomSpy = jest.spyOn(Math, 'random');
+    randomSpy.mockReturnValueOnce(0.1); // 30% 発動成功
+    randomSpy.mockReturnValueOnce(0.0); // summon candidate index
+    const committed = applyMove({
+      position,
+      pieceCatalog,
+      move: {
+        fromRow: 5,
+        fromCol: 4,
+        toRow: 4,
+        toCol: 4,
+        pieceCode: 'MOSS',
+        promote: false,
+        dropPieceCode: null,
+        capturedPieceCode: null,
+        notation: null,
+      },
+    });
+    randomSpy.mockRestore();
+
+    const mossCount =
+      committed.position.boardState.pieces?.filter(
+        (piece) => piece.side === 'player' && piece.pieceCode === 'MOSS',
+      ).length ?? 0;
+    expect(mossCount).toBe(2);
+  });
+
+  it('rainbow skill applies orthogonal-step movement restriction to adjacent enemies', () => {
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: '4k4/9/9/9/3p1p3/4"4/9/9/4K4 b - 1',
+      stateHash: 'seed',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'enemy', row: 4, col: 3, pieceCode: 'FU', char: '歩', promoted: false },
+          { side: 'enemy', row: 4, col: 5, pieceCode: 'FU', char: '歩', promoted: false },
+          { side: 'player', row: 5, col: 4, pieceCode: 'RAINBOW', char: '虹', promoted: false },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+      },
+      hands: { player: {}, enemy: {} },
+    };
+
+    const committed = applyMove({
+      position,
+      pieceCatalog,
+      move: {
+        fromRow: 5,
+        fromCol: 4,
+        toRow: 4,
+        toCol: 4,
+        pieceCode: 'RAINBOW',
+        promote: false,
+        dropPieceCode: null,
+        capturedPieceCode: null,
+        notation: null,
+      },
+    });
+
+    const skillState = committed.position.boardState.skill_state as
+      | { movement_modifiers?: Array<Record<string, unknown>> }
+      | undefined;
+    const modifiers = skillState?.movement_modifiers ?? [];
+    const ortho = modifiers.filter((m) => (m.movement_rule as string) === 'orthogonal_step_only');
+    expect(ortho.length).toBeGreaterThanOrEqual(1);
+    expect(ortho.every((m) => (m.remaining_turns as number) === 2)).toBe(true);
+  });
+
+  it('cloud piece captures allied piece and adds it to hand', () => {
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: '4k4/9/9/9/4P4/4,4/9/9/4K4 b - 1',
+      stateHash: 'seed',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'player', row: 4, col: 4, pieceCode: 'FU', char: '歩', promoted: false },
+          { side: 'player', row: 5, col: 4, pieceCode: 'CLOUD', char: '雲', promoted: false },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+      },
+      hands: { player: {}, enemy: {} },
+    };
+    const committed = applyMove({
+      position,
+      pieceCatalog,
+      move: {
+        fromRow: 5,
+        fromCol: 4,
+        toRow: 4,
+        toCol: 4,
+        pieceCode: 'CLOUD',
+        promote: false,
+        dropPieceCode: null,
+        capturedPieceCode: 'FU',
+        notation: null,
+      },
+    });
+    const pieces = committed.position.boardState.pieces as Array<{
+      side: 'player' | 'enemy';
+      row: number;
+      col: number;
+      pieceCode: string;
+    }>;
+    expect(pieces.some((piece) => piece.side === 'player' && piece.row === 4 && piece.col === 4 && piece.pieceCode === 'CLOUD')).toBe(true);
+    expect(pieces.some((piece) => piece.side === 'player' && piece.row === 4 && piece.col === 4 && piece.pieceCode === 'FU')).toBe(false);
+    expect(committed.position.hands.player.FU ?? 0).toBe(1);
   });
 
   it('wood skill summons one wood piece when proc succeeds', () => {

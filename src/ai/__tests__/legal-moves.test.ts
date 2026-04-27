@@ -121,6 +121,19 @@ const pieceCatalog: AiPieceDefinition[] = [
     ],
     isRepeatable: true,
   },
+  {
+    pieceCode: 'CLOUD',
+    canonicalCode: 'CLOUD',
+    sfenCode: ',',
+    char: '雲',
+    name: '雲',
+    unlock: 'default',
+    desc: '',
+    skill: '',
+    move: '',
+    moveVectors: [{ dx: 0, dy: -1, maxStep: 1 }],
+    isRepeatable: true,
+  },
 ];
 
 describe('ai engine legal moves', () => {
@@ -273,6 +286,38 @@ describe('ai engine legal moves', () => {
     expect(legal.legalMoves.some((move) => move.fromRow === 7 && move.fromCol === 4)).toBe(true);
   });
 
+  it('applies orthogonal_step_only movement modifier to king as well', () => {
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 3,
+      moveCount: 2,
+      sfen: '4k4/9/9/9/9/9/9/4K4/9 b - 1',
+      stateHash: 'seed',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'player', row: 7, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+        skill_state: {
+          movement_modifiers: [
+            {
+              side: 'player',
+              row: 7,
+              col: 4,
+              movement_rule: 'orthogonal_step_only',
+              remaining_turns: 2,
+            },
+          ],
+        },
+      },
+      hands: { player: {}, enemy: {} },
+    };
+    const legal = generateLegalMoves({ position, pieceCatalog });
+    const kingMoves = legal.legalMoves.filter((move) => move.fromRow === 7 && move.fromCol === 4);
+    expect(kingMoves.length).toBe(4);
+    expect(kingMoves.every((move) => Math.abs(move.toRow - 7) + Math.abs(move.toCol - 4) === 1)).toBe(true);
+  });
+
   it('blocks moves for dark_blind pieces', () => {
     const position: AiBattlePosition = {
       sideToMove: 'enemy',
@@ -302,6 +347,74 @@ describe('ai engine legal moves', () => {
     };
     const legal = generateLegalMoves({ position, pieceCatalog });
     expect(legal.legalMoves.some((move) => move.fromRow === 4 && move.fromCol === 4)).toBe(false);
+  });
+
+  it('cloud piece can capture allied piece', () => {
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 5,
+      moveCount: 4,
+      sfen: '4k4/9/9/9/4P4/4,4/9/9/4K4 b - 1',
+      stateHash: 'seed',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'player', row: 4, col: 4, pieceCode: 'FU', char: '歩', promoted: false },
+          { side: 'player', row: 5, col: 4, pieceCode: 'CLOUD', char: '雲', promoted: false },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+      },
+      hands: { player: {}, enemy: {} },
+    };
+    const legal = generateLegalMoves({ position, pieceCatalog });
+    expect(legal.legalMoves.some((move) => move.fromRow === 5 && move.fromCol === 4 && move.toRow === 4)).toBe(
+      true,
+    );
+  });
+
+  it('cloud piece cannot capture enemy piece', () => {
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 5,
+      moveCount: 4,
+      sfen: '4k4/9/9/9/4p4/4,4/9/9/4K4 b - 1',
+      stateHash: 'seed',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'enemy', row: 4, col: 4, pieceCode: 'FU', char: '歩', promoted: false },
+          { side: 'player', row: 5, col: 4, pieceCode: 'CLOUD', char: '雲', promoted: false },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+      },
+      hands: { player: {}, enemy: {} },
+    };
+    const legal = generateLegalMoves({ position, pieceCatalog });
+    expect(
+      legal.legalMoves.some((move) => move.fromRow === 5 && move.fromCol === 4 && move.toRow === 4 && move.toCol === 4),
+    ).toBe(false);
+  });
+
+  it('cloud piece cannot capture allied king', () => {
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 5,
+      moveCount: 4,
+      sfen: '4k4/9/9/9/4K4/4,4/9/9/9 b - 1',
+      stateHash: 'seed',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'player', row: 4, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'player', row: 5, col: 4, pieceCode: 'CLOUD', char: '雲', promoted: false },
+        ],
+      },
+      hands: { player: {}, enemy: {} },
+    };
+    const legal = generateLegalMoves({ position, pieceCatalog });
+    expect(
+      legal.legalMoves.some((move) => move.fromRow === 5 && move.fromCol === 4 && move.toRow === 4 && move.toCol === 4),
+    ).toBe(false);
   });
 
   it('prevents capturing dark_blind covered enemy piece', () => {
