@@ -41,6 +41,72 @@ function isCloudPiece(piece: AiBoardPiece): boolean {
   return code === 'CLOUD' || piece.char === '雲';
 }
 
+function isMirrorPiece(piece: AiBoardPiece): boolean {
+  const code = toBasePieceCode(piece.pieceCode);
+  return piece.char === '映' || piece.char === '鏡' || code === 'EI' || code === 'KAGAMI' || code === 'MIRROR';
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object') return null;
+  return value as Record<string, unknown>;
+}
+
+function isKingBlockedByPoisonCell(
+  position: AiBattlePosition,
+  piece: AiBoardPiece,
+  row: number,
+  col: number,
+): boolean {
+  if (!isKingPiece(piece)) return false;
+  const boardState = asRecord(position.boardState);
+  if (!boardState) return false;
+  const skillState = asRecord(boardState.skill_state ?? boardState.skillState);
+  const rawHazards =
+    (skillState?.board_hazards ??
+      skillState?.boardHazards ??
+      boardState.board_hazards ??
+      boardState.boardHazards) as unknown;
+  if (!Array.isArray(rawHazards)) return false;
+  return rawHazards.some((raw) => {
+    const hazard = asRecord(raw);
+    if (!hazard) return false;
+    const hazardType = String(hazard.hazard_type ?? hazard.hazardType ?? '');
+    if (hazardType !== 'poison_cell' && hazardType !== 'poison') return false;
+    const affects = (String(hazard.affects_side ?? hazard.affectsSide ?? 'player') === 'enemy'
+      ? 'enemy'
+      : 'player') as 'player' | 'enemy';
+    const remaining = Number(hazard.remaining_turns ?? hazard.remainingTurns ?? 0);
+    const hRow = Number(hazard.row);
+    const hCol = Number(hazard.col);
+    return remaining > 0 && affects === piece.side && hRow === row && hCol === col;
+  });
+}
+
+function isATransformedPawn(position: AiBattlePosition, piece: AiBoardPiece): boolean {
+  const baseCode = toBasePieceCode(piece.pieceCode);
+  if (!(baseCode === 'FU' || piece.char === '歩')) return false;
+  const boardState = asRecord(position.boardState);
+  if (!boardState) return false;
+  const skillState = asRecord(boardState.skill_state ?? boardState.skillState);
+  const rawStatuses =
+    (skillState?.piece_statuses ??
+      skillState?.pieceStatuses ??
+      boardState.piece_statuses ??
+      boardState.pieceStatuses) as unknown;
+  if (!Array.isArray(rawStatuses)) return false;
+  return rawStatuses.some((raw) => {
+    const status = asRecord(raw);
+    if (!status) return false;
+    const statusType = String(status.status_type ?? status.statusType ?? '');
+    if (statusType !== 'a_transform') return false;
+    const side = (String(status.side ?? 'player') === 'enemy' ? 'enemy' : 'player') as 'player' | 'enemy';
+    const remaining = Number(status.remaining_turns ?? status.remainingTurns ?? 0);
+    const row = Number(status.row);
+    const col = Number(status.col);
+    return remaining > 0 && side === piece.side && row === piece.row && col === piece.col;
+  });
+}
+
 function generateReflectiveTargets(pieces: AiBoardPiece[], piece: AiBoardPiece): Array<{ row: number; col: number }> {
   const out: Array<{ row: number; col: number }> = [];
   const seen = new Set<string>();
@@ -142,6 +208,35 @@ function normalizeVectorsForTime(piece: AiBoardPiece, vectors: AiPieceDefinition
     { dx: 0, dy: 1, maxStep: 1 },
     { dx: 1, dy: 1, maxStep: 1 },
   ];
+}
+
+function resolveEffectiveVectorsForPiece(
+  piece: AiBoardPiece,
+  pieceDef: AiPieceDefinition,
+): AiPieceDefinition['moveVectors'] {
+  const bishopNormalized = normalizeVectorsForBishop(piece, pieceDef.moveVectors);
+  const goldNormalized = normalizeVectorsForGold(piece, bishopNormalized);
+  return normalizeVectorsForTime(piece, goldNormalized);
+}
+
+function stableHash(value: string): number {
+  let hash = 2166136261;
+  for (let i = 0; i < value.length; i += 1) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function selectMirrorTarget(
+  position: AiBattlePosition,
+  mover: AiBoardPiece,
+  candidates: AiBoardPiece[],
+): AiBoardPiece | null {
+  if (candidates.length === 0) return null;
+  const seed = `${position.stateHash ?? ''}:${position.turnNumber}:${position.moveCount}:${mover.row}:${mover.col}:${mover.side}`;
+  const idx = stableHash(seed) % candidates.length;
+  return candidates[idx] ?? null;
 }
 
 function hasAdjacentEnemyPiece(pieces: AiBoardPiece[], piece: AiBoardPiece): boolean {
@@ -254,16 +349,27 @@ function generateBoardPieceMoves(input: {
   const lookups = buildPieceLookups(input.pieceCatalog);
   const pieceDef = resolvePieceDef(input.piece, lookups);
   if (!pieceDef || pieceDef.moveVectors.length === 0) return [];
-  const bishopNormalized = normalizeVectorsForBishop(input.piece, pieceDef.moveVectors);
-  const goldNormalized = normalizeVectorsForGold(input.piece, bishopNormalized);
-  const effectiveVectors = normalizeVectorsForTime(input.piece, goldNormalized);
+  let effectiveVectors = resolveEffectiveVectorsForPiece(input.piece, pieceDef);
+  let effectiveCanJump = pieceDef.canJump === true;
+
+  if (isMirrorPiece(input.piece)) {
+    const enemyCandidates = input.pieces.filter((piece) => piece.side !== input.piece.side && !isMirrorPiece(piece));
+    const selected = selectMirrorTarget(input.position, input.piece, enemyCandidates);
+    if (selected) {
+      const selectedDef = resolvePieceDef(selected, lookups);
+      if (selectedDef && selectedDef.moveVectors.length > 0) {
+        effectiveVectors = resolveEffectiveVectorsForPiece(selected, selectedDef);
+        effectiveCanJump = selectedDef.canJump === true;
+      }
+    }
+  }
 
   const leapVectors = effectiveVectors.filter((v) => isLeapOverOneMode(v.captureMode));
   const normalVectors = effectiveVectors.filter((v) => !isLeapOverOneMode(v.captureMode));
   const normalTargets = isCloudPiece(input.piece)
     ? generateCloudTargetsFromVectors(input.pieces, input.piece, normalVectors)
     : getLegalTargetsFromVectors(input.pieces, input.piece, normalVectors, 9, {
-        canJump: pieceDef.canJump === true,
+        canJump: effectiveCanJump,
       });
   const leapTargets = generateLeapOverOneTargets(input.pieces, input.piece, leapVectors);
   const reflectiveTargets = isReflectivePiece(input.piece)
@@ -304,17 +410,22 @@ function generateBoardPieceMoves(input: {
     );
   });
 
+  const hazardFilteredTargets = captureFilteredTargets.filter(
+    (target) => !isKingBlockedByPoisonCell(input.position, input.piece, target.row, target.col),
+  );
+
   const from = { row: input.piece.row, col: input.piece.col };
   const pieceCode =
     toBasePieceCode(input.piece.pieceCode) ??
     toBasePieceCode(CHAR_TO_CODE[input.piece.char]) ??
     'FU';
 
-  return captureFilteredTargets.flatMap((target) => {
+  return hazardFilteredTargets.flatMap((target) => {
     const captured = findPieceAt(input.pieces, target.row, target.col);
     const capturedPieceCode = toBasePieceCode(captured?.pieceCode ?? null);
-    const promote = canPromoteByMove(input.piece, from, target, 9);
-    const mustPromote = mustPromoteByMove(input.piece, target, 9);
+    const transformedByA = isATransformedPawn(input.position, input.piece);
+    const promote = transformedByA ? false : canPromoteByMove(input.piece, from, target, 9);
+    const mustPromote = transformedByA ? false : mustPromoteByMove(input.piece, target, 9);
     if (!promote) {
       return [createMove({ from, to: target, pieceCode, promote: false, capturedPieceCode })];
     }

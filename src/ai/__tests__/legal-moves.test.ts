@@ -134,6 +134,19 @@ const pieceCatalog: AiPieceDefinition[] = [
     moveVectors: [{ dx: 0, dy: -1, maxStep: 1 }],
     isRepeatable: true,
   },
+  {
+    pieceCode: 'MIRROR',
+    canonicalCode: 'MIRROR',
+    sfenCode: ']',
+    char: '鏡',
+    name: '鏡',
+    unlock: 'default',
+    desc: '',
+    skill: '',
+    move: '',
+    moveVectors: [{ dx: 0, dy: -1, maxStep: 1 }],
+    isRepeatable: true,
+  },
 ];
 
 describe('ai engine legal moves', () => {
@@ -198,6 +211,41 @@ describe('ai engine legal moves', () => {
 
     expect(pawnMoves).toHaveLength(1);
     expect(pawnMoves[0]?.promote).toBe(true);
+  });
+
+  it('prevents promotion for pawns transformed by a-skill', () => {
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: '4k4/4P4/9/9/9/9/9/9/4K4 b - 1',
+      stateHash: 'seed',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'player', row: 1, col: 4, pieceCode: 'FU', char: '歩', promoted: false },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+        skill_state: {
+          piece_statuses: [
+            {
+              side: 'player',
+              row: 1,
+              col: 4,
+              status_type: 'a_transform',
+              remaining_turns: 2,
+            },
+          ],
+        },
+      },
+      hands: { player: {}, enemy: {} },
+    };
+
+    const legal = generateLegalMoves({ position, pieceCatalog });
+    const pawnMoves = legal.legalMoves.filter((move) => move.fromRow === 1 && move.toRow === 0);
+
+    expect(pawnMoves).toHaveLength(1);
+    expect(pawnMoves[0]?.promote).toBe(false);
   });
 
   it('rejects illegal pawn drops in a file with another unpromoted pawn', () => {
@@ -415,6 +463,62 @@ describe('ai engine legal moves', () => {
     expect(
       legal.legalMoves.some((move) => move.fromRow === 5 && move.fromCol === 4 && move.toRow === 4 && move.toCol === 4),
     ).toBe(false);
+  });
+
+  it('king cannot move onto poison cell', () => {
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 6,
+      moveCount: 5,
+      sfen: '4k4/9/9/9/9/9/9/4K4/9 b - 1',
+      stateHash: 'seed',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'player', row: 7, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+        skill_state: {
+          board_hazards: [
+            {
+              row: 6,
+              col: 4,
+              hazard_type: 'poison_cell',
+              affects_side: 'player',
+              remaining_turns: 3,
+            },
+          ],
+        },
+      },
+      hands: { player: {}, enemy: {} },
+    };
+    const legal = generateLegalMoves({ position, pieceCatalog });
+    expect(
+      legal.legalMoves.some((move) => move.fromRow === 7 && move.fromCol === 4 && move.toRow === 6 && move.toCol === 4),
+    ).toBe(false);
+  });
+
+  it('mirror piece copies movement vectors from one enemy piece', () => {
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 7,
+      moveCount: 6,
+      sfen: '4k4/9/9/9/9/4]4/9/9/4K4 b - 1',
+      stateHash: 'seed',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'enemy', row: 2, col: 2, pieceCode: 'KE', char: '桂', promoted: false },
+          { side: 'player', row: 5, col: 4, pieceCode: 'MIRROR', char: '鏡', promoted: false },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+      },
+      hands: { player: {}, enemy: {} },
+    };
+    const legal = generateLegalMoves({ position, pieceCatalog });
+    const mirrorMoves = legal.legalMoves.filter((move) => move.fromRow === 5 && move.fromCol === 4);
+    const targets = mirrorMoves.map((m) => `${m.toRow}:${m.toCol}`);
+    expect(targets).toContain('3:3');
+    expect(targets).toContain('3:5');
   });
 
   it('prevents capturing dark_blind covered enemy piece', () => {

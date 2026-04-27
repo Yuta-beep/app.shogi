@@ -153,12 +153,19 @@ export function applyMove(input: {
       throw new Error('moving piece not found after capture resolution');
     }
     const moving = nextPieces[movingIndexAfterCapture];
+    const nextPromoted = move.promote || moving.promoted === true;
+    const resolvedChar = pieceChar(moving.pieceCode, nextPromoted);
+    const nextChar =
+      resolvedChar === '?' ||
+      (toBasePieceCode(moving.pieceCode) != null && resolvedChar === toBasePieceCode(moving.pieceCode))
+        ? moving.char
+        : resolvedChar;
     nextPieces[movingIndexAfterCapture] = {
       ...moving,
       row: move.toRow,
       col: move.toCol,
-      promoted: move.promote || moving.promoted === true,
-      char: pieceChar(moving.pieceCode, move.promote || moving.promoted === true),
+      promoted: nextPromoted,
+      char: nextChar,
     };
     movedPieceAfterApply = nextPieces[movingIndexAfterCapture] ?? null;
   }

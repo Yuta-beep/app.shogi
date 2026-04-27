@@ -42,6 +42,36 @@ const SPECIAL_DECK_PIECE_SIZE_PERCENT = 96;
 const DECK_PIECE_SIZE_OVERRIDES: Partial<Record<string, number>> = {
   忍: 104,
 };
+const LEAF_SKILL_DESCRIPTION = '移動時10%の確率で「葉」駒を周囲1マスに召喚する。';
+const ELECTRIC_SKILL_DESCRIPTION = '移動時20%の確率で周囲8マスの敵駒1体を3ターン行動不能にする。';
+const ICE_SKILL_DESCRIPTION = '移動時30%の確率で周囲の敵駒1体を2ターン行動不能にする。';
+const FISH_SKILL_DESCRIPTION = '移動時30%の確率で周囲の敵駒1体を3ターン行動不能にする。';
+const MOSS_SKILL_DESCRIPTION = '移動時30%の確率で周囲の空きマスに「苔」駒を1体召喚する。';
+const RAINBOW_SKILL_DESCRIPTION =
+  'この駒の周囲8マスにいる敵駒の移動範囲は縦横1マスのみに制限される。';
+const SWAMP_SKILL_DESCRIPTION =
+  'この駒の周囲8マスにいる敵駒の移動範囲は上下1マスのみに制限される。';
+const POISON_SKILL_DESCRIPTION =
+  'この駒が移動したとき移動前のマスは4ターン毒マスになる。毒マスを敵駒が通るとその駒は消滅する。';
+
+function resolveInspectSkillDescription(char: string, desc: string | undefined): string {
+  if (char === '葉') return LEAF_SKILL_DESCRIPTION;
+  if (char === '電') return ELECTRIC_SKILL_DESCRIPTION;
+  if (char === '氷') return ICE_SKILL_DESCRIPTION;
+  if (char === '魚') return FISH_SKILL_DESCRIPTION;
+  if (char === '苔') return MOSS_SKILL_DESCRIPTION;
+  if (char === '虹') return RAINBOW_SKILL_DESCRIPTION;
+  if (char === '沼') return SWAMP_SKILL_DESCRIPTION;
+  if (char === '毒') return POISON_SKILL_DESCRIPTION;
+  const normalized = (desc ?? '').trim();
+  return normalized.length > 0 ? normalized : 'スキル説明は個別設定されていません。';
+}
+
+function resolveInspectMoveDescription(char: string, move: string | undefined): string {
+  if (char === '闇') return '全方向に1マス';
+  const normalized = (move ?? '').trim();
+  return normalized.length > 0 ? normalized : '行動範囲の個別説明はありません。';
+}
 
 function pieceSelectionKey(piece: { pieceId?: number; char: string }): string {
   if (typeof piece.pieceId === 'number') return `id:${piece.pieceId}`;
@@ -456,9 +486,16 @@ export function DeckBuilderScreen() {
               {vm.selectedPiece?.name}
             </Text>
             <Text className="mt-3 text-xs font-black text-[#7f1d1d]">【スキルの説明】</Text>
-            <Text className="mt-1 text-sm text-[#1f2937]">{vm.selectedPiece?.desc}</Text>
+            <Text className="mt-1 text-sm text-[#1f2937]">
+              {resolveInspectSkillDescription(
+                vm.selectedPiece?.char ?? '',
+                vm.selectedPiece?.skill ?? vm.selectedPiece?.desc,
+              )}
+            </Text>
             <Text className="mt-3 text-xs font-black text-[#7f1d1d]">【行動範囲】</Text>
-            <Text className="mt-1 text-sm text-[#1f2937]">{vm.selectedPiece?.move}</Text>
+            <Text className="mt-1 text-sm text-[#1f2937]">
+              {resolveInspectMoveDescription(vm.selectedPiece?.char ?? '', vm.selectedPiece?.move)}
+            </Text>
             <Pressable
               onPress={() => {
                 void playSe('cancel');

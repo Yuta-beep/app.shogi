@@ -233,6 +233,45 @@ const pieceCatalog: AiPieceDefinition[] = [
     isRepeatable: true,
   },
   {
+    pieceCode: 'SWAMP',
+    canonicalCode: 'SWAMP',
+    sfenCode: '|',
+    char: '沼',
+    name: '沼',
+    unlock: 'default',
+    desc: '',
+    skill: '',
+    move: '',
+    moveVectors: [{ dx: 0, dy: -1, maxStep: 1 }],
+    isRepeatable: true,
+  },
+  {
+    pieceCode: 'POISON',
+    canonicalCode: 'POISON',
+    sfenCode: ';',
+    char: '毒',
+    name: '毒',
+    unlock: 'default',
+    desc: '',
+    skill: '',
+    move: '',
+    moveVectors: [{ dx: 0, dy: -1, maxStep: 1 }],
+    isRepeatable: true,
+  },
+  {
+    pieceCode: 'A',
+    canonicalCode: 'A',
+    sfenCode: 'a',
+    char: 'あ',
+    name: 'あ',
+    unlock: 'default',
+    desc: '',
+    skill: '',
+    move: '',
+    moveVectors: [{ dx: 0, dy: -1, maxStep: 1 }],
+    isRepeatable: true,
+  },
+  {
     pieceCode: 'TREASURE',
     canonicalCode: 'TREASURE',
     sfenCode: '$',
@@ -1524,6 +1563,210 @@ describe('ai engine apply move', () => {
     expect(committed.position.hands.player.FU ?? 0).toBe(1);
   });
 
+  it('swamp skill applies vertical-step movement restriction to adjacent enemies', () => {
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: '4k4/9/9/9/3p1p3/4|4/9/9/4K4 b - 1',
+      stateHash: 'seed',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'enemy', row: 4, col: 3, pieceCode: 'FU', char: '歩', promoted: false },
+          { side: 'enemy', row: 4, col: 5, pieceCode: 'FU', char: '歩', promoted: false },
+          { side: 'player', row: 5, col: 4, pieceCode: 'SWAMP', char: '沼', promoted: false },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+      },
+      hands: { player: {}, enemy: {} },
+    };
+
+    const committed = applyMove({
+      position,
+      pieceCatalog,
+      move: {
+        fromRow: 5,
+        fromCol: 4,
+        toRow: 4,
+        toCol: 4,
+        pieceCode: 'SWAMP',
+        promote: false,
+        dropPieceCode: null,
+        capturedPieceCode: null,
+        notation: null,
+      },
+    });
+
+    const skillState = committed.position.boardState.skill_state as
+      | { movement_modifiers?: Array<Record<string, unknown>> }
+      | undefined;
+    const modifiers = skillState?.movement_modifiers ?? [];
+    const verticalOnly = modifiers.filter((m) => (m.movement_rule as string) === 'vertical_step_only');
+    expect(verticalOnly.length).toBeGreaterThanOrEqual(1);
+    expect(verticalOnly.every((m) => (m.remaining_turns as number) === 2)).toBe(true);
+  });
+
+  it('poison skill creates origin poison cell with 4 turns', () => {
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: '4k4/9/9/9/9/4;4/9/9/4K4 b - 1',
+      stateHash: 'seed',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'player', row: 5, col: 4, pieceCode: 'POISON', char: '毒', promoted: false },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+      },
+      hands: { player: {}, enemy: {} },
+    };
+    const committed = applyMove({
+      position,
+      pieceCatalog,
+      move: {
+        fromRow: 5,
+        fromCol: 4,
+        toRow: 4,
+        toCol: 4,
+        pieceCode: 'POISON',
+        promote: false,
+        dropPieceCode: null,
+        capturedPieceCode: null,
+        notation: null,
+      },
+    });
+    const hazards = ((committed.position.boardState.skill_state as { board_hazards?: Array<Record<string, unknown>> })
+      ?.board_hazards ?? []) as Array<Record<string, unknown>>;
+    expect(
+      hazards.some(
+        (h) =>
+          h.row === 5 &&
+          h.col === 4 &&
+          h.hazard_type === 'poison_cell' &&
+          h.affects_side === 'enemy' &&
+          h.remaining_turns === 4,
+      ),
+    ).toBe(true);
+  });
+
+  it('enemy piece is removed when stepping onto poison cell', () => {
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 2,
+      moveCount: 1,
+      sfen: '4k4/9/9/9/9/4P4/9/9/4K4 b - 1',
+      stateHash: 'seed',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'player', row: 5, col: 4, pieceCode: 'FU', char: '歩', promoted: false },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+        skill_state: {
+          board_hazards: [
+            {
+              row: 4,
+              col: 4,
+              hazard_type: 'poison_cell',
+              affects_side: 'player',
+              remaining_turns: 3,
+            },
+          ],
+        },
+      },
+      hands: { player: {}, enemy: {} },
+    };
+    const committed = applyMove({
+      position,
+      pieceCatalog,
+      move: {
+        fromRow: 5,
+        fromCol: 4,
+        toRow: 4,
+        toCol: 4,
+        pieceCode: 'FU',
+        promote: false,
+        dropPieceCode: null,
+        capturedPieceCode: null,
+        notation: null,
+      },
+    });
+    const pieces = committed.position.boardState.pieces as Array<{ side: 'player' | 'enemy'; row: number; col: number }>;
+    expect(pieces.some((piece) => piece.side === 'player' && piece.row === 4 && piece.col === 4)).toBe(false);
+  });
+
+  it('a skill transforms adjacent enemy pieces into pawns', () => {
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: '4k4/9/9/9/3s1n3/4a4/9/9/4K4 b - 1',
+      stateHash: 'seed',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'enemy', row: 4, col: 3, pieceCode: 'GI', char: '銀', promoted: false },
+          { side: 'enemy', row: 4, col: 5, pieceCode: 'KE', char: '桂', promoted: false },
+          { side: 'player', row: 5, col: 4, pieceCode: 'A', char: 'あ', promoted: false },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+      },
+      hands: { player: {}, enemy: {} },
+    };
+    const committed = applyMove({
+      position,
+      pieceCatalog,
+      move: {
+        fromRow: 5,
+        fromCol: 4,
+        toRow: 4,
+        toCol: 4,
+        pieceCode: 'A',
+        promote: false,
+        dropPieceCode: null,
+        capturedPieceCode: null,
+        notation: null,
+      },
+    });
+    const pieces = committed.position.boardState.pieces as Array<{
+      side: 'player' | 'enemy';
+      row: number;
+      col: number;
+      pieceCode: string;
+      char: string;
+    }>;
+    const left = pieces.find((p) => p.side === 'enemy' && p.row === 4 && p.col === 3);
+    const right = pieces.find((p) => p.side === 'enemy' && p.row === 4 && p.col === 5);
+    expect(left?.pieceCode).toBe('FU');
+    expect(left?.char).toBe('歩');
+    expect(right?.pieceCode).toBe('FU');
+    expect(right?.char).toBe('歩');
+    const skillState = (committed.position.boardState as { skill_state?: { piece_statuses?: Array<Record<string, unknown>> } })
+      .skill_state;
+    const statuses = skillState?.piece_statuses ?? [];
+    expect(
+      statuses.some(
+        (status) =>
+          status.status_type === 'a_transform' &&
+          status.side === 'enemy' &&
+          status.row === 4 &&
+          status.col === 3,
+      ),
+    ).toBe(true);
+    expect(
+      statuses.some(
+        (status) =>
+          status.status_type === 'a_transform' &&
+          status.side === 'enemy' &&
+          status.row === 4 &&
+          status.col === 5,
+      ),
+    ).toBe(true);
+  });
+
   it('wood skill summons one wood piece when proc succeeds', () => {
     const position: AiBattlePosition = {
       sideToMove: 'player',
@@ -1781,5 +2024,41 @@ describe('ai engine apply move', () => {
         (piece) => piece.side === 'enemy' && piece.row === 4 && (piece.col === 3 || piece.col === 5),
       ) ?? [];
     expect(remainingAdjacentEnemies).toHaveLength(2);
+  });
+
+  it('keeps original char after moving piece with opaque pieceCode', () => {
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: '4k4/9/9/9/9/4x4/9/9/4K4 b - 1',
+      stateHash: 'seed',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'player', row: 5, col: 4, pieceCode: 'BA421EA0D85', char: '歩', promoted: false },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+      },
+      hands: { player: {}, enemy: {} },
+    };
+    const committed = applyMove({
+      position,
+      pieceCatalog,
+      move: {
+        fromRow: 5,
+        fromCol: 4,
+        toRow: 4,
+        toCol: 4,
+        pieceCode: 'BA421EA0D85',
+        promote: false,
+        dropPieceCode: null,
+        capturedPieceCode: null,
+        notation: null,
+      },
+    });
+    const pieces = committed.position.boardState.pieces as Array<{ row: number; col: number; char: string }>;
+    const moved = pieces.find((piece) => piece.row === 4 && piece.col === 4);
+    expect(moved?.char).toBe('歩');
   });
 });

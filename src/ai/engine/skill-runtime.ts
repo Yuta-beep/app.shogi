@@ -26,6 +26,9 @@ const WIND_PIECE_CODES = new Set(['WIND', '風']);
 const FISH_PIECE_CODES = new Set(['FISH', '魚']);
 const MOSS_PIECE_CODES = new Set(['MOSS', '苔']);
 const RAINBOW_PIECE_CODES = new Set(['RAINBOW', '虹']);
+const SWAMP_PIECE_CODES = new Set(['SWAMP', '沼']);
+const POISON_PIECE_CODES = new Set(['POISON', '毒']);
+const A_PIECE_CODES = new Set(['A', 'あ']);
 const WOOD_PIECE_CODES = new Set(['WOOD', 'MOK', '木']);
 const LEAF_PIECE_CODES = new Set(['LEAF', 'HAA', '葉']);
 const DEMON_PIECE_CODES = new Set(['DEMON', 'MAK', '魔']);
@@ -39,6 +42,16 @@ function normalizeSkillPieceCode(raw: string | null | undefined): string {
   if (upper.startsWith('PIECE_SHOGI_')) return upper.slice('PIECE_SHOGI_'.length);
   if (upper.startsWith('PIECE_')) return upper.slice('PIECE_'.length);
   return upper;
+}
+
+function isAPieceInstance(piece: AiBoardPiece): boolean {
+  const normalizedCode = normalizeSkillPieceCode(piece.pieceCode);
+  const base = toBasePieceCode(piece.pieceCode);
+  if (piece.char === 'あ') return true;
+  if (base === 'A' || normalizedCode === 'A') return true;
+  // 不透明IDでも既知の「あ」駒IDを拾えるようにする。
+  if (normalizedCode.includes('A9C2AD579732')) return true;
+  return false;
 }
 
 function removeRandomAdjacentEnemyPiece(input: {
@@ -537,6 +550,22 @@ export function applyMoveSkillEffects(input: {
   const defsRoot = asRecord(boardState.skill_definitions_v2 ?? boardState.skillDefinitionsV2);
   const defs = asArray(defsRoot?.definitions);
   const state = readSkillState(input.position);
+  if (input.move.fromRow != null && input.move.fromCol != null && input.movedPiece) {
+    state.piece_statuses = state.piece_statuses.map((entry) => {
+      const statusType = asString(entry.status_type ?? entry.statusType) ?? '';
+      const side = (asString(entry.side) ?? 'player') === 'enemy' ? 'enemy' : 'player';
+      const row = asNumber(entry.row);
+      const col = asNumber(entry.col);
+      if (statusType !== 'a_transform') return entry;
+      if (side !== input.actorSide) return entry;
+      if (row !== input.move.fromRow || col !== input.move.fromCol) return entry;
+      return {
+        ...entry,
+        row: input.movedPiece.row,
+        col: input.movedPiece.col,
+      };
+    });
+  }
   const isFlameMover =
     FLAME_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '炎';
   const isFireMover =
@@ -572,6 +601,14 @@ export function applyMoveSkillEffects(input: {
     MOSS_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '苔';
   const isRainbowMover =
     RAINBOW_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '虹';
+  const isSwampMover =
+    SWAMP_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '沼';
+  const isPoisonMover =
+    POISON_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '毒';
+  const isAMover =
+    A_PIECE_CODES.has(movedCode) ||
+    normalizeSkillPieceCode(input.move.pieceCode) === 'あ' ||
+    (input.movedPiece ? isAPieceInstance(input.movedPiece) : false);
   const isWoodMover =
     WOOD_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '木';
   const isLeafMover =
@@ -717,7 +754,6 @@ export function applyMoveSkillEffects(input: {
   }
   // 虹: 周囲8マスの敵駒の移動範囲を縦横1マスに制限する。
   if (isRainbowMover && input.move.fromRow != null && input.move.fromCol != null && input.movedPiece) {
-    let affectedCount = 0;
     for (let dr = -1; dr <= 1; dr += 1) {
       for (let dc = -1; dc <= 1; dc += 1) {
         if (dr === 0 && dc === 0) continue;
@@ -733,7 +769,113 @@ export function applyMoveSkillEffects(input: {
           movement_rule: 'orthogonal_step_only',
           remaining_turns: 2,
         });
+      }
+    }
+  }
+  // 沼: 周囲8マスの敵駒の移動範囲を上下1マスに制限する。
+  if (isSwampMover && input.move.fromRow != null && input.move.fromCol != null && input.movedPiece) {
+    let affectedCount = 0;
+    for (let dr = -1; dr <= 1; dr += 1) {
+      for (let dc = -1; dc <= 1; dc += 1) {
+        if (dr === 0 && dc === 0) continue;
+        const row = input.movedPiece.row + dr;
+        const col = input.movedPiece.col + dc;
+        if (row < 0 || row > 8 || col < 0 || col > 8) continue;
+        const target = input.pieces.find((piece) => piece.row === row && piece.col === col);
+        if (!target || target.side === input.actorSide) continue;
+        state.movement_modifiers.push({
+          row,
+          col,
+          side: target.side,
+          movement_rule: 'vertical_step_only',
+          remaining_turns: 2,
+        });
         affectedCount += 1;
+      }
+    }
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      console.info('[swamp-skill-debug]', {
+        moveCount: input.position.moveCount,
+        turnNumber: input.position.turnNumber,
+        pieceCode: movedCode,
+        affectedCount,
+        movementRule: 'vertical_step_only',
+        remainingTurns: affectedCount > 0 ? 2 : 0,
+      });
+    }
+  }
+  // 毒: 移動前マスを4ターンの毒マスにする（敵が踏むと消滅）。
+  if (isPoisonMover && input.move.fromRow != null && input.move.fromCol != null) {
+    const durationTurns = 4;
+    state.board_hazards.push({
+      row: input.move.fromRow,
+      col: input.move.fromCol,
+      hazard_type: 'poison_cell',
+      affects_side: sideOpposite(input.actorSide),
+      remaining_turns: durationTurns,
+    });
+  }
+  // あ: 周囲8マスの敵駒を「歩」に変化させる（王/玉は除外）。
+  // - あ駒自身が移動したとき
+  // - 敵駒があ駒の周囲8マスへ侵入したとき
+  if (input.move.fromRow != null && input.move.fromCol != null && input.movedPiece) {
+    const triggerCenters: AiBoardPiece[] = [];
+    if (isAMover) {
+      triggerCenters.push(input.movedPiece);
+    }
+    // 侵入トリガー: 着手後の移動駒に隣接する相手側の「あ」を起動する。
+    for (const piece of input.pieces) {
+      if (!isAPieceInstance(piece)) continue;
+      if (piece.side === input.actorSide) continue;
+      if (Math.abs(piece.row - input.movedPiece.row) > 1 || Math.abs(piece.col - input.movedPiece.col) > 1) continue;
+      triggerCenters.push(piece);
+    }
+    const centerKey = (piece: AiBoardPiece) => `${piece.side}:${piece.row}:${piece.col}`;
+    const uniqueCenters = triggerCenters.filter((piece, idx, arr) => arr.findIndex((p) => centerKey(p) === centerKey(piece)) === idx);
+    for (const center of uniqueCenters) {
+      let transformedCount = 0;
+      for (let dr = -1; dr <= 1; dr += 1) {
+        for (let dc = -1; dc <= 1; dc += 1) {
+          if (dr === 0 && dc === 0) continue;
+          const row = center.row + dr;
+          const col = center.col + dc;
+          if (row < 0 || row > 8 || col < 0 || col > 8) continue;
+          const target = input.pieces.find((piece) => piece.row === row && piece.col === col);
+          if (!target || target.side === center.side) continue;
+          if (target.char === '王' || target.char === '玉' || toBasePieceCode(target.pieceCode) === 'OU') continue;
+          target.pieceCode = 'FU';
+          target.char = '歩';
+          target.promoted = false;
+          const existingIdx = state.piece_statuses.findIndex((entry) => {
+            const statusType = asString(entry.status_type ?? entry.statusType) ?? '';
+            const side = (asString(entry.side) ?? 'player') === 'enemy' ? 'enemy' : 'player';
+            return (
+              statusType === 'a_transform' &&
+              side === target.side &&
+              asNumber(entry.row) === target.row &&
+              asNumber(entry.col) === target.col
+            );
+          });
+          if (existingIdx >= 0) {
+            state.piece_statuses[existingIdx] = {
+              ...state.piece_statuses[existingIdx],
+              row: target.row,
+              col: target.col,
+              side: target.side,
+              status_type: 'a_transform',
+              remaining_turns: 999,
+            };
+          } else {
+            state.piece_statuses.push({
+              row: target.row,
+              col: target.col,
+              side: target.side,
+              status_type: 'a_transform',
+              remaining_turns: 999,
+            });
+          }
+          transformedCount += 1;
+        }
       }
     }
   }

@@ -73,6 +73,10 @@ const FISH_SKILL_DESCRIPTION = '移動時30%の確率で周囲の敵駒1体を3�
 const MOSS_SKILL_DESCRIPTION = '移動時30%の確率で周囲の空きマスに「苔」駒を1体召喚する。';
 const RAINBOW_SKILL_DESCRIPTION =
   'この駒の周囲8マスにいる敵駒の移動範囲は縦横1マスのみに制限される。';
+const SWAMP_SKILL_DESCRIPTION =
+  'この駒の周囲8マスにいる敵駒の移動範囲は上下1マスのみに制限される。';
+const POISON_SKILL_DESCRIPTION =
+  'この駒が移動したとき移動前のマスは4ターン毒マスになる。毒マスを敵駒が通るとその駒は消滅する。';
 /** プロジェクト直下 `assets/pieces/promoted/` の PNG（Metro の静的 require） */
 const LOCAL_PROMOTED_PIECE_IMAGE_BY_CODE: Partial<Record<string, number>> = {
   FU: require('../../../../assets/pieces/promoted/tokin.png'),
@@ -156,6 +160,8 @@ type BoardPiece = RuleBoardPiece & {
   imageSignedUrl: string | null;
   /** 闇の `dark_blind`（boardState.skill_state.piece_statuses）。2ターン持続 */
   darkVeiled?: boolean;
+  /** 「あ」スキルで歩化された駒。軽い表示エフェクトと成り禁止に利用。 */
+  aTransformed?: boolean;
 };
 type PendingPromotion = {
   promoteMove: BattleMove;
@@ -270,7 +276,7 @@ function pieceCodeFromPlacement(
   }
   const fromKanji = CHAR_TO_CODE[char];
   if (fromKanji) return toBasePieceCode(fromKanji) ?? fromKanji;
-  if (pieceCode) return toBasePieceCode(pieceCode);
+  if (pieceCode && !isOpaquePieceInstanceId(pieceCode)) return toBasePieceCode(pieceCode);
   return null;
 }
 
@@ -514,36 +520,66 @@ function patchHandsForStarReturnSkill(
   actorSide: Side,
   move: BattleMove | null | undefined,
   skillTriggered: boolean,
+  handsBeforeMove?: HandsState,
 ): BattleCanonicalPosition {
-  if (!skillTriggered) return position;
-  if (normalizeCapturedCodeForStarReturn(move?.capturedPieceCode) !== 'HOS') return position;
-  const actorBag = { ...(position.hands[actorSide] ?? {}) };
-  const actorCountRaw = actorBag.HOS;
-  const actorCount =
-    typeof actorCountRaw === 'number' && Number.isFinite(actorCountRaw)
-      ? Math.max(0, Math.floor(actorCountRaw))
-      : 0;
-  if (actorCount <= 0) return position;
   const targetSide: Side = actorSide === 'player' ? 'enemy' : 'player';
-  const targetBag = { ...(position.hands[targetSide] ?? {}) };
-  const targetCountRaw = targetBag.HOS;
-  const targetCount =
-    typeof targetCountRaw === 'number' && Number.isFinite(targetCountRaw)
-      ? Math.max(0, Math.floor(targetCountRaw))
-      : 0;
-  actorBag.HOS = Math.max(0, actorCount - 1);
-  if (actorBag.HOS <= 0) {
-    delete actorBag.HOS;
+  let nextPosition = position;
+  if (skillTriggered && normalizeCapturedCodeForStarReturn(move?.capturedPieceCode) === 'HOS') {
+    const actorBag = { ...(nextPosition.hands[actorSide] ?? {}) };
+    const actorCountRaw = actorBag.HOS;
+    const actorCount =
+      typeof actorCountRaw === 'number' && Number.isFinite(actorCountRaw)
+        ? Math.max(0, Math.floor(actorCountRaw))
+        : 0;
+    if (actorCount > 0) {
+      const targetBag = { ...(nextPosition.hands[targetSide] ?? {}) };
+      const targetCountRaw = targetBag.HOS;
+      const targetCount =
+        typeof targetCountRaw === 'number' && Number.isFinite(targetCountRaw)
+          ? Math.max(0, Math.floor(targetCountRaw))
+          : 0;
+      actorBag.HOS = Math.max(0, actorCount - 1);
+      if (actorBag.HOS <= 0) {
+        delete actorBag.HOS;
+      }
+      targetBag.HOS = targetCount + 1;
+      nextPosition = {
+        ...nextPosition,
+        hands: {
+          ...nextPosition.hands,
+          [actorSide]: actorBag,
+          [targetSide]: targetBag,
+        },
+      };
+    }
   }
-  targetBag.HOS = targetCount + 1;
-  return {
-    ...position,
-    hands: {
-      ...position.hands,
-      [actorSide]: actorBag,
-      [targetSide]: targetBag,
-    },
-  };
+
+  const capturedCode = normalizeCapturedCodeForStarReturn(move?.capturedPieceCode);
+  if (capturedCode !== 'SWAMP' || !handsBeforeMove) return nextPosition;
+
+  const beforeActor = Math.max(0, Math.floor(handsBeforeMove[actorSide]?.SWAMP ?? 0));
+  const beforeTarget = Math.max(0, Math.floor(handsBeforeMove[targetSide]?.SWAMP ?? 0));
+  const afterActor = Math.max(0, Math.floor(nextPosition.hands[actorSide]?.SWAMP ?? 0));
+  const afterTarget = Math.max(0, Math.floor(nextPosition.hands[targetSide]?.SWAMP ?? 0));
+
+  // サーバー局面で「被捕獲側」に沼が加算された場合のみ捕獲側へ補正する。
+  if (afterActor === beforeActor && afterTarget === beforeTarget + 1) {
+    const actorBag = { ...(nextPosition.hands[actorSide] ?? {}) };
+    const targetBag = { ...(nextPosition.hands[targetSide] ?? {}) };
+    targetBag.SWAMP = Math.max(0, afterTarget - 1);
+    if (targetBag.SWAMP <= 0) delete targetBag.SWAMP;
+    actorBag.SWAMP = afterActor + 1;
+    return {
+      ...nextPosition,
+      hands: {
+        ...nextPosition.hands,
+        [actorSide]: actorBag,
+        [targetSide]: targetBag,
+      },
+    };
+  }
+
+  return nextPosition;
 }
 
 function countPiecesOnBoardWithCode(pieces: BoardPiece[], side: Side, pieceCode: string): number {
@@ -581,7 +617,15 @@ function reconcileExtendedPieceHandsAgainstBoard(
     for (const code of Object.keys(next)) {
       // 一部特殊駒は盤上にも同種が残ることが正常なため、盤上枚数との差分補正をかけると手駒表示が消える。
       const codeU = code.toUpperCase();
-      if (codeU === 'ICE' || codeU === 'SAND' || codeU === 'WIND' || codeU === 'HIK') continue;
+      if (
+        codeU === 'ICE' ||
+        codeU === 'SAND' ||
+        codeU === 'WIND' ||
+        codeU === 'HIK' ||
+        codeU === 'SWAMP'
+      ) {
+        continue;
+      }
       if (STANDARD_PIECE_CODES.has(code.toUpperCase())) continue;
       const raw = next[code];
       const hc = typeof raw === 'number' && Number.isFinite(raw) ? Math.max(0, Math.floor(raw)) : 0;
@@ -641,6 +685,46 @@ function applyDarkVeilFromSkillStateToPieces(
   return pieces.map((p) => ({
     ...p,
     darkVeiled: keys.has(`${p.side}:${p.row}:${p.col}`),
+  }));
+}
+
+function aTransformDisplayKeysFromCanonical(position: BattleCanonicalPosition): Set<string> {
+  const keys = new Set<string>();
+  const boardState = asRecord(position.boardState);
+  if (!boardState) return keys;
+  const skillState = asRecord(boardState.skill_state ?? boardState.skillState);
+  const rawList = (skillState?.piece_statuses ??
+    skillState?.pieceStatuses ??
+    boardState.piece_statuses ??
+    boardState.pieceStatuses) as unknown;
+  if (!Array.isArray(rawList)) return keys;
+  for (const raw of rawList) {
+    const st = asRecord(raw);
+    if (!st) continue;
+    const statusType = asString(st.status_type ?? st.statusType) ?? '';
+    if (statusType !== 'a_transform') continue;
+    const turns = Number(st.remaining_turns ?? st.remainingTurns ?? 1);
+    if (!Number.isFinite(turns) || turns <= 0) continue;
+    const row = normalizeCellIndex(Number(st.row));
+    const col = normalizeCellIndex(Number(st.col));
+    if (row === null || col === null) continue;
+    const side = normalizeSide(asString(st.side) ?? 'player');
+    keys.add(`${side}:${row}:${col}`);
+  }
+  return keys;
+}
+
+function applyATransformEffectToPieces(
+  pieces: BoardPiece[],
+  position: BattleCanonicalPosition,
+): BoardPiece[] {
+  const keys = aTransformDisplayKeysFromCanonical(position);
+  if (keys.size === 0) {
+    return pieces.map((p) => ({ ...p, aTransformed: false }));
+  }
+  return pieces.map((p) => ({
+    ...p,
+    aTransformed: keys.has(`${p.side}:${p.row}:${p.col}`),
   }));
 }
 
@@ -778,13 +862,26 @@ function piecesFromCanonicalBoardState(
       const fromKanji = CHAR_TO_CODE[rawCharForCode];
       if (fromKanji) code = fromKanji;
     }
+    if (!code) {
+      // TURN 境界の canonical 同期で拡張駒コードが欠落するフレームがあるため、
+      // 同座標の既存駒を優先して駒消失を防ぐ。
+      const existingAtCell = existingPieces.find((piece) => piece.side === side && piece.row === row && piece.col === col);
+      if (existingAtCell?.pieceCode) {
+        code = existingAtCell.pieceCode;
+      }
+    }
     if (!code) continue;
     const key = `${side}:${row}:${col}`;
     if (seen.has(key)) continue;
     seen.add(key);
 
+    const fallbackExistingChar =
+      existingPieces.find((piece) => piece.side === side && piece.pieceCode === code)?.char ?? null;
+    const resolvedCharFromCode = pieceCharFromCode(code, side, rawPromoted);
     const rawChar =
-      asString(nested.char ?? entry.char) ?? pieceCharFromCode(code, side, rawPromoted);
+      asString(nested.char ?? entry.char) ??
+      fallbackExistingChar ??
+      (resolvedCharFromCode === '?' ? code : resolvedCharFromCode);
     const promoted = rawPromoted || PROMOTED_DISPLAY_CHARS.has(rawChar);
     const char = rawChar;
     const pieceDef = promoted
@@ -1233,6 +1330,7 @@ function reconcilePieceIdentity(
 }
 
 const PERSISTENT_HAZARD_CHARS = new Set(['毒', '沼']);
+const PERSISTENT_SYNC_GUARD_CHARS = new Set(['毒', '沼', '映', '鏡', 'あ']);
 
 /**
  * canonical(SFEN/boardState) に一時的に載らないフレームが来ても、
@@ -1247,7 +1345,7 @@ function restoreMissingPersistentHazardPieces(
     nextByCell.set(`${p.row}:${p.col}`, p);
   }
   for (const p of existingPieces) {
-    if (!PERSISTENT_HAZARD_CHARS.has(p.char)) continue;
+    if (!PERSISTENT_SYNC_GUARD_CHARS.has(p.char)) continue;
     const cellKey = `${p.row}:${p.col}`;
     const byCell = nextByCell.get(cellKey);
     // 持続駒補完は「欠損セルのみ」。既に何か駒がいるセルは canonical を優先する。
@@ -1266,7 +1364,7 @@ function enforcePersistentHazardCells(
   if (persistentHazards.length === 0) return nextPieces;
   const nextHazardCount = new Map<string, number>();
   for (const p of nextPieces) {
-    if (!PERSISTENT_HAZARD_CHARS.has(p.char)) continue;
+    if (!PERSISTENT_SYNC_GUARD_CHARS.has(p.char)) continue;
     const key = `${p.side}:${p.char}`;
     nextHazardCount.set(key, (nextHazardCount.get(key) ?? 0) + 1);
   }
@@ -1448,9 +1546,13 @@ function buildPreservedMovedPieceForPlayer(
     promoted,
     promotedDef?.imageSignedUrl ?? moved.imageSignedUrl,
   );
-  const char = resolvedPieceCode
+  const resolvedChar = resolvedPieceCode
     ? pieceCharFromCode(resolvedPieceCode, moved.side, promoted)
     : moved.char;
+  const char =
+    resolvedChar === '?' || (resolvedPieceCode != null && resolvedChar === resolvedPieceCode)
+      ? moved.char
+      : resolvedChar;
   return {
     side: moved.side,
     toRow: resolved.toRow,
@@ -1591,10 +1693,14 @@ function computePiecesAfterOptimisticMove(
   const baseForChar =
     resolvedPieceCode ??
     (moving.pieceCode ? (toBasePieceCode(moving.pieceCode) ?? moving.pieceCode) : null);
-  const char =
+  const resolvedChar =
     baseForChar != null && baseForChar.length > 0
       ? pieceCharFromCode(baseForChar, moving.side, promoted)
       : moving.char;
+  const char =
+    resolvedChar === '?' || (baseForChar != null && resolvedChar === baseForChar)
+      ? moving.char
+      : resolvedChar;
   const baseForLocalKey = (toBasePieceCode(codeKey) ?? codeKey).toUpperCase();
   const imageSignedUrl =
     move.promote && LOCAL_PROMOTED_PIECE_IMAGE_BY_CODE[baseForLocalKey]
@@ -1626,6 +1732,7 @@ type BoardPieceSpriteProps = {
   instantPromotedKey?: string | null;
   /** 敵「闇」の隣接マスにいるとき、駒の文字・絵柄を判別しづらくする */
   darkVeiled?: boolean;
+  aTransformed?: boolean;
 };
 
 const BoardPieceSprite = memo(function BoardPieceSprite({
@@ -1635,6 +1742,7 @@ const BoardPieceSprite = memo(function BoardPieceSprite({
   instantPromotedSource = null,
   instantPromotedKey = null,
   darkVeiled = false,
+  aTransformed = false,
 }: BoardPieceSpriteProps) {
   const rowIndex = normalizeCellIndex(piece.row);
   const colIndex = normalizeCellIndex(piece.col);
@@ -1688,6 +1796,10 @@ const BoardPieceSprite = memo(function BoardPieceSprite({
           height: `${pieceScalePercent}%`,
           overflow: 'hidden',
           transform: [{ rotate: enemy ? '180deg' : '0deg' }],
+            borderWidth: aTransformed ? 2 : 0,
+            borderRadius: aTransformed ? 8 : 0,
+            borderColor: aTransformed ? 'rgba(255, 215, 64, 0.9)' : 'transparent',
+            backgroundColor: aTransformed ? 'rgba(255, 215, 64, 0.14)' : 'transparent',
         }}
       >
         <View style={{ width: '100%', height: '100%', position: 'relative' }}>
@@ -1988,6 +2100,7 @@ const BoardPiecesLayer = memo(function BoardPiecesLayer({
             instantPromotedSource={flash?.assetModule ?? null}
             instantPromotedKey={flash?.flashKey ?? null}
             darkVeiled={Boolean(placement.darkVeiled)}
+            aTransformed={Boolean(placement.aTransformed)}
           />
         );
       })}
@@ -2011,6 +2124,8 @@ function resolveInspectSkillDescription(char: string, desc: string | undefined):
   if (char === '魚') return FISH_SKILL_DESCRIPTION;
   if (char === '苔') return MOSS_SKILL_DESCRIPTION;
   if (char === '虹') return RAINBOW_SKILL_DESCRIPTION;
+  if (char === '沼') return SWAMP_SKILL_DESCRIPTION;
+  if (char === '毒') return POISON_SKILL_DESCRIPTION;
   const normalized = (desc ?? '').trim();
   return normalized.length > 0 ? normalized : '詳細は準備中です。';
 }
@@ -2328,6 +2443,7 @@ export function StageShogiScreen() {
       persistentHazardsRef.current,
     );
     const withDarkVeil = applyDarkVeilFromSkillStateToPieces(withPersistentCells, position);
+    const withATransformEffect = applyATransformEffectToPieces(withDarkVeil, position);
     const nextPoisonHazards = poisonHazardCellsForDisplay(position);
     latestMovementRuleByCellRef.current = movementRuleByCellFromCanonical(position);
     latestImmobilizedByCellRef.current = immobilizedKeysFromCanonical(position);
@@ -2340,11 +2456,14 @@ export function StageShogiScreen() {
       nextHands,
       withPromotionOverlay,
     );
-    const stabilizedPieces = enforcePersistentHazardCells(withDarkVeil, persistentHazardsRef.current);
+    const stabilizedPieces = enforcePersistentHazardCells(
+      withATransformEffect,
+      persistentHazardsRef.current,
+    );
     setPromotionImageFlash(null);
     setPieces(stabilizedPieces);
     // stale な永続ハザード参照で捕獲後に「沼」へ戻るのを防ぐため、canonical 同期ごとに更新する。
-    persistentHazardsRef.current = stabilizedPieces.filter((p) => PERSISTENT_HAZARD_CHARS.has(p.char));
+    persistentHazardsRef.current = stabilizedPieces.filter((p) => PERSISTENT_SYNC_GUARD_CHARS.has(p.char));
     setPoisonHazardCells(nextPoisonHazards);
     setHands(reconciledHands);
     setSideToMove(position.sideToMove);
@@ -2390,7 +2509,7 @@ export function StageShogiScreen() {
         return piece;
       })
       .filter((value): value is BoardPiece => value !== null);
-    const snapshotPersistentHazards = next.filter((p) => PERSISTENT_HAZARD_CHARS.has(p.char));
+    const snapshotPersistentHazards = next.filter((p) => PERSISTENT_SYNC_GUARD_CHARS.has(p.char));
     const enemySwampCount = snapshotPersistentHazards.filter(
       (p) => p.char === '沼' && p.side === 'enemy',
     ).length;
@@ -2611,6 +2730,7 @@ export function StageShogiScreen() {
         'enemy',
         response.selectedMove,
         response.skillTriggered,
+        handsRef.current,
       );
 
       let preservedMovedPiece: PreservedMovedPiece | undefined;

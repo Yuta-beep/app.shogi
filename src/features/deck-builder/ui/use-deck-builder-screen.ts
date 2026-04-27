@@ -99,6 +99,8 @@ const SPECIAL_PIECE_ALLOWED_POSITIONS = new Map<string, ReadonlySet<string>>([
   ['安', new Set(rowCols(7, [1, 7]))],
   ['宋', new Set(rowCols(7, [7]))],
   ['爆', new Set(rowCols(8, [3, 5]))],
+  // 「あ」は bポス専用駒のためデッキビルダーでは配置不可。
+  ['あ', new Set<string>()],
   ['煽', new Set(rowCols(7, [1, 7]))],
   ['灯', new Set(rowCols(8, [2, 6]))],
   ['辺', new Set(rowCols(8, [2, 6]))],
@@ -189,14 +191,29 @@ function toApiRow(row: number): number {
 function toOwnedPieceFromPlacement(
   placement: NonNullable<SavedDeck['placements']>[number],
 ): OwnedPiece {
+  const normalizedName = (placement.name ?? '').trim() || placement.char;
   return {
     pieceId: placement.pieceId,
     char: placement.char,
-    name: placement.name,
+    name: normalizedName,
     imageSignedUrl: placement.imageSignedUrl ?? null,
-    desc: `${placement.name}の詳細は準備中です。`,
-    skill: '準備中',
-    move: '準備中',
+    desc: `${normalizedName}の駒説明。`,
+    skill: `${normalizedName}のスキル説明。`,
+    move: `${normalizedName}の行動範囲。`,
+  };
+}
+
+function normalizeOwnedPieceText(piece: OwnedPiece): OwnedPiece {
+  const normalizedName = (piece.name ?? '').trim() || piece.char;
+  const desc = (piece.desc ?? '').trim();
+  const skill = (piece.skill ?? '').trim();
+  const move = (piece.move ?? '').trim();
+  return {
+    ...piece,
+    name: normalizedName,
+    desc: desc.length > 0 && desc !== '準備中' ? desc : `${normalizedName}の駒説明。`,
+    skill: skill.length > 0 && skill !== '準備中' ? skill : `${normalizedName}のスキル説明。`,
+    move: move.length > 0 && move !== '準備中' ? move : `${normalizedName}の行動範囲。`,
   };
 }
 
@@ -423,14 +440,15 @@ export function useDeckBuilderScreen() {
       .execute()
       .then((snapshot) => {
         if (active) {
-          setOwnedPieces(snapshot.ownedPieces);
+          const normalizedOwnedPieces = snapshot.ownedPieces.map(normalizeOwnedPieceText);
+          setOwnedPieces(normalizedOwnedPieces);
           setSavedDecks(snapshot.savedDecks);
           const initial = initialBoardPlacementsFromDecks(
             snapshot.savedDecks,
-            snapshot.ownedPieces,
+            normalizedOwnedPieces,
           );
           setBoardPlacements(
-            initial.length > 0 ? initial : createDefaultBoardPlacements(snapshot.ownedPieces),
+            initial.length > 0 ? initial : createDefaultBoardPlacements(normalizedOwnedPieces),
           );
         }
       })

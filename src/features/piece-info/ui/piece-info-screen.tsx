@@ -28,6 +28,10 @@ const FISH_SKILL_DESCRIPTION = '移動時30%の確率で周囲の敵駒1体を3�
 const MOSS_SKILL_DESCRIPTION = '移動時30%の確率で周囲の空きマスに「苔」駒を1体召喚する。';
 const RAINBOW_SKILL_DESCRIPTION =
   'この駒の周囲8マスにいる敵駒の移動範囲は縦横1マスのみに制限される。';
+const SWAMP_SKILL_DESCRIPTION =
+  'この駒の周囲8マスにいる敵駒の移動範囲は上下1マスのみに制限される。';
+const POISON_SKILL_DESCRIPTION =
+  'この駒が移動したとき移動前のマスは4ターン毒マスになる。毒マスを敵駒が通るとその駒は消滅する。';
 
 function resolveDisplaySkillText(char: string, skill: string | null | undefined): string {
   if (char === '葉') return LEAF_SKILL_DESCRIPTION;
@@ -36,6 +40,8 @@ function resolveDisplaySkillText(char: string, skill: string | null | undefined)
   if (char === '魚') return FISH_SKILL_DESCRIPTION;
   if (char === '苔') return MOSS_SKILL_DESCRIPTION;
   if (char === '虹') return RAINBOW_SKILL_DESCRIPTION;
+  if (char === '沼') return SWAMP_SKILL_DESCRIPTION;
+  if (char === '毒') return POISON_SKILL_DESCRIPTION;
   const normalized = (skill ?? '').trim();
   return normalized.length > 0 ? normalized : '-';
 }
