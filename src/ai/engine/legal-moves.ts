@@ -10,6 +10,7 @@ import type {
   AiBattlePosition,
   AiBoardPiece,
   AiPieceDefinition,
+  AiPieceLookups,
 } from '@/ai/model';
 import {
   buildPieceLookups,
@@ -19,12 +20,8 @@ import {
   toBasePieceCode,
 } from '@/ai/model';
 import { CHAR_TO_CODE } from '@/features/stage-shogi/domain/piece-conversion';
-import { createMove, findPieceAt, resolvePieceDef } from '@/ai/engine/shared';
-import {
-  isCaptureBlockedByDarkBlind,
-  isPieceImmobilized,
-  movementRuleAt,
-} from '@/ai/engine/skill-runtime';
+import { createMove, resolvePieceDef } from '@/ai/engine/shared';
+import { createSkillRuntimeView, type SkillRuntimeView } from '@/ai/engine/skill-runtime';
 
 function isKingPiece(piece: AiBoardPiece): boolean {
   const code = toBasePieceCode(piece.pieceCode);
@@ -43,74 +40,52 @@ function isCloudPiece(piece: AiBoardPiece): boolean {
 
 function isMirrorPiece(piece: AiBoardPiece): boolean {
   const code = toBasePieceCode(piece.pieceCode);
-  return piece.char === '映' || piece.char === '鏡' || code === 'EI' || code === 'KAGAMI' || code === 'MIRROR';
-}
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== 'object') return null;
-  return value as Record<string, unknown>;
+  return (
+    piece.char === '映' ||
+    piece.char === '鏡' ||
+    code === 'EI' ||
+    code === 'KAGAMI' ||
+    code === 'MIRROR'
+  );
 }
 
 function isKingBlockedByPoisonCell(
-  position: AiBattlePosition,
+  skillView: SkillRuntimeView,
   piece: AiBoardPiece,
   row: number,
   col: number,
 ): boolean {
   if (!isKingPiece(piece)) return false;
-  const boardState = asRecord(position.boardState);
-  if (!boardState) return false;
-  const skillState = asRecord(boardState.skill_state ?? boardState.skillState);
-  const rawHazards =
-    (skillState?.board_hazards ??
-      skillState?.boardHazards ??
-      boardState.board_hazards ??
-      boardState.boardHazards) as unknown;
-  if (!Array.isArray(rawHazards)) return false;
-  return rawHazards.some((raw) => {
-    const hazard = asRecord(raw);
-    if (!hazard) return false;
-    const hazardType = String(hazard.hazard_type ?? hazard.hazardType ?? '');
-    if (hazardType !== 'poison_cell' && hazardType !== 'poison') return false;
-    const affects = (String(hazard.affects_side ?? hazard.affectsSide ?? 'player') === 'enemy'
-      ? 'enemy'
-      : 'player') as 'player' | 'enemy';
-    const remaining = Number(hazard.remaining_turns ?? hazard.remainingTurns ?? 0);
-    const hRow = Number(hazard.row);
-    const hCol = Number(hazard.col);
-    return remaining > 0 && affects === piece.side && hRow === row && hCol === col;
-  });
+  return skillView.kingPoisonBlockedCells.has(`${piece.side}:${row}:${col}`);
 }
 
-function isATransformedPawn(position: AiBattlePosition, piece: AiBoardPiece): boolean {
+function isATransformedPawn(skillView: SkillRuntimeView, piece: AiBoardPiece): boolean {
   const baseCode = toBasePieceCode(piece.pieceCode);
   if (!(baseCode === 'FU' || piece.char === '歩')) return false;
-  const boardState = asRecord(position.boardState);
-  if (!boardState) return false;
-  const skillState = asRecord(boardState.skill_state ?? boardState.skillState);
-  const rawStatuses =
-    (skillState?.piece_statuses ??
-      skillState?.pieceStatuses ??
-      boardState.piece_statuses ??
-      boardState.pieceStatuses) as unknown;
-  if (!Array.isArray(rawStatuses)) return false;
-  return rawStatuses.some((raw) => {
-    const status = asRecord(raw);
-    if (!status) return false;
-    const statusType = String(status.status_type ?? status.statusType ?? '');
-    if (statusType !== 'a_transform') return false;
-    const side = (String(status.side ?? 'player') === 'enemy' ? 'enemy' : 'player') as 'player' | 'enemy';
-    const remaining = Number(status.remaining_turns ?? status.remainingTurns ?? 0);
-    const row = Number(status.row);
-    const col = Number(status.col);
-    return remaining > 0 && side === piece.side && row === piece.row && col === piece.col;
-  });
+  return skillView.aTransformCells.has(`${piece.side}:${piece.row}:${piece.col}`);
 }
 
-function generateReflectiveTargets(pieces: AiBoardPiece[], piece: AiBoardPiece): Array<{ row: number; col: number }> {
-  const out: Array<{ row: number; col: number }> = [];
+type OccupancyMap = Map<string, AiBoardPiece>;
+
+function occupancyKey(row: number, col: number): string {
+  return `${row}:${col}`;
+}
+
+function buildOccupancyMap(pieces: AiBoardPiece[]): OccupancyMap {
+  return new Map(pieces.map((piece) => [occupancyKey(piece.row, piece.col), piece]));
+}
+
+function findPieceAtFast(occupancy: OccupancyMap, row: number, col: number): AiBoardPiece | null {
+  return occupancy.get(occupancyKey(row, col)) ?? null;
+}
+
+function generateReflectiveTargets(
+  occupancy: OccupancyMap,
+  piece: AiBoardPiece,
+): { row: number; col: number }[] {
+  const out: { row: number; col: number }[] = [];
   const seen = new Set<string>();
-  const starts: Array<[number, number]> = [
+  const starts: [number, number][] = [
     [-1, -1],
     [-1, 1],
     [1, -1],
@@ -137,7 +112,7 @@ function generateReflectiveTargets(pieces: AiBoardPiece[], piece: AiBoardPiece):
         nc = c + dc;
       }
       if (nr < 0 || nr > 8 || nc < 0 || nc > 8) break;
-      const target = findPieceAt(pieces, nr, nc);
+      const target = findPieceAtFast(occupancy, nr, nc);
       if (target) {
         if (target.side !== piece.side) {
           const key = `${nr}:${nc}`;
@@ -163,7 +138,9 @@ function generateReflectiveTargets(pieces: AiBoardPiece[], piece: AiBoardPiece):
 function isLeapOverOneMode(mode: string | null | undefined): boolean {
   if (!mode) return false;
   const normalized = mode.trim().toLowerCase();
-  return normalized === 'leapoverone' || normalized === 'leap_over_one' || normalized === 'leap-over-one';
+  return (
+    normalized === 'leapoverone' || normalized === 'leap_over_one' || normalized === 'leap-over-one'
+  );
 }
 
 function normalizeVectorsForBishop(piece: AiBoardPiece, vectors: AiPieceDefinition['moveVectors']) {
@@ -239,14 +216,14 @@ function selectMirrorTarget(
   return candidates[idx] ?? null;
 }
 
-function hasAdjacentEnemyPiece(pieces: AiBoardPiece[], piece: AiBoardPiece): boolean {
+function hasAdjacentEnemyPiece(occupancy: OccupancyMap, piece: AiBoardPiece): boolean {
   for (let dr = -1; dr <= 1; dr += 1) {
     for (let dc = -1; dc <= 1; dc += 1) {
       if (dr === 0 && dc === 0) continue;
       const row = piece.row + dr;
       const col = piece.col + dc;
       if (row < 0 || row > 8 || col < 0 || col > 8) continue;
-      const target = findPieceAt(pieces, row, col);
+      const target = findPieceAtFast(occupancy, row, col);
       if (target && target.side !== piece.side) return true;
     }
   }
@@ -254,18 +231,18 @@ function hasAdjacentEnemyPiece(pieces: AiBoardPiece[], piece: AiBoardPiece): boo
 }
 
 function generateLeapOverOneTargets(
-  pieces: AiBoardPiece[],
+  occupancy: OccupancyMap,
   piece: AiBoardPiece,
-  vectors: Array<{ dx: number; dy: number }>,
-): Array<{ row: number; col: number }> {
-  const out: Array<{ row: number; col: number }> = [];
+  vectors: { dx: number; dy: number }[],
+): { row: number; col: number }[] {
+  const out: { row: number; col: number }[] = [];
   const seen = new Set<string>();
   for (const vector of vectors) {
     let r = piece.row + vector.dy;
     let c = piece.col + vector.dx;
     let platformFound = false;
     while (r >= 0 && r <= 8 && c >= 0 && c <= 8) {
-      const target = findPieceAt(pieces, r, c);
+      const target = findPieceAtFast(occupancy, r, c);
       if (target) {
         platformFound = true;
         r += vector.dy;
@@ -282,7 +259,7 @@ function generateLeapOverOneTargets(
     }
     if (!platformFound) continue;
     while (r >= 0 && r <= 8 && c >= 0 && c <= 8) {
-      const target = findPieceAt(pieces, r, c);
+      const target = findPieceAtFast(occupancy, r, c);
       if (!target) {
         r += vector.dy;
         c += vector.dx;
@@ -302,11 +279,11 @@ function generateLeapOverOneTargets(
 }
 
 function generateCloudTargetsFromVectors(
-  pieces: AiBoardPiece[],
+  occupancy: OccupancyMap,
   piece: AiBoardPiece,
   vectors: AiPieceDefinition['moveVectors'],
-): Array<{ row: number; col: number }> {
-  const out: Array<{ row: number; col: number }> = [];
+): { row: number; col: number }[] {
+  const out: { row: number; col: number }[] = [];
   const seen = new Set<string>();
   const orient = piece.side === 'player' ? 1 : -1;
   for (const vector of vectors) {
@@ -317,7 +294,7 @@ function generateCloudTargetsFromVectors(
       const row = piece.row + dy * step;
       const col = piece.col + dx * step;
       if (row < 0 || row > 8 || col < 0 || col > 8) break;
-      const occupied = findPieceAt(pieces, row, col);
+      const occupied = findPieceAtFast(occupancy, row, col);
       if (occupied && occupied.side !== piece.side) {
         // 雲は敵駒を取れないため、敵駒マスは移動不可。
         break;
@@ -344,19 +321,22 @@ function generateBoardPieceMoves(input: {
   pieces: AiBoardPiece[];
   piece: AiBoardPiece;
   position: AiBattlePosition;
-  pieceCatalog: AiPieceDefinition[];
+  lookups: AiPieceLookups;
+  occupancy: OccupancyMap;
+  skillView: SkillRuntimeView;
 }): AiBattleMove[] {
-  const lookups = buildPieceLookups(input.pieceCatalog);
-  const pieceDef = resolvePieceDef(input.piece, lookups);
+  const pieceDef = resolvePieceDef(input.piece, input.lookups);
   if (!pieceDef || pieceDef.moveVectors.length === 0) return [];
   let effectiveVectors = resolveEffectiveVectorsForPiece(input.piece, pieceDef);
   let effectiveCanJump = pieceDef.canJump === true;
 
   if (isMirrorPiece(input.piece)) {
-    const enemyCandidates = input.pieces.filter((piece) => piece.side !== input.piece.side && !isMirrorPiece(piece));
+    const enemyCandidates = input.pieces.filter(
+      (piece) => piece.side !== input.piece.side && !isMirrorPiece(piece),
+    );
     const selected = selectMirrorTarget(input.position, input.piece, enemyCandidates);
     if (selected) {
-      const selectedDef = resolvePieceDef(selected, lookups);
+      const selectedDef = resolvePieceDef(selected, input.lookups);
       if (selectedDef && selectedDef.moveVectors.length > 0) {
         effectiveVectors = resolveEffectiveVectorsForPiece(selected, selectedDef);
         effectiveCanJump = selectedDef.canJump === true;
@@ -367,21 +347,19 @@ function generateBoardPieceMoves(input: {
   const leapVectors = effectiveVectors.filter((v) => isLeapOverOneMode(v.captureMode));
   const normalVectors = effectiveVectors.filter((v) => !isLeapOverOneMode(v.captureMode));
   const normalTargets = isCloudPiece(input.piece)
-    ? generateCloudTargetsFromVectors(input.pieces, input.piece, normalVectors)
+    ? generateCloudTargetsFromVectors(input.occupancy, input.piece, normalVectors)
     : getLegalTargetsFromVectors(input.pieces, input.piece, normalVectors, 9, {
         canJump: effectiveCanJump,
       });
-  const leapTargets = generateLeapOverOneTargets(input.pieces, input.piece, leapVectors);
+  const leapTargets = generateLeapOverOneTargets(input.occupancy, input.piece, leapVectors);
   const reflectiveTargets = isReflectivePiece(input.piece)
-    ? generateReflectiveTargets(input.pieces, input.piece)
+    ? generateReflectiveTargets(input.occupancy, input.piece)
     : [];
   const targets = [...normalTargets, ...leapTargets, ...reflectiveTargets];
-  const movementRule = movementRuleAt(
-    input.position,
-    input.piece.side,
-    input.piece.row,
-    input.piece.col,
-  );
+  const movementRule =
+    input.skillView.movementRulesByCell.get(
+      `${input.piece.side}:${input.piece.row}:${input.piece.col}`,
+    ) ?? null;
   const filteredTargets =
     movementRule === 'vertical_step_only'
       ? targets.filter(
@@ -395,23 +373,18 @@ function generateBoardPieceMoves(input: {
           )
         : targets;
   const captureFilteredTargets = filteredTargets.filter((target) => {
-    const captured = findPieceAt(input.pieces, target.row, target.col);
+    const captured = findPieceAtFast(input.occupancy, target.row, target.col);
     if (!captured) return true;
     if (isCloudPiece(input.piece)) {
       // 雲: 敵は取れず、味方のみ取れる（ただし味方王/玉は不可）。
       return captured.side === input.piece.side && !isKingPiece(captured);
     }
     if (captured.side === input.piece.side) return false;
-    return !isCaptureBlockedByDarkBlind(
-      input.position,
-      captured.side,
-      captured.row,
-      captured.col,
-    );
+    return !input.skillView.darkBlindCells.has(`${captured.side}:${captured.row}:${captured.col}`);
   });
 
   const hazardFilteredTargets = captureFilteredTargets.filter(
-    (target) => !isKingBlockedByPoisonCell(input.position, input.piece, target.row, target.col),
+    (target) => !isKingBlockedByPoisonCell(input.skillView, input.piece, target.row, target.col),
   );
 
   const from = { row: input.piece.row, col: input.piece.col };
@@ -421,9 +394,9 @@ function generateBoardPieceMoves(input: {
     'FU';
 
   return hazardFilteredTargets.flatMap((target) => {
-    const captured = findPieceAt(input.pieces, target.row, target.col);
+    const captured = findPieceAtFast(input.occupancy, target.row, target.col);
     const capturedPieceCode = toBasePieceCode(captured?.pieceCode ?? null);
-    const transformedByA = isATransformedPawn(input.position, input.piece);
+    const transformedByA = isATransformedPawn(input.skillView, input.piece);
     const promote = transformedByA ? false : canPromoteByMove(input.piece, from, target, 9);
     const mustPromote = transformedByA ? false : mustPromoteByMove(input.piece, target, 9);
     if (!promote) {
@@ -491,24 +464,26 @@ export function generateLegalMoves(input: {
     enemy: sanitizeHandsBag(position.hands.enemy),
   } satisfies AiHandsState;
   const pieces = piecesFromBoardState(position);
+  const occupancy = buildOccupancyMap(pieces);
+  const lookups = buildPieceLookups(input.pieceCatalog);
+  const skillView = createSkillRuntimeView(position);
+  const activePieces = pieces.filter((piece) => piece.side === position.sideToMove);
 
-  const boardMoves = pieces
-    .filter((piece) => piece.side === position.sideToMove)
+  const boardMoves = activePieces
     .filter(
       (piece) =>
         isKingPiece(piece) ||
-        !isPieceImmobilized(position, piece.side, piece.row, piece.col),
+        !skillView.immobilizedCells.has(`${piece.side}:${piece.row}:${piece.col}`),
     )
     .flatMap((piece) =>
-      generateBoardPieceMoves({ pieces, piece, position, pieceCatalog: input.pieceCatalog }),
+      generateBoardPieceMoves({ pieces, piece, position, lookups, occupancy, skillView }),
     );
-  const timeSkillOnlyMoves = pieces
-    .filter((piece) => piece.side === position.sideToMove)
+  const timeSkillOnlyMoves = activePieces
     .filter((piece) => {
       const code = toBasePieceCode(piece.pieceCode);
       return code === 'TIME' || piece.char === '時';
     })
-    .filter((piece) => hasAdjacentEnemyPiece(pieces, piece))
+    .filter((piece) => hasAdjacentEnemyPiece(occupancy, piece))
     .map((piece) =>
       createMove({
         from: { row: piece.row, col: piece.col },

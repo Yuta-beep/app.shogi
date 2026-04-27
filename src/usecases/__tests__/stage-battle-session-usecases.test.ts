@@ -1,3 +1,8 @@
+import { postJson } from '@/infra/http/api-client';
+import { supabase } from '@/lib/supabase/supabase-client';
+import { FinishStageBattleSessionUseCase } from '@/usecases/stage-battle/finish-stage-battle-session-usecase';
+import { StartStageBattleSessionUseCase } from '@/usecases/stage-battle/start-stage-battle-session-usecase';
+
 jest.mock('@/infra/http/api-client', () => ({
   postJson: jest.fn(),
 }));
@@ -9,11 +14,6 @@ jest.mock('@/lib/supabase/supabase-client', () => ({
     },
   },
 }));
-
-import { postJson } from '@/infra/http/api-client';
-import { supabase } from '@/lib/supabase/supabase-client';
-import { FinishStageBattleSessionUseCase } from '@/usecases/stage-battle/finish-stage-battle-session-usecase';
-import { StartStageBattleSessionUseCase } from '@/usecases/stage-battle/start-stage-battle-session-usecase';
 
 const mockedPostJson = postJson as jest.MockedFunction<typeof postJson>;
 const mockedGetSession = jest.mocked(supabase.auth.getSession);

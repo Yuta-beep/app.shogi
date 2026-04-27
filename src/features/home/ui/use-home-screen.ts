@@ -13,18 +13,6 @@ export type HomeScreenVM = {
   isLoading: boolean;
 };
 
-const emptySnapshot: HomeSnapshot = {
-  playerName: '',
-  rating: 0,
-  pawnCurrency: 0,
-  goldCurrency: 0,
-  playerRank: 1,
-  playerExp: 0,
-  stamina: 50,
-  maxStamina: 50,
-  nextRecoveryAt: null,
-};
-
 export function useHomeScreen(): HomeScreenVM {
   const state = useSyncExternalStore(subscribeHomeSnapshot, getHomeSnapshotState);
 

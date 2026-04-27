@@ -2,6 +2,23 @@ import { applyMove } from '@/ai/engine/apply-move';
 import { generateLegalMoves } from '@/ai/engine/legal-moves';
 import type { AiBattlePosition, AiPieceDefinition } from '@/ai/model';
 
+type TestBoardPiece = {
+  side: 'player' | 'enemy';
+  row: number;
+  col: number;
+  pieceCode: string;
+  char?: string;
+};
+
+function asAiPosition(position: unknown): AiBattlePosition {
+  return position as AiBattlePosition;
+}
+
+function boardPieces(position: { boardState?: unknown }): TestBoardPiece[] {
+  const boardState = position.boardState as { pieces?: TestBoardPiece[] } | undefined;
+  return boardState?.pieces ?? [];
+}
+
 const pieceCatalog: AiPieceDefinition[] = [
   {
     pieceCode: 'OU',
@@ -161,7 +178,7 @@ describe('stage17 skill compatibility', () => {
       },
     });
     const second = applyMove({
-      position: first.position,
+      position: asAiPosition(first.position),
       pieceCatalog,
       move: {
         fromRow: 0,
@@ -177,7 +194,14 @@ describe('stage17 skill compatibility', () => {
     });
 
     const skillState = second.position.boardState.skill_state as
-      | { board_hazards?: Array<{ row?: number; col?: number; hazard_type?: string; remaining_turns?: number }> }
+      | {
+          board_hazards?: {
+            row?: number;
+            col?: number;
+            hazard_type?: string;
+            remaining_turns?: number;
+          }[];
+        }
       | undefined;
     const hazards = skillState?.board_hazards ?? [];
     expect(
@@ -239,13 +263,11 @@ describe('stage17 skill compatibility', () => {
         notation: null,
       },
     });
-    const legal = generateLegalMoves({ position: committed.position, pieceCatalog });
+    const legal = generateLegalMoves({ position: asAiPosition(committed.position), pieceCatalog });
     const goldMoves = legal.legalMoves.filter((m) => m.fromRow === 4 && m.fromCol === 4);
 
     expect(goldMoves.length).toBeGreaterThan(0);
-    expect(
-      goldMoves.every((m) => m.toCol === 4 && Math.abs((m.toRow ?? 0) - 4) === 1),
-    ).toBe(true);
+    expect(goldMoves.every((m) => m.toCol === 4 && Math.abs((m.toRow ?? 0) - 4) === 1)).toBe(true);
   });
 
   it('does not apply movement modifier to enemy king', () => {
@@ -297,12 +319,12 @@ describe('stage17 skill compatibility', () => {
     });
 
     const skillState = committed.position.boardState.skill_state as
-      | { movement_modifiers?: Array<{ row?: number; col?: number; side?: string }> }
+      | { movement_modifiers?: { row?: number; col?: number; side?: string }[] }
       | undefined;
     const movementModifiers = skillState?.movement_modifiers ?? [];
-    expect(
-      movementModifiers.some((m) => m.side === 'enemy' && m.row === 0 && m.col === 4),
-    ).toBe(false);
+    expect(movementModifiers.some((m) => m.side === 'enemy' && m.row === 0 && m.col === 4)).toBe(
+      false,
+    );
   });
 
   it('applies orthogonal_step_only to adjacent enemy piece legal moves', () => {
@@ -353,7 +375,7 @@ describe('stage17 skill compatibility', () => {
         notation: null,
       },
     });
-    const legal = generateLegalMoves({ position: committed.position, pieceCatalog });
+    const legal = generateLegalMoves({ position: asAiPosition(committed.position), pieceCatalog });
     const goldMoves = legal.legalMoves.filter((m) => m.fromRow === 4 && m.fromCol === 4);
     expect(goldMoves.length).toBeGreaterThan(0);
     expect(
@@ -411,8 +433,8 @@ describe('stage17 skill compatibility', () => {
       },
     });
     const firstStatuses =
-      ((first.position.boardState.skill_state as { piece_statuses?: Array<Record<string, unknown>> })
-        ?.piece_statuses as Array<Record<string, unknown>>) ?? [];
+      ((first.position.boardState.skill_state as { piece_statuses?: Record<string, unknown>[] })
+        ?.piece_statuses as Record<string, unknown>[]) ?? [];
     expect(
       firstStatuses.some(
         (s) =>
@@ -425,7 +447,7 @@ describe('stage17 skill compatibility', () => {
     ).toBe(true);
 
     const second = applyMove({
-      position: first.position,
+      position: asAiPosition(first.position),
       pieceCatalog,
       move: {
         fromRow: 0,
@@ -440,8 +462,11 @@ describe('stage17 skill compatibility', () => {
       },
     });
     const secondStatuses =
-      ((second.position.boardState.skill_state as { piece_statuses?: Array<Record<string, unknown>> })
-        ?.piece_statuses as Array<Record<string, unknown>>) ?? [];
+      ((
+        second.position.boardState.skill_state as {
+          piece_statuses?: Record<string, unknown>[];
+        }
+      )?.piece_statuses as Record<string, unknown>[]) ?? [];
     expect(
       secondStatuses.some(
         (s) =>
@@ -504,7 +529,7 @@ describe('stage17 skill compatibility', () => {
     });
 
     expect(
-      committed.position.boardState.pieces?.some(
+      boardPieces(committed.position).some(
         (p) => p.side === 'enemy' && p.row === 4 && p.col === 3 && p.pieceCode === 'FU',
       ),
     ).toBe(false);
@@ -577,9 +602,9 @@ describe('stage17 skill compatibility', () => {
 
     const skillState = committed.position.boardState.skill_state as
       | {
-          board_hazards?: Array<Record<string, unknown>>;
-          movement_modifiers?: Array<Record<string, unknown>>;
-          piece_statuses?: Array<Record<string, unknown>>;
+          board_hazards?: Record<string, unknown>[];
+          movement_modifiers?: Record<string, unknown>[];
+          piece_statuses?: Record<string, unknown>[];
         }
       | undefined;
     const hazards = skillState?.board_hazards ?? [];
@@ -588,12 +613,17 @@ describe('stage17 skill compatibility', () => {
 
     expect(
       hazards.some(
-        (h) => h.row === 5 && h.col === 4 && h.hazard_type === 'poison_cell' && h.remaining_turns === 2,
+        (h) =>
+          h.row === 5 && h.col === 4 && h.hazard_type === 'poison_cell' && h.remaining_turns === 2,
       ),
     ).toBe(true);
     expect(
       movementModifiers.some(
-        (m) => m.side === 'enemy' && m.row === 4 && m.col === 3 && m.movement_rule === 'vertical_step_only',
+        (m) =>
+          m.side === 'enemy' &&
+          m.row === 4 &&
+          m.col === 3 &&
+          m.movement_rule === 'vertical_step_only',
       ),
     ).toBe(true);
     expect(
@@ -602,9 +632,8 @@ describe('stage17 skill compatibility', () => {
       ),
     ).toBe(true);
     const playerFuCount =
-      committed.position.boardState.pieces?.filter(
-        (p) => p.side === 'player' && p.pieceCode === 'FU',
-      ).length ?? 0;
+      boardPieces(committed.position).filter((p) => p.side === 'player' && p.pieceCode === 'FU')
+        .length ?? 0;
     expect(playerFuCount).toBe(2);
   });
 
@@ -658,8 +687,11 @@ describe('stage17 skill compatibility', () => {
     });
 
     const statuses =
-      ((committed.position.boardState.skill_state as { piece_statuses?: Array<Record<string, unknown>> })
-        ?.piece_statuses as Array<Record<string, unknown>>) ?? [];
+      ((
+        committed.position.boardState.skill_state as {
+          piece_statuses?: Record<string, unknown>[];
+        }
+      )?.piece_statuses as Record<string, unknown>[]) ?? [];
     expect(
       statuses.some(
         (s) =>
@@ -671,7 +703,7 @@ describe('stage17 skill compatibility', () => {
       ),
     ).toBe(true);
 
-    const legal = generateLegalMoves({ position: committed.position, pieceCatalog });
+    const legal = generateLegalMoves({ position: asAiPosition(committed.position), pieceCatalog });
     expect(legal.legalMoves.some((m) => m.fromRow === 4 && m.fromCol === 3)).toBe(false);
   });
 
@@ -757,8 +789,11 @@ describe('stage17 skill compatibility', () => {
       },
     });
     const poisonHazards =
-      ((poisonCommitted.position.boardState.skill_state as { board_hazards?: Array<Record<string, unknown>> })
-        ?.board_hazards as Array<Record<string, unknown>>) ?? [];
+      ((
+        poisonCommitted.position.boardState.skill_state as {
+          board_hazards?: Record<string, unknown>[];
+        }
+      )?.board_hazards as Record<string, unknown>[]) ?? [];
     expect(
       poisonHazards.some((h) => h.row === 5 && h.col === 4 && h.hazard_type === 'poison_cell'),
     ).toBe(true);
@@ -791,11 +826,18 @@ describe('stage17 skill compatibility', () => {
       },
     });
     const swampModifiers =
-      ((swampCommitted.position.boardState.skill_state as { movement_modifiers?: Array<Record<string, unknown>> })
-        ?.movement_modifiers as Array<Record<string, unknown>>) ?? [];
+      ((
+        swampCommitted.position.boardState.skill_state as {
+          movement_modifiers?: Record<string, unknown>[];
+        }
+      )?.movement_modifiers as Record<string, unknown>[]) ?? [];
     expect(
       swampModifiers.some(
-        (m) => m.side === 'enemy' && m.row === 4 && m.col === 3 && m.movement_rule === 'vertical_step_only',
+        (m) =>
+          m.side === 'enemy' &&
+          m.row === 4 &&
+          m.col === 3 &&
+          m.movement_rule === 'vertical_step_only',
       ),
     ).toBe(true);
 
@@ -827,11 +869,18 @@ describe('stage17 skill compatibility', () => {
       },
     });
     const rainbowModifiers =
-      ((rainbowCommitted.position.boardState.skill_state as { movement_modifiers?: Array<Record<string, unknown>> })
-        ?.movement_modifiers as Array<Record<string, unknown>>) ?? [];
+      ((
+        rainbowCommitted.position.boardState.skill_state as {
+          movement_modifiers?: Record<string, unknown>[];
+        }
+      )?.movement_modifiers as Record<string, unknown>[]) ?? [];
     expect(
       rainbowModifiers.some(
-        (m) => m.side === 'enemy' && m.row === 4 && m.col === 3 && m.movement_rule === 'orthogonal_step_only',
+        (m) =>
+          m.side === 'enemy' &&
+          m.row === 4 &&
+          m.col === 3 &&
+          m.movement_rule === 'orthogonal_step_only',
       ),
     ).toBe(true);
 
@@ -863,8 +912,11 @@ describe('stage17 skill compatibility', () => {
       },
     });
     const darkStatuses =
-      ((darkCommitted.position.boardState.skill_state as { piece_statuses?: Array<Record<string, unknown>> })
-        ?.piece_statuses as Array<Record<string, unknown>>) ?? [];
+      ((
+        darkCommitted.position.boardState.skill_state as {
+          piece_statuses?: Record<string, unknown>[];
+        }
+      )?.piece_statuses as Record<string, unknown>[]) ?? [];
     expect(
       darkStatuses.some(
         (s) => s.side === 'enemy' && s.row === 4 && s.col === 3 && s.status_type === 'dark_blind',
@@ -919,8 +971,11 @@ describe('stage17 skill compatibility', () => {
       },
     });
     const hazards =
-      ((committed.position.boardState.skill_state as { board_hazards?: Array<Record<string, unknown>> })
-        ?.board_hazards as Array<Record<string, unknown>>) ?? [];
+      ((
+        committed.position.boardState.skill_state as {
+          board_hazards?: Record<string, unknown>[];
+        }
+      )?.board_hazards as Record<string, unknown>[]) ?? [];
     expect(hazards.length).toBeGreaterThan(0);
     expect(
       hazards.some((h) => h.hazard_type === 'poison_cell' && Number(h.remaining_turns) === 2),
@@ -974,8 +1029,11 @@ describe('stage17 skill compatibility', () => {
       },
     });
     const hazards =
-      ((committed.position.boardState.skill_state as { board_hazards?: Array<Record<string, unknown>> })
-        ?.board_hazards as Array<Record<string, unknown>>) ?? [];
+      ((
+        committed.position.boardState.skill_state as {
+          board_hazards?: Record<string, unknown>[];
+        }
+      )?.board_hazards as Record<string, unknown>[]) ?? [];
     expect(
       hazards.some((h) => h.row === 5 && h.col === 4 && h.hazard_type === 'status:time_stop'),
     ).toBe(true);
@@ -1030,10 +1088,10 @@ describe('stage17 skill compatibility', () => {
       },
     });
     expect(
-      committed.position.boardState.pieces?.some((p) => p.side === 'enemy' && p.row === 4 && p.col === 3),
+      boardPieces(committed.position).some((p) => p.side === 'enemy' && p.row === 4 && p.col === 3),
     ).toBe(false);
     expect(
-      committed.position.boardState.pieces?.some((p) => p.side === 'enemy' && p.row === 4 && p.col === 4),
+      boardPieces(committed.position).some((p) => p.side === 'enemy' && p.row === 4 && p.col === 4),
     ).toBe(false);
   });
 
@@ -1085,8 +1143,13 @@ describe('stage17 skill compatibility', () => {
       },
     });
     expect(
-      committed.position.boardState.pieces?.some(
-        (p) => p.side === 'enemy' && p.row === 4 && p.col === 3 && p.pieceCode === 'KI' && p.char === '金',
+      boardPieces(committed.position).some(
+        (p) =>
+          p.side === 'enemy' &&
+          p.row === 4 &&
+          p.col === 3 &&
+          p.pieceCode === 'KI' &&
+          p.char === '金',
       ),
     ).toBe(true);
   });
@@ -1112,8 +1175,16 @@ describe('stage17 skill compatibility', () => {
               pieceChars: ['FU'],
               trigger: { type: 'after_move' },
               effects: [
-                { type: 'seal_skill', target: { group: 'adjacent', selector: 'adjacent_enemy' }, params: {} },
-                { type: 'disable_piece', target: { group: 'adjacent', selector: 'adjacent_enemy' }, params: {} },
+                {
+                  type: 'seal_skill',
+                  target: { group: 'adjacent', selector: 'adjacent_enemy' },
+                  params: {},
+                },
+                {
+                  type: 'disable_piece',
+                  target: { group: 'adjacent', selector: 'adjacent_enemy' },
+                  params: {},
+                },
               ],
             },
           ],
@@ -1137,13 +1208,20 @@ describe('stage17 skill compatibility', () => {
       },
     });
     const statuses =
-      ((committed.position.boardState.skill_state as { piece_statuses?: Array<Record<string, unknown>> })
-        ?.piece_statuses as Array<Record<string, unknown>>) ?? [];
+      ((
+        committed.position.boardState.skill_state as {
+          piece_statuses?: Record<string, unknown>[];
+        }
+      )?.piece_statuses as Record<string, unknown>[]) ?? [];
     expect(
-      statuses.some((s) => s.side === 'enemy' && s.row === 4 && s.col === 3 && s.status_type === 'skill_sealed'),
+      statuses.some(
+        (s) => s.side === 'enemy' && s.row === 4 && s.col === 3 && s.status_type === 'skill_sealed',
+      ),
     ).toBe(true);
     expect(
-      statuses.some((s) => s.side === 'enemy' && s.row === 4 && s.col === 3 && s.status_type === 'disabled'),
+      statuses.some(
+        (s) => s.side === 'enemy' && s.row === 4 && s.col === 3 && s.status_type === 'disabled',
+      ),
     ).toBe(true);
   });
 
@@ -1167,8 +1245,16 @@ describe('stage17 skill compatibility', () => {
               pieceChars: ['KI'],
               trigger: { type: 'after_move' },
               effects: [
-                { type: 'defense_or_immunity', target: { group: 'self', selector: 'self_piece' }, params: { mode: 'immunity', durationTurns: 2 } },
-                { type: 'defense_or_immunity', target: { group: 'adjacent', selector: 'adjacent_ally' }, params: { mode: 'immunity', durationTurns: 2 } },
+                {
+                  type: 'defense_or_immunity',
+                  target: { group: 'self', selector: 'self_piece' },
+                  params: { mode: 'immunity', durationTurns: 2 },
+                },
+                {
+                  type: 'defense_or_immunity',
+                  target: { group: 'adjacent', selector: 'adjacent_ally' },
+                  params: { mode: 'immunity', durationTurns: 2 },
+                },
               ],
             },
           ],
@@ -1192,10 +1278,21 @@ describe('stage17 skill compatibility', () => {
       },
     });
     const defenses =
-      ((committed.position.boardState.skill_state as { piece_defenses?: Array<Record<string, unknown>> })
-        ?.piece_defenses as Array<Record<string, unknown>>) ?? [];
-    expect(defenses.some((d) => d.side === 'player' && d.row === 4 && d.col === 3 && d.mode === 'immunity')).toBe(true);
-    expect(defenses.some((d) => d.side === 'player' && d.row === 4 && d.col === 4 && d.mode === 'immunity')).toBe(true);
+      ((
+        committed.position.boardState.skill_state as {
+          piece_defenses?: Record<string, unknown>[];
+        }
+      )?.piece_defenses as Record<string, unknown>[]) ?? [];
+    expect(
+      defenses.some(
+        (d) => d.side === 'player' && d.row === 4 && d.col === 3 && d.mode === 'immunity',
+      ),
+    ).toBe(true);
+    expect(
+      defenses.some(
+        (d) => d.side === 'player' && d.row === 4 && d.col === 4 && d.mode === 'immunity',
+      ),
+    ).toBe(true);
   });
 
   it('applies transform self/all_ally and gain/substitute/revive style statuses', () => {
@@ -1218,11 +1315,31 @@ describe('stage17 skill compatibility', () => {
               pieceChars: ['KI'],
               trigger: { type: 'after_move' },
               effects: [
-                { type: 'transform_piece', target: { group: 'self', selector: 'self_piece' }, params: { toPieceCode: 'FU', toPieceChar: '歩' } },
-                { type: 'transform_piece', target: { group: 'global', selector: 'all_ally' }, params: { fromPieceCode: 'FU', toPieceCode: 'KI', toPieceChar: '金' } },
-                { type: 'gain_piece', target: { group: 'hand', selector: 'ally_hand_piece' }, params: { gainPieceCode: 'FU' } },
-                { type: 'substitute', target: { group: 'self', selector: 'self_piece' }, params: {} },
-                { type: 'revive', target: { group: 'adjacent', selector: 'adjacent_ally' }, params: {} },
+                {
+                  type: 'transform_piece',
+                  target: { group: 'self', selector: 'self_piece' },
+                  params: { toPieceCode: 'FU', toPieceChar: '歩' },
+                },
+                {
+                  type: 'transform_piece',
+                  target: { group: 'global', selector: 'all_ally' },
+                  params: { fromPieceCode: 'FU', toPieceCode: 'KI', toPieceChar: '金' },
+                },
+                {
+                  type: 'gain_piece',
+                  target: { group: 'hand', selector: 'ally_hand_piece' },
+                  params: { gainPieceCode: 'FU' },
+                },
+                {
+                  type: 'substitute',
+                  target: { group: 'self', selector: 'self_piece' },
+                  params: {},
+                },
+                {
+                  type: 'revive',
+                  target: { group: 'adjacent', selector: 'adjacent_ally' },
+                  params: {},
+                },
               ],
             },
           ],
@@ -1247,11 +1364,13 @@ describe('stage17 skill compatibility', () => {
     });
     expect(committed.position.hands.player.FU).toBe(1);
     expect(
-      committed.position.boardState.pieces?.some((p) => p.side === 'player' && p.row === 4 && p.col === 3 && p.pieceCode === 'KI'),
+      boardPieces(committed.position).some(
+        (p) => p.side === 'player' && p.row === 4 && p.col === 3 && p.pieceCode === 'KI',
+      ),
     ).toBe(true);
     const skillState = committed.position.boardState.skill_state as {
-      piece_defenses?: Array<Record<string, unknown>>;
-      piece_statuses?: Array<Record<string, unknown>>;
+      piece_defenses?: Record<string, unknown>[];
+      piece_statuses?: Record<string, unknown>[];
     };
     expect((skillState.piece_defenses ?? []).some((d) => d.mode === 'substitute')).toBe(true);
     expect((skillState.piece_statuses ?? []).some((s) => s.status_type === 'revive')).toBe(true);
@@ -1276,7 +1395,11 @@ describe('stage17 skill compatibility', () => {
               pieceChars: ['KI'],
               trigger: { type: 'after_move' },
               effects: [
-                { type: 'script_hook', target: { group: 'self', selector: 'self_piece' }, params: { hook: 'safe_room_king_relocation' } },
+                {
+                  type: 'script_hook',
+                  target: { group: 'self', selector: 'self_piece' },
+                  params: { hook: 'safe_room_king_relocation' },
+                },
               ],
             },
           ],
@@ -1301,7 +1424,7 @@ describe('stage17 skill compatibility', () => {
       },
     });
     expect(
-      relocated.position.boardState.pieces?.some(
+      boardPieces(relocated.position).some(
         (p) => p.side === 'player' && p.pieceCode === 'OU' && p.row === 8 && p.col === 4,
       ),
     ).toBe(true);
@@ -1321,7 +1444,11 @@ describe('stage17 skill compatibility', () => {
               pieceChars: ['KI'],
               trigger: { type: 'after_move' },
               effects: [
-                { type: 'script_hook', target: { group: 'self', selector: 'self_piece' }, params: { hook: 'escape_king_follow' } },
+                {
+                  type: 'script_hook',
+                  target: { group: 'self', selector: 'self_piece' },
+                  params: { hook: 'escape_king_follow' },
+                },
               ],
             },
           ],
@@ -1344,7 +1471,7 @@ describe('stage17 skill compatibility', () => {
       },
     });
     expect(
-      followed.position.boardState.pieces?.some(
+      boardPieces(followed.position).some(
         (p) => p.side === 'player' && p.pieceCode === 'OU' && p.row === 6 && p.col === 4,
       ),
     ).toBe(true);

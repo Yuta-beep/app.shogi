@@ -1,6 +1,5 @@
 import type { BoardCell } from '@/features/stage-shogi/domain/game-rules';
 import {
-  CHAR_TO_CODE,
   CODE_TO_CHAR,
   PROMOTED_CODE_TO_CHAR,
   createPieceSfenMapping,

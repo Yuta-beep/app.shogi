@@ -1,4 +1,9 @@
 describe('create stage battle usecases', () => {
+  const loadModule = () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    return require('@/usecases/stage-battle/create-stage-battle-usecases');
+  };
+
   afterEach(() => {
     jest.resetModules();
     delete process.env.EXPO_PUBLIC_DATA_SOURCE;
@@ -13,7 +18,7 @@ describe('create stage battle usecases', () => {
         },
       },
     }));
-    const mod = require('@/usecases/stage-battle/create-stage-battle-usecases');
+    const mod = loadModule();
 
     expect(mod.createPrepareStageBattleUseCase().constructor.name).toBe(
       'LocalPrepareStageBattleUseCase',
@@ -32,7 +37,7 @@ describe('create stage battle usecases', () => {
         },
       },
     }));
-    const mod = require('@/usecases/stage-battle/create-stage-battle-usecases');
+    const mod = loadModule();
 
     expect(mod.createPrepareStageBattleUseCase().constructor.name).toBe(
       'MockPrepareStageBattleUseCase',

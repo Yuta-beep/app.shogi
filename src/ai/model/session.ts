@@ -2,7 +2,7 @@ import type { StageBattleSessionStart } from '@/usecases/stage-battle/stage-batt
 
 export type AiStageBattleSession = StageBattleSessionStart & {
   board: StageBattleSessionStart['board'] & {
-    placements: Array<{
+    placements: {
       side: string;
       row: number;
       col: number;
@@ -14,7 +14,7 @@ export type AiStageBattleSession = StageBattleSessionStart & {
         imageKey: string | null;
         imageSignedUrl?: string | null;
       };
-    }>;
+    }[];
   };
 };
 

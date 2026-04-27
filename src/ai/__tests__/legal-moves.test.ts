@@ -363,7 +363,9 @@ describe('ai engine legal moves', () => {
     const legal = generateLegalMoves({ position, pieceCatalog });
     const kingMoves = legal.legalMoves.filter((move) => move.fromRow === 7 && move.fromCol === 4);
     expect(kingMoves.length).toBe(4);
-    expect(kingMoves.every((move) => Math.abs(move.toRow - 7) + Math.abs(move.toCol - 4) === 1)).toBe(true);
+    expect(
+      kingMoves.every((move) => Math.abs(move.toRow - 7) + Math.abs(move.toCol - 4) === 1),
+    ).toBe(true);
   });
 
   it('blocks moves for dark_blind pieces', () => {
@@ -415,9 +417,9 @@ describe('ai engine legal moves', () => {
       hands: { player: {}, enemy: {} },
     };
     const legal = generateLegalMoves({ position, pieceCatalog });
-    expect(legal.legalMoves.some((move) => move.fromRow === 5 && move.fromCol === 4 && move.toRow === 4)).toBe(
-      true,
-    );
+    expect(
+      legal.legalMoves.some((move) => move.fromRow === 5 && move.fromCol === 4 && move.toRow === 4),
+    ).toBe(true);
   });
 
   it('cloud piece cannot capture enemy piece', () => {
@@ -439,7 +441,9 @@ describe('ai engine legal moves', () => {
     };
     const legal = generateLegalMoves({ position, pieceCatalog });
     expect(
-      legal.legalMoves.some((move) => move.fromRow === 5 && move.fromCol === 4 && move.toRow === 4 && move.toCol === 4),
+      legal.legalMoves.some(
+        (move) => move.fromRow === 5 && move.fromCol === 4 && move.toRow === 4 && move.toCol === 4,
+      ),
     ).toBe(false);
   });
 
@@ -461,7 +465,9 @@ describe('ai engine legal moves', () => {
     };
     const legal = generateLegalMoves({ position, pieceCatalog });
     expect(
-      legal.legalMoves.some((move) => move.fromRow === 5 && move.fromCol === 4 && move.toRow === 4 && move.toCol === 4),
+      legal.legalMoves.some(
+        (move) => move.fromRow === 5 && move.fromCol === 4 && move.toRow === 4 && move.toCol === 4,
+      ),
     ).toBe(false);
   });
 
@@ -493,7 +499,9 @@ describe('ai engine legal moves', () => {
     };
     const legal = generateLegalMoves({ position, pieceCatalog });
     expect(
-      legal.legalMoves.some((move) => move.fromRow === 7 && move.fromCol === 4 && move.toRow === 6 && move.toCol === 4),
+      legal.legalMoves.some(
+        (move) => move.fromRow === 7 && move.fromCol === 4 && move.toRow === 6 && move.toCol === 4,
+      ),
     ).toBe(false);
   });
 
@@ -550,7 +558,11 @@ describe('ai engine legal moves', () => {
       hands: { player: {}, enemy: {} },
     };
     const legal = generateLegalMoves({ position, pieceCatalog });
-    expect(legal.legalMoves.some((move) => move.fromRow === 5 && move.fromCol === 5 && move.toRow === 4 && move.toCol === 4)).toBe(false);
+    expect(
+      legal.legalMoves.some(
+        (move) => move.fromRow === 5 && move.fromCol === 5 && move.toRow === 4 && move.toCol === 4,
+      ),
+    ).toBe(false);
   });
 
   it('generates reflective diagonal moves for HIK piece', () => {
@@ -570,8 +582,16 @@ describe('ai engine legal moves', () => {
       hands: { player: {}, enemy: {} },
     };
     const legal = generateLegalMoves({ position, pieceCatalog });
-    expect(legal.legalMoves.some((m) => m.fromRow === 5 && m.fromCol === 4 && m.toRow === 4 && m.toCol === 3)).toBe(true);
-    expect(legal.legalMoves.some((m) => m.fromRow === 5 && m.fromCol === 4 && m.toRow === 4 && m.toCol === 5)).toBe(true);
+    expect(
+      legal.legalMoves.some(
+        (m) => m.fromRow === 5 && m.fromCol === 4 && m.toRow === 4 && m.toCol === 3,
+      ),
+    ).toBe(true);
+    expect(
+      legal.legalMoves.some(
+        (m) => m.fromRow === 5 && m.fromCol === 4 && m.toRow === 4 && m.toCol === 5,
+      ),
+    ).toBe(true);
   });
 
   it('allows HOU leap-over-one capture with one platform piece', () => {
@@ -593,7 +613,11 @@ describe('ai engine legal moves', () => {
       hands: { player: {}, enemy: {} },
     };
     const legal = generateLegalMoves({ position, pieceCatalog });
-    expect(legal.legalMoves.some((m) => m.fromRow === 4 && m.fromCol === 4 && m.toRow === 2 && m.toCol === 4)).toBe(true);
+    expect(
+      legal.legalMoves.some(
+        (m) => m.fromRow === 4 && m.fromCol === 4 && m.toRow === 2 && m.toCol === 4,
+      ),
+    ).toBe(true);
   });
 
   it('allows KA bishop to move diagonally any distance', () => {
@@ -613,8 +637,16 @@ describe('ai engine legal moves', () => {
       hands: { player: {}, enemy: {} },
     };
     const legal = generateLegalMoves({ position, pieceCatalog });
-    expect(legal.legalMoves.some((m) => m.fromRow === 4 && m.fromCol === 4 && m.toRow === 0 && m.toCol === 0)).toBe(true);
-    expect(legal.legalMoves.some((m) => m.fromRow === 4 && m.fromCol === 4 && m.toRow === 7 && m.toCol === 7)).toBe(true);
+    expect(
+      legal.legalMoves.some(
+        (m) => m.fromRow === 4 && m.fromCol === 4 && m.toRow === 0 && m.toCol === 0,
+      ),
+    ).toBe(true);
+    expect(
+      legal.legalMoves.some(
+        (m) => m.fromRow === 4 && m.fromCol === 4 && m.toRow === 7 && m.toCol === 7,
+      ),
+    ).toBe(true);
   });
 
   it('forces KI gold move set to forward/diag-forward/sides/backward only', () => {

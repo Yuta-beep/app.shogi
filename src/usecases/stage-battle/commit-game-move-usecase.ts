@@ -1,10 +1,7 @@
 import { normalizeBattleGameStatus, normalizeBattlePosition } from '@/ai/model';
 import { applyLocalMove } from '@/ai/local-engine';
 import { getLocalBattleGame, updateLocalBattleGame } from '@/ai/local-battle-registry';
-import {
-  BattleCommittedMove,
-  BattleMove,
-} from '@/usecases/stage-battle/game-move-contract';
+import { BattleCommittedMove, BattleMove } from '@/usecases/stage-battle/game-move-contract';
 
 export type CommitGameMoveInput = {
   gameId: string;

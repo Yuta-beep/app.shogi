@@ -17,12 +17,7 @@ import {
   toBasePieceCode,
 } from '@/ai/model';
 import { assertMoveAllowedBySessionCatalog } from '@/ai/engine/guardrails';
-import {
-  createPosition,
-  findPieceAt,
-  notationForMove,
-  pieceChar,
-} from '@/ai/engine/shared';
+import { createPosition, findPieceAt, notationForMove, pieceChar } from '@/ai/engine/shared';
 import { generateLegalMoves } from '@/ai/engine/legal-moves';
 import {
   applyBoardHazardsOnLanding,
@@ -121,27 +116,27 @@ export function applyMove(input: {
           hands = addHandPiece(hands, actorSide, capturedCode, 1);
         }
       } else {
-      const capturedBaseCode = toBasePieceCode(captured.pieceCode);
-      const isStarCaptured = capturedBaseCode === 'HOS' || captured.char === '星';
-      if (isStarCaptured) {
-        const procChance = 0.4;
-        const roll = Math.random();
-        const triggered = roll <= procChance;
-        if (triggered) {
-          starReturnProcTriggered = true;
-          hands = addHandPiece(hands, captured.side, 'HOS', 1);
+        const capturedBaseCode = toBasePieceCode(captured.pieceCode);
+        const isStarCaptured = capturedBaseCode === 'HOS' || captured.char === '星';
+        if (isStarCaptured) {
+          const procChance = 0.4;
+          const roll = Math.random();
+          const triggered = roll <= procChance;
+          if (triggered) {
+            starReturnProcTriggered = true;
+            hands = addHandPiece(hands, captured.side, 'HOS', 1);
+          } else {
+            const capturedCode = toBasePieceCode(capturedToHandPieceCode(captured));
+            if (capturedCode) {
+              hands = addHandPiece(hands, actorSide, capturedCode, 1);
+            }
+          }
         } else {
           const capturedCode = toBasePieceCode(capturedToHandPieceCode(captured));
           if (capturedCode) {
             hands = addHandPiece(hands, actorSide, capturedCode, 1);
           }
         }
-      } else {
-        const capturedCode = toBasePieceCode(capturedToHandPieceCode(captured));
-        if (capturedCode) {
-          hands = addHandPiece(hands, actorSide, capturedCode, 1);
-        }
-      }
       }
     }
 
@@ -157,7 +152,8 @@ export function applyMove(input: {
     const resolvedChar = pieceChar(moving.pieceCode, nextPromoted);
     const nextChar =
       resolvedChar === '?' ||
-      (toBasePieceCode(moving.pieceCode) != null && resolvedChar === toBasePieceCode(moving.pieceCode))
+      (toBasePieceCode(moving.pieceCode) != null &&
+        resolvedChar === toBasePieceCode(moving.pieceCode))
         ? moving.char
         : resolvedChar;
     nextPieces[movingIndexAfterCapture] = {

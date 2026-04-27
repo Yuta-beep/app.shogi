@@ -3,10 +3,19 @@ import type { AiBattleMove, AiBattlePosition, AiBoardPiece } from '@/ai/model';
 import { piecesFromBoardState, toBasePieceCode } from '@/ai/model';
 
 type SkillStateRecord = {
-  board_hazards: Array<Record<string, unknown>>;
-  movement_modifiers: Array<Record<string, unknown>>;
-  piece_statuses: Array<Record<string, unknown>>;
-  piece_defenses: Array<Record<string, unknown>>;
+  board_hazards: Record<string, unknown>[];
+  movement_modifiers: Record<string, unknown>[];
+  piece_statuses: Record<string, unknown>[];
+  piece_defenses: Record<string, unknown>[];
+};
+
+export type SkillRuntimeView = {
+  state: SkillStateRecord;
+  movementRulesByCell: Map<string, string>;
+  immobilizedCells: Set<string>;
+  darkBlindCells: Set<string>;
+  kingPoisonBlockedCells: Set<string>;
+  aTransformCells: Set<string>;
 };
 
 const FLAME_PIECE_CODES = new Set(['ENN', 'FLAME', '炎']);
@@ -159,7 +168,7 @@ function pushOrthogonalAdjacentEnemiesToEdge(input: {
   center: AiBoardPiece;
   actorSide: Side;
 }): number {
-  const directions: Array<{ dr: number; dc: number }> = [
+  const directions: { dr: number; dc: number }[] = [
     { dr: -1, dc: 0 },
     { dr: 1, dc: 0 },
     { dr: 0, dc: -1 },
@@ -211,8 +220,7 @@ function moveAdjacentAllySandWithLeader(input: {
       if (!SAND_PIECE_CODES.has(code)) return false;
       if (piece.row === input.center.row && piece.col === input.center.col) return false;
       return (
-        Math.abs(piece.row - input.center.row) <= 1 &&
-        Math.abs(piece.col - input.center.col) <= 1
+        Math.abs(piece.row - input.center.row) <= 1 && Math.abs(piece.col - input.center.col) <= 1
       );
     });
   let moved = 0;
@@ -238,7 +246,7 @@ function summonRandomAdjacentEmptyPiece(input: {
   summonCode: string;
   summonChar: string;
 }): { summoned: boolean; row: number | null; col: number | null } {
-  const candidates: Array<{ row: number; col: number }> = [];
+  const candidates: { row: number; col: number }[] = [];
   for (let dr = -1; dr <= 1; dr += 1) {
     for (let dc = -1; dc <= 1; dc += 1) {
       if (dr === 0 && dc === 0) continue;
@@ -286,6 +294,10 @@ function sideOpposite(side: Side): Side {
   return side === 'player' ? 'enemy' : 'player';
 }
 
+function cellKey(side: Side, row: number, col: number): string {
+  return `${side}:${row}:${col}`;
+}
+
 function hasAdjacentPiece(input: {
   pieces: AiBoardPiece[];
   row: number;
@@ -314,12 +326,16 @@ function hasSameRowAlly(input: {
   col: number;
   side: Side;
 }): boolean {
-  return input.pieces.some((p) => p.side === input.side && p.row === input.row && p.col !== input.col);
+  return input.pieces.some(
+    (p) => p.side === input.side && p.row === input.row && p.col !== input.col,
+  );
 }
 
 function findKingIndex(pieces: AiBoardPiece[], side: Side): number {
   return pieces.findIndex(
-    (p) => p.side === side && (toBasePieceCode(p.pieceCode) === 'OU' || p.char === '王' || p.char === '玉'),
+    (p) =>
+      p.side === side &&
+      (toBasePieceCode(p.pieceCode) === 'OU' || p.char === '王' || p.char === '玉'),
   );
 }
 
@@ -327,12 +343,7 @@ function isCellEmpty(pieces: AiBoardPiece[], row: number, col: number): boolean 
   return !pieces.some((p) => p.row === row && p.col === col);
 }
 
-function incrementHand(
-  position: AiBattlePosition,
-  side: Side,
-  pieceCode: string,
-  delta: number,
-) {
+function incrementHand(position: AiBattlePosition, side: Side, pieceCode: string, delta: number) {
   const bag = { ...(position.hands[side] ?? {}) };
   const key = pieceCode.toUpperCase();
   const current = typeof bag[key] === 'number' ? Math.max(0, Math.floor(bag[key] as number)) : 0;
@@ -388,16 +399,16 @@ function readSkillState(position: AiBattlePosition): SkillStateRecord {
   return {
     board_hazards: asArray(skillState.board_hazards ?? skillState.boardHazards).filter(
       (v): v is Record<string, unknown> => asRecord(v) != null,
-    ) as Array<Record<string, unknown>>,
-    movement_modifiers: asArray(skillState.movement_modifiers ?? skillState.movementModifiers).filter(
-      (v): v is Record<string, unknown> => asRecord(v) != null,
-    ) as Array<Record<string, unknown>>,
+    ) as Record<string, unknown>[],
+    movement_modifiers: asArray(
+      skillState.movement_modifiers ?? skillState.movementModifiers,
+    ).filter((v): v is Record<string, unknown> => asRecord(v) != null) as Record<string, unknown>[],
     piece_statuses: asArray(skillState.piece_statuses ?? skillState.pieceStatuses).filter(
       (v): v is Record<string, unknown> => asRecord(v) != null,
-    ) as Array<Record<string, unknown>>,
+    ) as Record<string, unknown>[],
     piece_defenses: asArray(skillState.piece_defenses ?? skillState.pieceDefenses).filter(
       (v): v is Record<string, unknown> => asRecord(v) != null,
-    ) as Array<Record<string, unknown>>,
+    ) as Record<string, unknown>[],
   };
 }
 
@@ -415,10 +426,74 @@ function writeSkillState(position: AiBattlePosition, state: SkillStateRecord) {
   };
 }
 
+export function createSkillRuntimeView(position: AiBattlePosition): SkillRuntimeView {
+  const state = readSkillState(position);
+  const movementRulesByCell = new Map<string, string>();
+  const immobilizedCells = new Set<string>();
+  const darkBlindCells = new Set<string>();
+  const kingPoisonBlockedCells = new Set<string>();
+  const aTransformCells = new Set<string>();
+
+  for (const entry of state.movement_modifiers) {
+    const side = (asString(entry.side) ?? 'player') === 'enemy' ? 'enemy' : 'player';
+    const row = asNumber(entry.row);
+    const col = asNumber(entry.col);
+    const remaining = asNumber(entry.remaining_turns ?? entry.remainingTurns) ?? 0;
+    const rule = asString(entry.movement_rule ?? entry.movementRule);
+    if (row == null || col == null || remaining <= 0 || !rule) continue;
+    const key = cellKey(side, row, col);
+    if (!movementRulesByCell.has(key)) {
+      movementRulesByCell.set(key, rule);
+    }
+  }
+
+  for (const entry of state.piece_statuses) {
+    const side = (asString(entry.side) ?? 'player') === 'enemy' ? 'enemy' : 'player';
+    const row = asNumber(entry.row);
+    const col = asNumber(entry.col);
+    const remaining = asNumber(entry.remaining_turns ?? entry.remainingTurns) ?? 0;
+    const statusType = asString(entry.status_type ?? entry.statusType) ?? '';
+    if (row == null || col == null || remaining <= 0) continue;
+    const key = cellKey(side, row, col);
+    if (statusType === 'stun' || statusType === 'time_stop' || statusType === 'dark_blind') {
+      immobilizedCells.add(key);
+    }
+    if (statusType === 'dark_blind') {
+      darkBlindCells.add(key);
+    }
+    if (statusType === 'a_transform') {
+      aTransformCells.add(key);
+    }
+  }
+
+  for (const entry of state.board_hazards) {
+    const type = asString(entry.hazard_type ?? entry.hazardType);
+    const row = asNumber(entry.row);
+    const col = asNumber(entry.col);
+    const remaining = asNumber(entry.remaining_turns ?? entry.remainingTurns) ?? 0;
+    const affectsSide =
+      (asString(entry.affects_side ?? entry.affectsSide) ?? 'player') === 'enemy'
+        ? 'enemy'
+        : 'player';
+    if (type !== 'poison_cell' && type !== 'poison') continue;
+    if (row == null || col == null || remaining <= 0) continue;
+    kingPoisonBlockedCells.add(cellKey(affectsSide, row, col));
+  }
+
+  return {
+    state,
+    movementRulesByCell,
+    immobilizedCells,
+    darkBlindCells,
+    kingPoisonBlockedCells,
+    aTransformCells,
+  };
+}
+
 export function tickSkillStateDurations(position: AiBattlePosition) {
   const state = readSkillState(position);
-  function tick(list: Array<Record<string, unknown>>) {
-    const out: Array<Record<string, unknown>> = [];
+  function tick(list: Record<string, unknown>[]) {
+    const out: Record<string, unknown>[] = [];
     for (const entry of list) {
       const remaining = asNumber(entry.remaining_turns ?? entry.remainingTurns) ?? 0;
       if (remaining <= 0) continue;
@@ -441,17 +516,7 @@ export function movementRuleAt(
   row: number,
   col: number,
 ): string | null {
-  const state = readSkillState(position);
-  for (const entry of state.movement_modifiers) {
-    const eSide = (asString(entry.side) ?? 'player') === 'enemy' ? 'enemy' : 'player';
-    const eRow = asNumber(entry.row);
-    const eCol = asNumber(entry.col);
-    const remaining = asNumber(entry.remaining_turns ?? entry.remainingTurns) ?? 0;
-    const rule = asString(entry.movement_rule ?? entry.movementRule);
-    if (remaining <= 0 || !rule) continue;
-    if (eSide === side && eRow === row && eCol === col) return rule;
-  }
-  return null;
+  return createSkillRuntimeView(position).movementRulesByCell.get(cellKey(side, row, col)) ?? null;
 }
 
 export function isPieceImmobilized(
@@ -471,17 +536,7 @@ export function isPieceImmobilized(
   ) {
     return false;
   }
-  const state = readSkillState(position);
-  return state.piece_statuses.some((entry) => {
-    const eSide = (asString(entry.side) ?? 'player') === 'enemy' ? 'enemy' : 'player';
-    const eRow = asNumber(entry.row);
-    const eCol = asNumber(entry.col);
-    const remaining = asNumber(entry.remaining_turns ?? entry.remainingTurns) ?? 0;
-    const statusType = asString(entry.status_type ?? entry.statusType) ?? '';
-    if (remaining <= 0) return false;
-    if (statusType !== 'stun' && statusType !== 'time_stop' && statusType !== 'dark_blind') return false;
-    return eSide === side && eRow === row && eCol === col;
-  });
+  return createSkillRuntimeView(position).immobilizedCells.has(cellKey(side, row, col));
 }
 
 export function isCaptureBlockedByDarkBlind(
@@ -490,17 +545,7 @@ export function isCaptureBlockedByDarkBlind(
   row: number,
   col: number,
 ): boolean {
-  const state = readSkillState(position);
-  return state.piece_statuses.some((entry) => {
-    const eSide = (asString(entry.side) ?? 'player') === 'enemy' ? 'enemy' : 'player';
-    const eRow = asNumber(entry.row);
-    const eCol = asNumber(entry.col);
-    const remaining = asNumber(entry.remaining_turns ?? entry.remainingTurns) ?? 0;
-    const statusType = asString(entry.status_type ?? entry.statusType) ?? '';
-    if (remaining <= 0) return false;
-    if (statusType !== 'dark_blind') return false;
-    return eSide === side && eRow === row && eCol === col;
-  });
+  return createSkillRuntimeView(position).darkBlindCells.has(cellKey(side, row, col));
 }
 
 export function applyBoardHazardsOnLanding(input: {
@@ -515,9 +560,10 @@ export function applyBoardHazardsOnLanding(input: {
     const row = asNumber(entry.row);
     const col = asNumber(entry.col);
     const remaining = asNumber(entry.remaining_turns ?? entry.remainingTurns) ?? 0;
-    const affectsSide = (asString(entry.affects_side ?? entry.affectsSide) ?? 'player') === 'enemy'
-      ? 'enemy'
-      : 'player';
+    const affectsSide =
+      (asString(entry.affects_side ?? entry.affectsSide) ?? 'player') === 'enemy'
+        ? 'enemy'
+        : 'player';
     return (
       remaining > 0 &&
       affectsSide === input.actorSide &&
@@ -550,7 +596,8 @@ export function applyMoveSkillEffects(input: {
   const defsRoot = asRecord(boardState.skill_definitions_v2 ?? boardState.skillDefinitionsV2);
   const defs = asArray(defsRoot?.definitions);
   const state = readSkillState(input.position);
-  if (input.move.fromRow != null && input.move.fromCol != null && input.movedPiece) {
+  const movedPiece = input.movedPiece;
+  if (input.move.fromRow != null && input.move.fromCol != null && movedPiece) {
     state.piece_statuses = state.piece_statuses.map((entry) => {
       const statusType = asString(entry.status_type ?? entry.statusType) ?? '';
       const side = (asString(entry.side) ?? 'player') === 'enemy' ? 'enemy' : 'player';
@@ -561,8 +608,8 @@ export function applyMoveSkillEffects(input: {
       if (row !== input.move.fromRow || col !== input.move.fromCol) return entry;
       return {
         ...entry,
-        row: input.movedPiece.row,
-        col: input.movedPiece.col,
+        row: movedPiece.row,
+        col: movedPiece.col,
       };
     });
   }
@@ -571,8 +618,7 @@ export function applyMoveSkillEffects(input: {
   const isFireMover =
     FIRE_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '火';
   const isWaterMover =
-    WATER_PIECE_CODES.has(movedCode) ||
-    normalizeSkillPieceCode(input.move.pieceCode) === '水';
+    WATER_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '水';
   const isTreasureMover =
     TREASURE_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '宝';
   const isIronMover =
@@ -619,7 +665,12 @@ export function applyMoveSkillEffects(input: {
     DARK_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '闇';
 
   // ai.shogi の explicit override 相当: 定義読み込み失敗時でも炎スキルは発動可能にする。
-  if (isFlameMover && input.move.fromRow != null && input.move.fromCol != null && input.movedPiece) {
+  if (
+    isFlameMover &&
+    input.move.fromRow != null &&
+    input.move.fromCol != null &&
+    input.movedPiece
+  ) {
     const procChance = 0.2;
     const roll = Math.random();
     const triggered = roll <= procChance;
@@ -666,7 +717,12 @@ export function applyMoveSkillEffects(input: {
     }
   }
   // 水: 移動時に周囲8マスの敵駒を1マス押し流す。
-  if (isWaterMover && input.move.fromRow != null && input.move.fromCol != null && input.movedPiece) {
+  if (
+    isWaterMover &&
+    input.move.fromRow != null &&
+    input.move.fromCol != null &&
+    input.movedPiece
+  ) {
     pushAdjacentEnemyPiecesOneStep({
       pieces: input.pieces,
       center: input.movedPiece,
@@ -710,17 +766,17 @@ export function applyMoveSkillEffects(input: {
     });
   }
   // 魚: 移動時30%で周囲の敵駒1体（玉除く）を3ターン行動不能（stun）。
-  if (isFishMover && input.move.fromRow != null && input.move.fromCol != null && input.movedPiece) {
+  if (isFishMover && input.move.fromRow != null && input.move.fromCol != null && movedPiece) {
     const procChance = 0.3;
     const roll = Math.random();
     const triggered = roll <= procChance;
     if (triggered) {
       const candidates = input.pieces.filter((piece) => {
         if (piece.side === input.actorSide) return false;
-        if (Math.abs(piece.row - input.movedPiece.row) > 1 || Math.abs(piece.col - input.movedPiece.col) > 1) {
+        if (Math.abs(piece.row - movedPiece.row) > 1 || Math.abs(piece.col - movedPiece.col) > 1) {
           return false;
         }
-        if (piece.row === input.movedPiece.row && piece.col === input.movedPiece.col) return false;
+        if (piece.row === movedPiece.row && piece.col === movedPiece.col) return false;
         const base = toBasePieceCode(piece.pieceCode);
         if (base === 'OU' || piece.char === '王' || piece.char === '玉') return false;
         return true;
@@ -753,7 +809,12 @@ export function applyMoveSkillEffects(input: {
     }
   }
   // 虹: 周囲8マスの敵駒の移動範囲を縦横1マスに制限する。
-  if (isRainbowMover && input.move.fromRow != null && input.move.fromCol != null && input.movedPiece) {
+  if (
+    isRainbowMover &&
+    input.move.fromRow != null &&
+    input.move.fromCol != null &&
+    input.movedPiece
+  ) {
     for (let dr = -1; dr <= 1; dr += 1) {
       for (let dc = -1; dc <= 1; dc += 1) {
         if (dr === 0 && dc === 0) continue;
@@ -773,7 +834,12 @@ export function applyMoveSkillEffects(input: {
     }
   }
   // 沼: 周囲8マスの敵駒の移動範囲を上下1マスに制限する。
-  if (isSwampMover && input.move.fromRow != null && input.move.fromCol != null && input.movedPiece) {
+  if (
+    isSwampMover &&
+    input.move.fromRow != null &&
+    input.move.fromCol != null &&
+    input.movedPiece
+  ) {
     let affectedCount = 0;
     for (let dr = -1; dr <= 1; dr += 1) {
       for (let dc = -1; dc <= 1; dc += 1) {
@@ -827,13 +893,18 @@ export function applyMoveSkillEffects(input: {
     for (const piece of input.pieces) {
       if (!isAPieceInstance(piece)) continue;
       if (piece.side === input.actorSide) continue;
-      if (Math.abs(piece.row - input.movedPiece.row) > 1 || Math.abs(piece.col - input.movedPiece.col) > 1) continue;
+      if (
+        Math.abs(piece.row - input.movedPiece.row) > 1 ||
+        Math.abs(piece.col - input.movedPiece.col) > 1
+      )
+        continue;
       triggerCenters.push(piece);
     }
     const centerKey = (piece: AiBoardPiece) => `${piece.side}:${piece.row}:${piece.col}`;
-    const uniqueCenters = triggerCenters.filter((piece, idx, arr) => arr.findIndex((p) => centerKey(p) === centerKey(piece)) === idx);
+    const uniqueCenters = triggerCenters.filter(
+      (piece, idx, arr) => arr.findIndex((p) => centerKey(p) === centerKey(piece)) === idx,
+    );
     for (const center of uniqueCenters) {
-      let transformedCount = 0;
       for (let dr = -1; dr <= 1; dr += 1) {
         for (let dc = -1; dc <= 1; dc += 1) {
           if (dr === 0 && dc === 0) continue;
@@ -842,7 +913,12 @@ export function applyMoveSkillEffects(input: {
           if (row < 0 || row > 8 || col < 0 || col > 8) continue;
           const target = input.pieces.find((piece) => piece.row === row && piece.col === col);
           if (!target || target.side === center.side) continue;
-          if (target.char === '王' || target.char === '玉' || toBasePieceCode(target.pieceCode) === 'OU') continue;
+          if (
+            target.char === '王' ||
+            target.char === '玉' ||
+            toBasePieceCode(target.pieceCode) === 'OU'
+          )
+            continue;
           target.pieceCode = 'FU';
           target.char = '歩';
           target.promoted = false;
@@ -874,7 +950,6 @@ export function applyMoveSkillEffects(input: {
               remaining_turns: 999,
             });
           }
-          transformedCount += 1;
         }
       }
     }
@@ -912,30 +987,23 @@ export function applyMoveSkillEffects(input: {
     }
   }
   // 電: 移動時20%で周囲8マスの敵駒1体（玉除く）を3ターン行動不能（stun）。
-  if (
-    isElectricMover &&
-    input.move.fromRow != null &&
-    input.move.fromCol != null &&
-    input.movedPiece
-  ) {
+  if (isElectricMover && input.move.fromRow != null && input.move.fromCol != null && movedPiece) {
     const procChance = 0.2;
     const roll = Math.random();
     const triggered = roll <= procChance;
-    let selectedTarget: { row: number; col: number; side: Side } | null = null;
     if (triggered) {
       const candidates = input.pieces.filter((piece) => {
         if (piece.side === input.actorSide) return false;
-        if (Math.abs(piece.row - input.movedPiece.row) > 1 || Math.abs(piece.col - input.movedPiece.col) > 1) {
+        if (Math.abs(piece.row - movedPiece.row) > 1 || Math.abs(piece.col - movedPiece.col) > 1) {
           return false;
         }
-        if (piece.row === input.movedPiece.row && piece.col === input.movedPiece.col) return false;
+        if (piece.row === movedPiece.row && piece.col === movedPiece.col) return false;
         const base = toBasePieceCode(piece.pieceCode);
         if (base === 'OU' || piece.char === '王' || piece.char === '玉') return false;
         return true;
       });
       if (candidates.length > 0) {
         const target = candidates[Math.floor(Math.random() * candidates.length)]!;
-        selectedTarget = { row: target.row, col: target.col, side: target.side };
         state.piece_statuses.push({
           row: target.row,
           col: target.col,
@@ -962,25 +1030,23 @@ export function applyMoveSkillEffects(input: {
     }
   }
   // 氷: 移動時30%で周囲8マスの敵駒（玉除く）1体を2ターン行動不能（stun）。
-  if (isIceMover && input.move.fromRow != null && input.move.fromCol != null && input.movedPiece) {
+  if (isIceMover && input.move.fromRow != null && input.move.fromCol != null && movedPiece) {
     const procChance = 0.3;
     const roll = Math.random();
     const triggered = roll <= procChance;
-    let selectedTarget: { row: number; col: number; side: Side } | null = null;
     if (triggered) {
       const candidates = input.pieces.filter((piece) => {
         if (piece.side === input.actorSide) return false;
-        if (Math.abs(piece.row - input.movedPiece.row) > 1 || Math.abs(piece.col - input.movedPiece.col) > 1) {
+        if (Math.abs(piece.row - movedPiece.row) > 1 || Math.abs(piece.col - movedPiece.col) > 1) {
           return false;
         }
-        if (piece.row === input.movedPiece.row && piece.col === input.movedPiece.col) return false;
+        if (piece.row === movedPiece.row && piece.col === movedPiece.col) return false;
         const base = toBasePieceCode(piece.pieceCode);
         if (base === 'OU' || piece.char === '王' || piece.char === '玉') return false;
         return true;
       });
       if (candidates.length > 0) {
         const target = candidates[Math.floor(Math.random() * candidates.length)]!;
-        selectedTarget = { row: target.row, col: target.col, side: target.side };
         state.piece_statuses.push({
           row: target.row,
           col: target.col,
@@ -1001,19 +1067,23 @@ export function applyMoveSkillEffects(input: {
     }
   }
   // 時: skill 発動時（time_skill_only/time_skill）に周囲8マスの敵駒（玉除く）を4ターン行動不能。
-  if (isTimeMover && (input.move.notation === 'time_skill_only' || input.move.notation === 'time_skill')) {
+  if (
+    isTimeMover &&
+    (input.move.notation === 'time_skill_only' || input.move.notation === 'time_skill')
+  ) {
     const center =
       input.movedPiece ??
       (input.move.fromRow != null && input.move.fromCol != null
-        ? input.pieces.find(
+        ? (input.pieces.find(
             (piece) =>
               piece.side === input.actorSide &&
               piece.row === input.move.fromRow &&
               piece.col === input.move.fromCol &&
-              TIME_PIECE_CODES.has(normalizeSkillPieceCode(toBasePieceCode(piece.pieceCode) ?? piece.char)),
-          ) ?? null
+              TIME_PIECE_CODES.has(
+                normalizeSkillPieceCode(toBasePieceCode(piece.pieceCode) ?? piece.char),
+              ),
+          ) ?? null)
         : null);
-    let stunnedCount = 0;
     if (center) {
       for (let dr = -1; dr <= 1; dr += 1) {
         for (let dc = -1; dc <= 1; dc += 1) {
@@ -1032,7 +1102,6 @@ export function applyMoveSkillEffects(input: {
             status_type: 'stun',
             remaining_turns: 4,
           });
-          stunnedCount += 1;
         }
       }
     }
@@ -1042,20 +1111,14 @@ export function applyMoveSkillEffects(input: {
     const procChance = 0.1;
     const roll = Math.random();
     const triggered = roll <= procChance;
-    let summoned = false;
-    let summonedRow: number | null = null;
-    let summonedCol: number | null = null;
     if (triggered) {
-      const summonedResult = summonRandomAdjacentEmptyPiece({
+      summonRandomAdjacentEmptyPiece({
         pieces: input.pieces,
         center: input.movedPiece,
         actorSide: input.actorSide,
         summonCode: 'MOK',
         summonChar: '木',
       });
-      summoned = summonedResult.summoned;
-      summonedRow = summonedResult.row;
-      summonedCol = summonedResult.col;
     }
   }
   // 葉: 移動時10%で周囲8マスのランダム1マスに葉を召喚。
@@ -1063,24 +1126,23 @@ export function applyMoveSkillEffects(input: {
     const procChance = 0.1;
     const roll = Math.random();
     const triggered = roll <= procChance;
-    let summoned = false;
-    let summonedRow: number | null = null;
-    let summonedCol: number | null = null;
     if (triggered) {
-      const summonedResult = summonRandomAdjacentEmptyPiece({
+      summonRandomAdjacentEmptyPiece({
         pieces: input.pieces,
         center: input.movedPiece,
         actorSide: input.actorSide,
         summonCode: 'HAA',
         summonChar: '葉',
       });
-      summoned = summonedResult.summoned;
-      summonedRow = summonedResult.row;
-      summonedCol = summonedResult.col;
     }
   }
   // 魔: 移動時10%で周囲8マスの敵駒を最大2体消滅。
-  if (isDemonMover && input.move.fromRow != null && input.move.fromCol != null && input.movedPiece) {
+  if (
+    isDemonMover &&
+    input.move.fromRow != null &&
+    input.move.fromCol != null &&
+    input.movedPiece
+  ) {
     if (Math.random() <= 0.1) {
       removeUpToRandomAdjacentEnemyPieces({
         pieces: input.pieces,
@@ -1173,7 +1235,8 @@ export function applyMoveSkillEffects(input: {
           row: input.move.fromRow,
           col: input.move.fromCol,
           hazard_type: hazardType,
-          affects_side: hazardType === 'poison_cell' ? sideOpposite(input.actorSide) : input.actorSide,
+          affects_side:
+            hazardType === 'poison_cell' ? sideOpposite(input.actorSide) : input.actorSide,
           remaining_turns: duration,
         });
         continue;
@@ -1194,7 +1257,8 @@ export function applyMoveSkillEffects(input: {
               row,
               col,
               hazard_type: hazardType,
-              affects_side: hazardType === 'poison_cell' ? sideOpposite(input.actorSide) : input.actorSide,
+              affects_side:
+                hazardType === 'poison_cell' ? sideOpposite(input.actorSide) : input.actorSide,
               remaining_turns: duration,
             });
           }
@@ -1560,8 +1624,12 @@ export function applyMoveSkillEffects(input: {
           .map((p, idx) => ({ p, idx }))
           .filter(({ p }) => {
             if (p.side === input.actorSide) return false;
-            if (p.char === '王' || p.char === '玉' || toBasePieceCode(p.pieceCode) === 'OU') return false;
-            return Math.abs(p.row - input.movedPiece!.row) <= 1 && Math.abs(p.col - input.movedPiece!.col) <= 1;
+            if (p.char === '王' || p.char === '玉' || toBasePieceCode(p.pieceCode) === 'OU')
+              return false;
+            return (
+              Math.abs(p.row - input.movedPiece!.row) <= 1 &&
+              Math.abs(p.col - input.movedPiece!.col) <= 1
+            );
           });
         if (candidates.length <= 0) continue;
         const randomOne = params.randomOne === true;
@@ -1585,7 +1653,11 @@ export function applyMoveSkillEffects(input: {
             if (idx < 0) continue;
             const target = input.pieces[idx]!;
             if (target.side === input.actorSide) continue;
-            if (target.char === '王' || target.char === '玉' || toBasePieceCode(target.pieceCode) === 'OU') {
+            if (
+              target.char === '王' ||
+              target.char === '玉' ||
+              toBasePieceCode(target.pieceCode) === 'OU'
+            ) {
               continue;
             }
             input.pieces.splice(idx, 1);
@@ -1604,7 +1676,11 @@ export function applyMoveSkillEffects(input: {
         if (idx < 0) continue;
         const target = input.pieces[idx]!;
         if (target.side === input.actorSide) continue;
-        if (target.char === '王' || target.char === '玉' || toBasePieceCode(target.pieceCode) === 'OU') {
+        if (
+          target.char === '王' ||
+          target.char === '玉' ||
+          toBasePieceCode(target.pieceCode) === 'OU'
+        ) {
           continue;
         }
         input.pieces.splice(idx, 1);
@@ -1615,8 +1691,12 @@ export function applyMoveSkillEffects(input: {
         if (!input.movedPiece) continue;
         const idx = input.pieces.findIndex((p) => {
           if (p.side === input.actorSide) return false;
-          if (p.char === '王' || p.char === '玉' || toBasePieceCode(p.pieceCode) === 'OU') return false;
-          return Math.abs(p.row - input.movedPiece!.row) <= 1 && Math.abs(p.col - input.movedPiece!.col) <= 1;
+          if (p.char === '王' || p.char === '玉' || toBasePieceCode(p.pieceCode) === 'OU')
+            return false;
+          return (
+            Math.abs(p.row - input.movedPiece!.row) <= 1 &&
+            Math.abs(p.col - input.movedPiece!.col) <= 1
+          );
         });
         if (idx >= 0) {
           const target = input.pieces[idx]!;
@@ -1633,7 +1713,8 @@ export function applyMoveSkillEffects(input: {
       if (effectType === 'return_to_hand' && selector === 'self_piece') {
         if (!input.movedPiece) continue;
         const handOwner = asString(params.handOwner) ?? 'self';
-        const ownerSide: Side = handOwner === 'enemy' ? sideOpposite(input.actorSide) : input.actorSide;
+        const ownerSide: Side =
+          handOwner === 'enemy' ? sideOpposite(input.actorSide) : input.actorSide;
         const code = toBasePieceCode(input.movedPiece.pieceCode);
         const idx = input.pieces.findIndex(
           (p) =>
@@ -1653,8 +1734,12 @@ export function applyMoveSkillEffects(input: {
         if (!toPieceCode && !toPieceChar) continue;
         const idx = input.pieces.findIndex((p) => {
           if (p.side === input.actorSide) return false;
-          if (p.char === '王' || p.char === '玉' || toBasePieceCode(p.pieceCode) === 'OU') return false;
-          return Math.abs(p.row - input.movedPiece!.row) <= 1 && Math.abs(p.col - input.movedPiece!.col) <= 1;
+          if (p.char === '王' || p.char === '玉' || toBasePieceCode(p.pieceCode) === 'OU')
+            return false;
+          return (
+            Math.abs(p.row - input.movedPiece!.row) <= 1 &&
+            Math.abs(p.col - input.movedPiece!.col) <= 1
+          );
         });
         if (idx < 0) continue;
         const target = input.pieces[idx]!;

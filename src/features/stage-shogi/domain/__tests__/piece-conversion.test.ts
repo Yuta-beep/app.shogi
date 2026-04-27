@@ -317,7 +317,7 @@ describe('piece conversion via DB-derived mapping', () => {
 
   it('resolveHandsStateFromCanonicalSfenAndJson falls back to JSON when SFEN parses empty but JSON has pieces', () => {
     const json: HandsState = { player: { FU: 1 }, enemy: {} };
-    const sfen = '9/9/9/9/9/9/9/9/9 b 3= 1';
+    const sfen = '9/9/9/9/9/9/9/9/9 b 3/ 1';
     expect(resolveHandsStateFromCanonicalSfenAndJson(sfen, pieceSfenMapping, json)).toEqual(json);
   });
 

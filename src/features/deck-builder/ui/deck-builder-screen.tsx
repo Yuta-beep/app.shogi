@@ -1,16 +1,7 @@
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import { useCallback, useMemo, useRef, useState } from 'react';
-import {
-  Alert,
-  Modal,
-  Pressable,
-  Text,
-  TextInput,
-  View,
-  ScrollView,
-  PanResponder,
-} from 'react-native';
+import { useCallback, useMemo, useState } from 'react';
+import { Alert, Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import Svg, { Line, Rect } from 'react-native-svg';
 
 import { AppLoadingScreen } from '@/components/organism/app-loading-screen';
@@ -82,11 +73,6 @@ export function DeckBuilderScreen() {
   const router = useRouter();
   const vm = useDeckBuilderScreen();
   const [activeCell, setActiveCell] = useState<{ row: number; col: number } | null>(null);
-  const [boardTouchArea, setBoardTouchArea] = useState({ width: 0, height: 0 });
-  const dragLastCellKeyRef = useRef<string | null>(null);
-  const longPressTriggeredRef = useRef(false);
-  const startTouchRef = useRef({ x: 0, y: 0 });
-  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { isReady: areAssetsReady } = useAssetPreload(
     [deckAssets.bg, ...listLocalPieceImageModules()],
     {
@@ -94,25 +80,6 @@ export function DeckBuilderScreen() {
     },
   );
   useScreenBgm('deckBuilder');
-
-  const getCellFromTouch = useCallback(
-    (x: number, y: number): { row: number; col: number } | null => {
-      if (boardTouchArea.width <= 0 || boardTouchArea.height <= 0) return null;
-      if (x < 0 || y < 0 || x >= boardTouchArea.width || y >= boardTouchArea.height) return null;
-      const col = Math.floor((x / boardTouchArea.width) * BOARD_SIZE);
-      const row = Math.floor((y / boardTouchArea.height) * BOARD_SIZE);
-      if (row < 0 || row >= BOARD_SIZE || col < 0 || col >= BOARD_SIZE) return null;
-      return { row, col };
-    },
-    [boardTouchArea.height, boardTouchArea.width],
-  );
-
-  const getPlacementAt = useCallback(
-    (row: number, col: number) =>
-      vm.boardPlacements.find((placement) => placement.row === row && placement.col === col) ??
-      null,
-    [vm.boardPlacements],
-  );
 
   const applyCellAction = useCallback(
     (row: number, col: number) => {
@@ -122,74 +89,9 @@ export function DeckBuilderScreen() {
     [vm],
   );
 
-  const clearLongPressTimer = useCallback(() => {
-    if (longPressTimerRef.current) {
-      clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-    }
-  }, []);
-
-  const beginLongPressDetection = useCallback(
-    (row: number, col: number) => {
-      const placement = getPlacementAt(row, col);
-      if (!placement) return;
-      clearLongPressTimer();
-      longPressTimerRef.current = setTimeout(() => {
-        longPressTriggeredRef.current = true;
-        vm.openPieceDetail(placement.piece);
-      }, 420);
-    },
-    [clearLongPressTimer, getPlacementAt, vm],
-  );
-
-  const boardPanResponder = useMemo(
-    () =>
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => true,
-        onStartShouldSetPanResponderCapture: () => true,
-        onMoveShouldSetPanResponder: () => true,
-        onMoveShouldSetPanResponderCapture: () => true,
-        onPanResponderGrant: (event) => {
-          longPressTriggeredRef.current = false;
-          const { locationX, locationY } = event.nativeEvent;
-          startTouchRef.current = { x: locationX, y: locationY };
-          const cell = getCellFromTouch(locationX, locationY);
-          dragLastCellKeyRef.current = cell ? `${cell.row}-${cell.col}` : null;
-          if (cell) beginLongPressDetection(cell.row, cell.col);
-        },
-        onPanResponderMove: (event) => {
-          const { locationX, locationY } = event.nativeEvent;
-          const dx = locationX - startTouchRef.current.x;
-          const dy = locationY - startTouchRef.current.y;
-          if (Math.hypot(dx, dy) > 6) {
-            clearLongPressTimer();
-          }
-          const cell = getCellFromTouch(locationX, locationY);
-          if (!cell) return;
-          const key = `${cell.row}-${cell.col}`;
-          if (dragLastCellKeyRef.current === key) return;
-          dragLastCellKeyRef.current = key;
-          applyCellAction(cell.row, cell.col);
-        },
-        onPanResponderRelease: (event) => {
-          clearLongPressTimer();
-          const { locationX, locationY } = event.nativeEvent;
-          const cell = getCellFromTouch(locationX, locationY);
-          if (!cell) return;
-          if (!longPressTriggeredRef.current) {
-            applyCellAction(cell.row, cell.col);
-          }
-        },
-        onPanResponderTerminate: () => {
-          clearLongPressTimer();
-        },
-      }),
-    [applyCellAction, beginLongPressDetection, clearLongPressTimer, getCellFromTouch],
-  );
-
   const validPlacementCells = useMemo(() => {
-    if (!vm.selectedPieceForPlacement) return [] as Array<{ row: number; col: number }>;
-    const cells: Array<{ row: number; col: number }> = [];
+    if (!vm.selectedPieceForPlacement) return [] as { row: number; col: number }[];
+    const cells: { row: number; col: number }[] = [];
     for (let row = 6; row < BOARD_SIZE; row += 1) {
       for (let col = 0; col < BOARD_SIZE; col += 1) {
         if (vm.isValidPlacementAt(row, col)) {
@@ -198,7 +100,7 @@ export function DeckBuilderScreen() {
       }
     }
     return cells;
-  }, [vm.selectedPieceForPlacement, vm.boardPlacements, vm.isValidPlacementAt]);
+  }, [vm]);
 
   if (vm.isLoading || !areAssetsReady) {
     return <AppLoadingScreen imageSource={homeAssets.loadingImage} />;
@@ -268,10 +170,6 @@ export function DeckBuilderScreen() {
               left: `${BOARD_PADDING_RATIO * 100}%`,
               width: `${(BOARD_INNER / BOARD_VIEWBOX) * 100}%`,
               height: `${(BOARD_INNER / BOARD_VIEWBOX) * 100}%`,
-            }}
-            onLayout={(event) => {
-              const { width, height } = event.nativeEvent.layout;
-              setBoardTouchArea({ width, height });
             }}
           >
             <Svg

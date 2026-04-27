@@ -1,3 +1,9 @@
+import { resetLocalBattleRegistry } from '@/ai/local-battle-registry';
+import {
+  LocalClaimStageClearRewardUseCase,
+  LocalPrepareStageBattleUseCase,
+} from '@/usecases/stage-battle/local-stage-battle-usecases';
+
 jest.mock('@/lib/supabase/supabase-client', () => ({
   supabase: {
     auth: {
@@ -5,12 +11,6 @@ jest.mock('@/lib/supabase/supabase-client', () => ({
     },
   },
 }));
-
-import { resetLocalBattleRegistry } from '@/ai/local-battle-registry';
-import {
-  LocalClaimStageClearRewardUseCase,
-  LocalPrepareStageBattleUseCase,
-} from '@/usecases/stage-battle/local-stage-battle-usecases';
 
 describe('local stage battle usecases', () => {
   beforeEach(() => {

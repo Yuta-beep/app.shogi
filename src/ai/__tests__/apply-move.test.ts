@@ -1,6 +1,27 @@
 import { applyMove } from '@/ai/engine/apply-move';
 import type { AiBattlePosition, AiPieceDefinition } from '@/ai/model';
 
+type TestBoardPiece = {
+  side: 'player' | 'enemy';
+  row: number;
+  col: number;
+  pieceCode: string;
+  char?: string;
+  promoted?: boolean;
+};
+
+function boardPieces(position: { boardState?: unknown }): TestBoardPiece[] {
+  const boardState = position.boardState as { pieces?: TestBoardPiece[] } | undefined;
+  return boardState?.pieces ?? [];
+}
+
+function handTotal(hand: Record<string, number | undefined>): number {
+  return Object.values(hand).reduce<number>(
+    (sum, value) => sum + (typeof value === 'number' ? value : 0),
+    0,
+  );
+}
+
 const pieceCatalog: AiPieceDefinition[] = [
   {
     pieceCode: 'OU',
@@ -474,12 +495,9 @@ describe('ai engine apply move', () => {
     });
 
     expect(
-      committed.position.boardState.pieces?.some(
+      boardPieces(committed.position).some(
         (piece) =>
-          piece.side === 'player' &&
-          piece.row === 4 &&
-          piece.col === 4 &&
-          piece.pieceCode === 'FU',
+          piece.side === 'player' && piece.row === 4 && piece.col === 4 && piece.pieceCode === 'FU',
       ),
     ).toBe(false);
     expect(committed.position.hands.player.FU).toBe(2);
@@ -534,7 +552,7 @@ describe('ai engine apply move', () => {
     });
 
     const summonedCount =
-      committed.position.boardState.pieces?.filter(
+      boardPieces(committed.position).filter(
         (piece) => piece.side === 'player' && piece.pieceCode === 'FU',
       ).length ?? 0;
     // ai.shogi互換: adjacent_empty は最初の空き1マスのみ召喚
@@ -592,19 +610,24 @@ describe('ai engine apply move', () => {
     });
 
     const skillState = committed.position.boardState.skill_state as
-      | { piece_statuses?: Array<{ side?: string; row?: number; col?: number; status_type?: string }> }
+      | {
+          piece_statuses?: {
+            side?: string;
+            row?: number;
+            col?: number;
+            status_type?: string;
+          }[];
+        }
       | undefined;
     const statuses = skillState?.piece_statuses ?? [];
     expect(
       statuses.some(
-        (s) =>
-          s.side === 'enemy' && s.row === 4 && s.col === 3 && s.status_type === 'stun',
+        (s) => s.side === 'enemy' && s.row === 4 && s.col === 3 && s.status_type === 'stun',
       ),
     ).toBe(true);
     expect(
       statuses.some(
-        (s) =>
-          s.side === 'enemy' && s.row === 4 && s.col === 5 && s.status_type === 'stun',
+        (s) => s.side === 'enemy' && s.row === 4 && s.col === 5 && s.status_type === 'stun',
       ),
     ).toBe(true);
   });
@@ -665,8 +688,9 @@ describe('ai engine apply move', () => {
     randomSpy.mockRestore();
 
     const remainingAdjacentEnemy =
-      committed.position.boardState.pieces?.filter(
-        (piece) => piece.side === 'enemy' && piece.row === 4 && (piece.col === 3 || piece.col === 5),
+      boardPieces(committed.position).filter(
+        (piece) =>
+          piece.side === 'enemy' && piece.row === 4 && (piece.col === 3 || piece.col === 5),
       ) ?? [];
     expect(remainingAdjacentEnemy).toHaveLength(1);
   });
@@ -725,8 +749,9 @@ describe('ai engine apply move', () => {
     randomSpy.mockRestore();
 
     const remainingAdjacentEnemy =
-      committed.position.boardState.pieces?.filter(
-        (piece) => piece.side === 'enemy' && piece.row === 4 && (piece.col === 3 || piece.col === 5),
+      boardPieces(committed.position).filter(
+        (piece) =>
+          piece.side === 'enemy' && piece.row === 4 && (piece.col === 3 || piece.col === 5),
       ) ?? [];
     expect(remainingAdjacentEnemy).toHaveLength(2);
   });
@@ -766,10 +791,7 @@ describe('ai engine apply move', () => {
     });
     randomSpy.mockRestore();
 
-    const enemyHandTotal = Object.values(committed.position.hands.enemy).reduce(
-      (sum, value) => sum + (typeof value === 'number' ? value : 0),
-      0,
-    );
+    const enemyHandTotal = handTotal(committed.position.hands.enemy);
     expect(enemyHandTotal).toBe(1);
   });
 
@@ -808,10 +830,7 @@ describe('ai engine apply move', () => {
     });
     randomSpy.mockRestore();
 
-    const enemyHandTotal = Object.values(committed.position.hands.enemy).reduce(
-      (sum, value) => sum + (typeof value === 'number' ? value : 0),
-      0,
-    );
+    const enemyHandTotal = handTotal(committed.position.hands.enemy);
     expect(enemyHandTotal).toBe(2);
   });
 
@@ -850,10 +869,10 @@ describe('ai engine apply move', () => {
       },
     });
 
-    const enemyAt42 = committed.position.boardState.pieces?.find(
+    const enemyAt42 = boardPieces(committed.position).find(
       (piece) => piece.side === 'enemy' && piece.row === 4 && piece.col === 2,
     );
-    const enemyAt46 = committed.position.boardState.pieces?.find(
+    const enemyAt46 = boardPieces(committed.position).find(
       (piece) => piece.side === 'enemy' && piece.row === 4 && piece.col === 6,
     );
     expect(enemyAt42?.pieceCode).toBe('FU');
@@ -895,10 +914,10 @@ describe('ai engine apply move', () => {
       },
     });
 
-    const enemyAt42 = committed.position.boardState.pieces?.find(
+    const enemyAt42 = boardPieces(committed.position).find(
       (piece) => piece.side === 'enemy' && piece.row === 4 && piece.col === 2,
     );
-    const enemyAt46 = committed.position.boardState.pieces?.find(
+    const enemyAt46 = boardPieces(committed.position).find(
       (piece) => piece.side === 'enemy' && piece.row === 4 && piece.col === 6,
     );
     expect(enemyAt42?.pieceCode).toBe('FU');
@@ -940,10 +959,10 @@ describe('ai engine apply move', () => {
       },
     });
 
-    const enemyAt42 = committed.position.boardState.pieces?.find(
+    const enemyAt42 = boardPieces(committed.position).find(
       (piece) => piece.side === 'enemy' && piece.row === 4 && piece.col === 2,
     );
-    const enemyAt46 = committed.position.boardState.pieces?.find(
+    const enemyAt46 = boardPieces(committed.position).find(
       (piece) => piece.side === 'enemy' && piece.row === 4 && piece.col === 6,
     );
     expect(enemyAt42?.pieceCode).toBe('FU');
@@ -988,7 +1007,7 @@ describe('ai engine apply move', () => {
     randomSpy.mockRestore();
 
     const skillState = committed.position.boardState.skill_state as
-      | { piece_statuses?: Array<Record<string, unknown>> }
+      | { piece_statuses?: Record<string, unknown>[] }
       | undefined;
     const statuses = skillState?.piece_statuses ?? [];
     const stuns = statuses.filter((s) => (s.status_type as string) === 'stun');
@@ -1078,7 +1097,7 @@ describe('ai engine apply move', () => {
     randomSpy.mockRestore();
 
     const skillState = committed.position.boardState.skill_state as
-      | { piece_statuses?: Array<Record<string, unknown>> }
+      | { piece_statuses?: Record<string, unknown>[] }
       | undefined;
     const statuses = skillState?.piece_statuses ?? [];
     const stuns = statuses.filter((s) => (s.status_type as string) === 'stun');
@@ -1124,10 +1143,7 @@ describe('ai engine apply move', () => {
     });
     randomSpy.mockRestore();
 
-    const enemyHandTotal = Object.values(committed.position.hands.enemy).reduce(
-      (sum, value) => sum + (typeof value === 'number' ? value : 0),
-      0,
-    );
+    const enemyHandTotal = handTotal(committed.position.hands.enemy);
     expect(enemyHandTotal).toBe(1);
   });
 
@@ -1164,7 +1180,7 @@ describe('ai engine apply move', () => {
       },
     });
 
-    const moved = committed.position.boardState.pieces?.find(
+    const moved = boardPieces(committed.position).find(
       (piece) => piece.side === 'player' && piece.pieceCode === 'TIME',
     );
     expect(moved?.row).toBe(4);
@@ -1208,7 +1224,7 @@ describe('ai engine apply move', () => {
     });
 
     const skillState = committed.position.boardState.skill_state as
-      | { piece_statuses?: Array<Record<string, unknown>> }
+      | { piece_statuses?: Record<string, unknown>[] }
       | undefined;
     const statuses = skillState?.piece_statuses ?? [];
     const stuns = statuses.filter((s) => (s.status_type as string) === 'stun');
@@ -1256,7 +1272,7 @@ describe('ai engine apply move', () => {
     randomSpy.mockRestore();
 
     const skillState = committed.position.boardState.skill_state as
-      | { piece_statuses?: Array<Record<string, unknown>> }
+      | { piece_statuses?: Record<string, unknown>[] }
       | undefined;
     const statuses = skillState?.piece_statuses ?? [];
     const stuns = statuses.filter((s) => (s.status_type as string) === 'stun');
@@ -1336,7 +1352,7 @@ describe('ai engine apply move', () => {
       },
     });
 
-    const linked = committed.position.boardState.pieces?.find(
+    const linked = boardPieces(committed.position).find(
       (piece) => piece.side === 'player' && piece.pieceCode === 'SAND' && piece.col === 3,
     );
     expect(linked?.row).toBe(4);
@@ -1378,7 +1394,7 @@ describe('ai engine apply move', () => {
       },
     });
 
-    const pushedRight = committed.position.boardState.pieces?.find(
+    const pushedRight = boardPieces(committed.position).find(
       (piece) => piece.side === 'enemy' && piece.col === 8 && piece.row === 4,
     );
     expect(pushedRight?.pieceCode).toBe('FU');
@@ -1424,7 +1440,7 @@ describe('ai engine apply move', () => {
     randomSpy.mockRestore();
 
     const skillState = committed.position.boardState.skill_state as
-      | { piece_statuses?: Array<Record<string, unknown>> }
+      | { piece_statuses?: Record<string, unknown>[] }
       | undefined;
     const statuses = skillState?.piece_statuses ?? [];
     const stuns = statuses.filter((s) => (s.status_type as string) === 'stun');
@@ -1470,7 +1486,7 @@ describe('ai engine apply move', () => {
     randomSpy.mockRestore();
 
     const mossCount =
-      committed.position.boardState.pieces?.filter(
+      boardPieces(committed.position).filter(
         (piece) => piece.side === 'player' && piece.pieceCode === 'MOSS',
       ).length ?? 0;
     expect(mossCount).toBe(2);
@@ -1512,7 +1528,7 @@ describe('ai engine apply move', () => {
     });
 
     const skillState = committed.position.boardState.skill_state as
-      | { movement_modifiers?: Array<Record<string, unknown>> }
+      | { movement_modifiers?: Record<string, unknown>[] }
       | undefined;
     const modifiers = skillState?.movement_modifiers ?? [];
     const ortho = modifiers.filter((m) => (m.movement_rule as string) === 'orthogonal_step_only');
@@ -1552,14 +1568,27 @@ describe('ai engine apply move', () => {
         notation: null,
       },
     });
-    const pieces = committed.position.boardState.pieces as Array<{
+    const pieces = committed.position.boardState.pieces as {
       side: 'player' | 'enemy';
       row: number;
       col: number;
       pieceCode: string;
-    }>;
-    expect(pieces.some((piece) => piece.side === 'player' && piece.row === 4 && piece.col === 4 && piece.pieceCode === 'CLOUD')).toBe(true);
-    expect(pieces.some((piece) => piece.side === 'player' && piece.row === 4 && piece.col === 4 && piece.pieceCode === 'FU')).toBe(false);
+    }[];
+    expect(
+      pieces.some(
+        (piece) =>
+          piece.side === 'player' &&
+          piece.row === 4 &&
+          piece.col === 4 &&
+          piece.pieceCode === 'CLOUD',
+      ),
+    ).toBe(true);
+    expect(
+      pieces.some(
+        (piece) =>
+          piece.side === 'player' && piece.row === 4 && piece.col === 4 && piece.pieceCode === 'FU',
+      ),
+    ).toBe(false);
     expect(committed.position.hands.player.FU ?? 0).toBe(1);
   });
 
@@ -1599,10 +1628,12 @@ describe('ai engine apply move', () => {
     });
 
     const skillState = committed.position.boardState.skill_state as
-      | { movement_modifiers?: Array<Record<string, unknown>> }
+      | { movement_modifiers?: Record<string, unknown>[] }
       | undefined;
     const modifiers = skillState?.movement_modifiers ?? [];
-    const verticalOnly = modifiers.filter((m) => (m.movement_rule as string) === 'vertical_step_only');
+    const verticalOnly = modifiers.filter(
+      (m) => (m.movement_rule as string) === 'vertical_step_only',
+    );
     expect(verticalOnly.length).toBeGreaterThanOrEqual(1);
     expect(verticalOnly.every((m) => (m.remaining_turns as number) === 2)).toBe(true);
   });
@@ -1638,8 +1669,11 @@ describe('ai engine apply move', () => {
         notation: null,
       },
     });
-    const hazards = ((committed.position.boardState.skill_state as { board_hazards?: Array<Record<string, unknown>> })
-      ?.board_hazards ?? []) as Array<Record<string, unknown>>;
+    const hazards = ((
+      committed.position.boardState.skill_state as {
+        board_hazards?: Record<string, unknown>[];
+      }
+    )?.board_hazards ?? []) as Record<string, unknown>[];
     expect(
       hazards.some(
         (h) =>
@@ -1694,8 +1728,14 @@ describe('ai engine apply move', () => {
         notation: null,
       },
     });
-    const pieces = committed.position.boardState.pieces as Array<{ side: 'player' | 'enemy'; row: number; col: number }>;
-    expect(pieces.some((piece) => piece.side === 'player' && piece.row === 4 && piece.col === 4)).toBe(false);
+    const pieces = committed.position.boardState.pieces as {
+      side: 'player' | 'enemy';
+      row: number;
+      col: number;
+    }[];
+    expect(
+      pieces.some((piece) => piece.side === 'player' && piece.row === 4 && piece.col === 4),
+    ).toBe(false);
   });
 
   it('a skill transforms adjacent enemy pieces into pawns', () => {
@@ -1731,21 +1771,24 @@ describe('ai engine apply move', () => {
         notation: null,
       },
     });
-    const pieces = committed.position.boardState.pieces as Array<{
+    const pieces = committed.position.boardState.pieces as {
       side: 'player' | 'enemy';
       row: number;
       col: number;
       pieceCode: string;
       char: string;
-    }>;
+    }[];
     const left = pieces.find((p) => p.side === 'enemy' && p.row === 4 && p.col === 3);
     const right = pieces.find((p) => p.side === 'enemy' && p.row === 4 && p.col === 5);
     expect(left?.pieceCode).toBe('FU');
     expect(left?.char).toBe('歩');
     expect(right?.pieceCode).toBe('FU');
     expect(right?.char).toBe('歩');
-    const skillState = (committed.position.boardState as { skill_state?: { piece_statuses?: Array<Record<string, unknown>> } })
-      .skill_state;
+    const skillState = (
+      committed.position.boardState as {
+        skill_state?: { piece_statuses?: Record<string, unknown>[] };
+      }
+    ).skill_state;
     const statuses = skillState?.piece_statuses ?? [];
     expect(
       statuses.some(
@@ -1805,7 +1848,7 @@ describe('ai engine apply move', () => {
     randomSpy.mockRestore();
 
     const woodCount =
-      committed.position.boardState.pieces?.filter(
+      boardPieces(committed.position).filter(
         (piece) => piece.side === 'player' && piece.pieceCode === 'MOK',
       ).length ?? 0;
     expect(woodCount).toBe(2);
@@ -1849,7 +1892,7 @@ describe('ai engine apply move', () => {
     randomSpy.mockRestore();
 
     const leafCount =
-      committed.position.boardState.pieces?.filter(
+      boardPieces(committed.position).filter(
         (piece) => piece.side === 'player' && piece.pieceCode === 'HAA',
       ).length ?? 0;
     expect(leafCount).toBe(2);
@@ -1976,8 +2019,9 @@ describe('ai engine apply move', () => {
     randomSpy.mockRestore();
 
     const remainingAdjacentEnemies =
-      committed.position.boardState.pieces?.filter(
-        (piece) => piece.side === 'enemy' && piece.row === 4 && (piece.col === 3 || piece.col === 5),
+      boardPieces(committed.position).filter(
+        (piece) =>
+          piece.side === 'enemy' && piece.row === 4 && (piece.col === 3 || piece.col === 5),
       ) ?? [];
     expect(remainingAdjacentEnemies).toHaveLength(0);
   });
@@ -2020,8 +2064,9 @@ describe('ai engine apply move', () => {
     randomSpy.mockRestore();
 
     const remainingAdjacentEnemies =
-      committed.position.boardState.pieces?.filter(
-        (piece) => piece.side === 'enemy' && piece.row === 4 && (piece.col === 3 || piece.col === 5),
+      boardPieces(committed.position).filter(
+        (piece) =>
+          piece.side === 'enemy' && piece.row === 4 && (piece.col === 3 || piece.col === 5),
       ) ?? [];
     expect(remainingAdjacentEnemies).toHaveLength(2);
   });
@@ -2057,7 +2102,11 @@ describe('ai engine apply move', () => {
         notation: null,
       },
     });
-    const pieces = committed.position.boardState.pieces as Array<{ row: number; col: number; char: string }>;
+    const pieces = committed.position.boardState.pieces as {
+      row: number;
+      col: number;
+      char: string;
+    }[];
     const moved = pieces.find((piece) => piece.row === 4 && piece.col === 4);
     expect(moved?.char).toBe('歩');
   });

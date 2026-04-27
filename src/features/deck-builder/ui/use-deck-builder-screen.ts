@@ -150,7 +150,10 @@ const SPECIAL_PIECE_ALLOWED_POSITIONS = new Map<string, ReadonlySet<string>>([
   ['定', new Set(rowCols(8, [0, 8]))],
 ]);
 
-function isDeckBuilderSpecialChar(char: string | null | undefined, nameHint?: string | null): boolean {
+function isDeckBuilderSpecialChar(
+  char: string | null | undefined,
+  nameHint?: string | null,
+): boolean {
   if (!char && !(nameHint ?? '').trim()) return false;
   const key = normalizeDeckBuilderPieceChar(char, nameHint);
   // 標準駒は特殊に含めない（deck_builder.html の customCount 相当）
@@ -341,7 +344,7 @@ function findOwnedByAliases(
 }
 
 function createDefaultBoardPlacements(ownedPieces: OwnedPiece[]): BoardPlacement[] {
-  const cells: Array<{ row: number; col: number; aliases: readonly string[] }> = [
+  const cells: { row: number; col: number; aliases: readonly string[] }[] = [
     // 歩段
     ...ALL_COLS.map((col) => ({ row: 6, col, aliases: ['歩'] as const })),
     // 8段目

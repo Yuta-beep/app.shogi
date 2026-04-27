@@ -35,9 +35,16 @@ export function computeAiMove(input: {
     };
   }
 
-  const selectedMove = [...legal.legalMoves].sort(
-    (lhs, rhs) => moveScore(rhs, 'enemy') - moveScore(lhs, 'enemy'),
-  )[0];
+  let selectedMove = legal.legalMoves[0]!;
+  let bestScore = moveScore(selectedMove, 'enemy');
+  for (let i = 1; i < legal.legalMoves.length; i += 1) {
+    const candidate = legal.legalMoves[i]!;
+    const score = moveScore(candidate, 'enemy');
+    if (score > bestScore) {
+      selectedMove = candidate;
+      bestScore = score;
+    }
+  }
   assertMoveAllowedBySessionCatalog({
     position: input.position,
     pieceCatalog: input.pieceCatalog,
@@ -58,7 +65,7 @@ export function computeAiMove(input: {
       thinkMs: Date.now() - startedAt,
       searchedNodes: legal.legalMoves.length,
       searchDepth: 1,
-      evalCp: moveScore(selectedMove, 'enemy'),
+      evalCp: bestScore,
       candidateCount: legal.legalMoves.length,
       configApplied: {},
     },
