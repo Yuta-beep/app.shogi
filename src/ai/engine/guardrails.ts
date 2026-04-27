@@ -10,6 +10,13 @@ export function assertMoveAllowedBySessionCatalog(input: {
   actor: 'player' | 'enemy';
 }) {
   const move = normalizeBattleMove(input.move);
+  const moveForMatch =
+    move.notation === 'time_normal'
+      ? {
+          ...move,
+          notation: null,
+        }
+      : move;
   const legal = generateLegalMoves({
     position: input.position,
     pieceCatalog: input.pieceCatalog,
@@ -21,7 +28,7 @@ export function assertMoveAllowedBySessionCatalog(input: {
     );
   }
 
-  const matched = legal.legalMoves.find((candidate) => moveEquals(candidate, move));
+  const matched = legal.legalMoves.find((candidate) => moveEquals(candidate, moveForMatch));
   if (!matched) {
     throw new Error('guardrail rejected move: move is outside session catalog legal range');
   }

@@ -18,6 +18,11 @@ const WAVE_PIECE_CODES = new Set(['WAVE', 'NAM', '波']);
 const TIN_PIECE_CODES = new Set(['TIN', '錫']);
 const ELECTRIC_PIECE_CODES = new Set(['ELECTRIC', '電']);
 const THUNDER_PIECE_CODES = new Set(['THUNDER', '雷']);
+const TIME_PIECE_CODES = new Set(['TIME', '時']);
+const ICE_PIECE_CODES = new Set(['ICE', '氷']);
+const SNOW_PIECE_CODES = new Set(['SNOW', '雪']);
+const SAND_PIECE_CODES = new Set(['SAND', '砂']);
+const WIND_PIECE_CODES = new Set(['WIND', '風']);
 const WOOD_PIECE_CODES = new Set(['WOOD', 'MOK', '木']);
 const LEAF_PIECE_CODES = new Set(['LEAF', 'HAA', '葉']);
 const DEMON_PIECE_CODES = new Set(['DEMON', 'MAK', '魔']);
@@ -131,6 +136,83 @@ function pushAdjacentEnemyPiecesOneStep(input: {
     };
   }
   return planned.size;
+}
+
+function pushOrthogonalAdjacentEnemiesToEdge(input: {
+  pieces: AiBoardPiece[];
+  center: AiBoardPiece;
+  actorSide: Side;
+}): number {
+  const directions: Array<{ dr: number; dc: number }> = [
+    { dr: -1, dc: 0 },
+    { dr: 1, dc: 0 },
+    { dr: 0, dc: -1 },
+    { dr: 0, dc: 1 },
+  ];
+  let pushed = 0;
+  for (const direction of directions) {
+    const row = input.center.row + direction.dr;
+    const col = input.center.col + direction.dc;
+    if (row < 0 || row > 8 || col < 0 || col > 8) continue;
+    const idx = input.pieces.findIndex((piece) => piece.row === row && piece.col === col);
+    if (idx < 0) continue;
+    const target = input.pieces[idx]!;
+    if (target.side === input.actorSide) continue;
+    let nextRow = target.row;
+    let nextCol = target.col;
+    while (true) {
+      const candidateRow = nextRow + direction.dr;
+      const candidateCol = nextCol + direction.dc;
+      if (candidateRow < 0 || candidateRow > 8 || candidateCol < 0 || candidateCol > 8) break;
+      if (!isCellEmpty(input.pieces, candidateRow, candidateCol)) break;
+      nextRow = candidateRow;
+      nextCol = candidateCol;
+    }
+    if (nextRow === target.row && nextCol === target.col) continue;
+    input.pieces[idx] = {
+      ...target,
+      row: nextRow,
+      col: nextCol,
+    };
+    pushed += 1;
+  }
+  return pushed;
+}
+
+function moveAdjacentAllySandWithLeader(input: {
+  pieces: AiBoardPiece[];
+  center: AiBoardPiece;
+  actorSide: Side;
+  deltaRow: number;
+  deltaCol: number;
+}): number {
+  if (input.deltaRow === 0 && input.deltaCol === 0) return 0;
+  const candidates = input.pieces
+    .map((piece, idx) => ({ piece, idx }))
+    .filter(({ piece }) => {
+      if (piece.side !== input.actorSide) return false;
+      const code = normalizeSkillPieceCode(toBasePieceCode(piece.pieceCode) ?? piece.char);
+      if (!SAND_PIECE_CODES.has(code)) return false;
+      if (piece.row === input.center.row && piece.col === input.center.col) return false;
+      return (
+        Math.abs(piece.row - input.center.row) <= 1 &&
+        Math.abs(piece.col - input.center.col) <= 1
+      );
+    });
+  let moved = 0;
+  for (const { piece, idx } of candidates) {
+    const toRow = piece.row + input.deltaRow;
+    const toCol = piece.col + input.deltaCol;
+    if (toRow < 0 || toRow > 8 || toCol < 0 || toCol > 8) continue;
+    if (!isCellEmpty(input.pieces, toRow, toCol)) continue;
+    input.pieces[idx] = {
+      ...piece,
+      row: toRow,
+      col: toCol,
+    };
+    moved += 1;
+  }
+  return moved;
 }
 
 function summonRandomAdjacentEmptyPiece(input: {
@@ -482,6 +564,16 @@ export function applyMoveSkillEffects(input: {
     ELECTRIC_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '電';
   const isThunderMover =
     THUNDER_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '雷';
+  const isTimeMover =
+    TIME_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '時';
+  const isIceMover =
+    ICE_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '氷';
+  const isSnowMover =
+    SNOW_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '雪';
+  const isSandMover =
+    SAND_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '砂';
+  const isWindMover =
+    WIND_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '風';
   const isWoodMover =
     WOOD_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '木';
   const isLeafMover =
@@ -562,6 +654,26 @@ export function applyMoveSkillEffects(input: {
       actorSide: input.actorSide,
     });
   }
+  // 砂: 移動時、隣接する味方の砂駒があれば同じ方向へ連携移動する。
+  if (isSandMover && input.move.fromRow != null && input.move.fromCol != null && input.movedPiece) {
+    const deltaRow = input.move.toRow - input.move.fromRow;
+    const deltaCol = input.move.toCol - input.move.fromCol;
+    moveAdjacentAllySandWithLeader({
+      pieces: input.pieces,
+      center: input.movedPiece,
+      actorSide: input.actorSide,
+      deltaRow,
+      deltaCol,
+    });
+  }
+  // 風: 前後左右1マスの敵駒を、その方向の行けるところまで押し流す。
+  if (isWindMover && input.move.fromRow != null && input.move.fromCol != null && input.movedPiece) {
+    pushOrthogonalAdjacentEnemiesToEdge({
+      pieces: input.pieces,
+      center: input.movedPiece,
+      actorSide: input.actorSide,
+    });
+  }
   // 錫: 移動時10%で周囲8マスの敵駒（玉除く）を2ターン行動不能（stun）。
   if (isTinMover && input.move.fromRow != null && input.move.fromCol != null && input.movedPiece) {
     const procChance = 0.1;
@@ -628,18 +740,6 @@ export function applyMoveSkillEffects(input: {
         });
       }
     }
-    if (typeof __DEV__ !== 'undefined' && __DEV__) {
-      console.info('[electric-skill-debug]', {
-        moveCount: input.position.moveCount,
-        turnNumber: input.position.turnNumber,
-        pieceCode: movedCode,
-        procChance,
-        roll,
-        triggered,
-        selectedTarget,
-        stunTurns: selectedTarget ? 3 : 0,
-      });
-    }
   }
   // 雷: 移動時10%で相手手持ち駒を最大2つランダム消滅。
   if (isThunderMover && input.move.fromRow != null && input.move.fromCol != null) {
@@ -655,17 +755,81 @@ export function applyMoveSkillEffects(input: {
         removedHandCodes.push(removed);
       }
     }
-    if (typeof __DEV__ !== 'undefined' && __DEV__) {
-      console.info('[thunder-skill-debug]', {
-        moveCount: input.position.moveCount,
-        turnNumber: input.position.turnNumber,
-        pieceCode: movedCode,
-        procChance,
-        roll,
-        triggered,
-        removedHandCount: removedHandCodes.length,
-        removedHandCodes,
+  }
+  // 氷: 移動時30%で周囲8マスの敵駒（玉除く）1体を2ターン行動不能（stun）。
+  if (isIceMover && input.move.fromRow != null && input.move.fromCol != null && input.movedPiece) {
+    const procChance = 0.3;
+    const roll = Math.random();
+    const triggered = roll <= procChance;
+    let selectedTarget: { row: number; col: number; side: Side } | null = null;
+    if (triggered) {
+      const candidates = input.pieces.filter((piece) => {
+        if (piece.side === input.actorSide) return false;
+        if (Math.abs(piece.row - input.movedPiece.row) > 1 || Math.abs(piece.col - input.movedPiece.col) > 1) {
+          return false;
+        }
+        if (piece.row === input.movedPiece.row && piece.col === input.movedPiece.col) return false;
+        const base = toBasePieceCode(piece.pieceCode);
+        if (base === 'OU' || piece.char === '王' || piece.char === '玉') return false;
+        return true;
       });
+      if (candidates.length > 0) {
+        const target = candidates[Math.floor(Math.random() * candidates.length)]!;
+        selectedTarget = { row: target.row, col: target.col, side: target.side };
+        state.piece_statuses.push({
+          row: target.row,
+          col: target.col,
+          side: target.side,
+          status_type: 'stun',
+          remaining_turns: 2,
+        });
+      }
+    }
+  }
+  // 雪: 移動時20%で手持ちに氷（ICE）を1つ加える。
+  if (isSnowMover && input.move.fromRow != null && input.move.fromCol != null) {
+    const procChance = 0.2;
+    const roll = Math.random();
+    const triggered = roll <= procChance;
+    if (triggered) {
+      incrementHand(input.position, input.actorSide, 'ICE', 1);
+    }
+  }
+  // 時: skill 発動時（time_skill_only/time_skill）に周囲8マスの敵駒（玉除く）を4ターン行動不能。
+  if (isTimeMover && (input.move.notation === 'time_skill_only' || input.move.notation === 'time_skill')) {
+    const center =
+      input.movedPiece ??
+      (input.move.fromRow != null && input.move.fromCol != null
+        ? input.pieces.find(
+            (piece) =>
+              piece.side === input.actorSide &&
+              piece.row === input.move.fromRow &&
+              piece.col === input.move.fromCol &&
+              TIME_PIECE_CODES.has(normalizeSkillPieceCode(toBasePieceCode(piece.pieceCode) ?? piece.char)),
+          ) ?? null
+        : null);
+    let stunnedCount = 0;
+    if (center) {
+      for (let dr = -1; dr <= 1; dr += 1) {
+        for (let dc = -1; dc <= 1; dc += 1) {
+          if (dr === 0 && dc === 0) continue;
+          const row = center.row + dr;
+          const col = center.col + dc;
+          if (row < 0 || row > 8 || col < 0 || col > 8) continue;
+          const target = input.pieces.find((piece) => piece.row === row && piece.col === col);
+          if (!target || target.side === input.actorSide) continue;
+          const base = toBasePieceCode(target.pieceCode);
+          if (base === 'OU' || target.char === '王' || target.char === '玉') continue;
+          state.piece_statuses.push({
+            row,
+            col,
+            side: target.side,
+            status_type: 'stun',
+            remaining_turns: 4,
+          });
+          stunnedCount += 1;
+        }
+      }
     }
   }
   // 木: 移動時10%で周囲8マスのランダム1マスに木を召喚。

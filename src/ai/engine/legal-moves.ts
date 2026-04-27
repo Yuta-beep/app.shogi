@@ -123,6 +123,36 @@ function normalizeVectorsForGold(piece: AiBoardPiece, vectors: AiPieceDefinition
   ];
 }
 
+function normalizeVectorsForTime(piece: AiBoardPiece, vectors: AiPieceDefinition['moveVectors']) {
+  const baseCode = toBasePieceCode(piece.pieceCode);
+  if (baseCode !== 'TIME' && piece.char !== '時') return vectors;
+  // 時: 全方位1マス
+  return [
+    { dx: -1, dy: -1, maxStep: 1 },
+    { dx: 0, dy: -1, maxStep: 1 },
+    { dx: 1, dy: -1, maxStep: 1 },
+    { dx: -1, dy: 0, maxStep: 1 },
+    { dx: 1, dy: 0, maxStep: 1 },
+    { dx: -1, dy: 1, maxStep: 1 },
+    { dx: 0, dy: 1, maxStep: 1 },
+    { dx: 1, dy: 1, maxStep: 1 },
+  ];
+}
+
+function hasAdjacentEnemyPiece(pieces: AiBoardPiece[], piece: AiBoardPiece): boolean {
+  for (let dr = -1; dr <= 1; dr += 1) {
+    for (let dc = -1; dc <= 1; dc += 1) {
+      if (dr === 0 && dc === 0) continue;
+      const row = piece.row + dr;
+      const col = piece.col + dc;
+      if (row < 0 || row > 8 || col < 0 || col > 8) continue;
+      const target = findPieceAt(pieces, row, col);
+      if (target && target.side !== piece.side) return true;
+    }
+  }
+  return false;
+}
+
 function generateLeapOverOneTargets(
   pieces: AiBoardPiece[],
   piece: AiBoardPiece,
@@ -181,7 +211,8 @@ function generateBoardPieceMoves(input: {
   const pieceDef = resolvePieceDef(input.piece, lookups);
   if (!pieceDef || pieceDef.moveVectors.length === 0) return [];
   const bishopNormalized = normalizeVectorsForBishop(input.piece, pieceDef.moveVectors);
-  const effectiveVectors = normalizeVectorsForGold(input.piece, bishopNormalized);
+  const goldNormalized = normalizeVectorsForGold(input.piece, bishopNormalized);
+  const effectiveVectors = normalizeVectorsForTime(input.piece, goldNormalized);
 
   const leapVectors = effectiveVectors.filter((v) => isLeapOverOneMode(v.captureMode));
   const normalVectors = effectiveVectors.filter((v) => !isLeapOverOneMode(v.captureMode));
@@ -309,12 +340,28 @@ export function generateLegalMoves(input: {
     .flatMap((piece) =>
       generateBoardPieceMoves({ pieces, piece, position, pieceCatalog: input.pieceCatalog }),
     );
+  const timeSkillOnlyMoves = pieces
+    .filter((piece) => piece.side === position.sideToMove)
+    .filter((piece) => {
+      const code = toBasePieceCode(piece.pieceCode);
+      return code === 'TIME' || piece.char === '時';
+    })
+    .filter((piece) => hasAdjacentEnemyPiece(pieces, piece))
+    .map((piece) =>
+      createMove({
+        from: { row: piece.row, col: piece.col },
+        to: { row: piece.row, col: piece.col },
+        pieceCode: toBasePieceCode(piece.pieceCode) ?? 'TIME',
+        promote: false,
+        notation: 'time_skill_only',
+      }),
+    );
   const dropMoves = generateDropMoves({ pieces, position });
 
   return {
     sideToMove: position.sideToMove,
     moveNo: position.moveCount + 1,
     stateHash: position.stateHash,
-    legalMoves: [...boardMoves, ...dropMoves],
+    legalMoves: [...boardMoves, ...timeSkillOnlyMoves, ...dropMoves],
   };
 }

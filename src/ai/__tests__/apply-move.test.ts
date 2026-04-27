@@ -116,6 +116,71 @@ const pieceCatalog: AiPieceDefinition[] = [
     isRepeatable: true,
   },
   {
+    pieceCode: 'TIME',
+    canonicalCode: 'TIME',
+    sfenCode: '#',
+    char: '時',
+    name: '時',
+    unlock: 'default',
+    desc: '',
+    skill: '',
+    move: '',
+    moveVectors: [{ dx: 0, dy: -1, maxStep: 1 }],
+    isRepeatable: true,
+  },
+  {
+    pieceCode: 'ICE',
+    canonicalCode: 'ICE',
+    sfenCode: '@',
+    char: '氷',
+    name: '氷',
+    unlock: 'default',
+    desc: '',
+    skill: '',
+    move: '',
+    moveVectors: [{ dx: 0, dy: -1, maxStep: 1 }],
+    isRepeatable: true,
+  },
+  {
+    pieceCode: 'SNOW',
+    canonicalCode: 'SNOW',
+    sfenCode: '^',
+    char: '雪',
+    name: '雪',
+    unlock: 'default',
+    desc: '',
+    skill: '',
+    move: '',
+    moveVectors: [{ dx: 0, dy: -1, maxStep: 1 }],
+    isRepeatable: true,
+  },
+  {
+    pieceCode: 'SAND',
+    canonicalCode: 'SAND',
+    sfenCode: '[',
+    char: '砂',
+    name: '砂',
+    unlock: 'default',
+    desc: '',
+    skill: '',
+    move: '',
+    moveVectors: [{ dx: 0, dy: -1, maxStep: 1 }],
+    isRepeatable: true,
+  },
+  {
+    pieceCode: 'WIND',
+    canonicalCode: 'WIND',
+    sfenCode: '<',
+    char: '風',
+    name: '風',
+    unlock: 'default',
+    desc: '',
+    skill: '',
+    move: '',
+    moveVectors: [{ dx: 0, dy: -1, maxStep: 1 }],
+    isRepeatable: true,
+  },
+  {
     pieceCode: 'TREASURE',
     canonicalCode: 'TREASURE',
     sfenCode: '$',
@@ -973,6 +1038,259 @@ describe('ai engine apply move', () => {
       0,
     );
     expect(enemyHandTotal).toBe(1);
+  });
+
+  it('time piece can move one step in all directions', () => {
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: '4k4/9/9/9/9/4#4/9/9/4K4 b - 1',
+      stateHash: 'seed',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'player', row: 5, col: 4, pieceCode: 'TIME', char: '時', promoted: false },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+      },
+      hands: { player: {}, enemy: {} },
+    };
+
+    const committed = applyMove({
+      position,
+      pieceCatalog,
+      move: {
+        fromRow: 5,
+        fromCol: 4,
+        toRow: 4,
+        toCol: 3,
+        pieceCode: 'TIME',
+        promote: false,
+        dropPieceCode: null,
+        capturedPieceCode: null,
+        notation: 'time_normal',
+      },
+    });
+
+    const moved = committed.position.boardState.pieces?.find(
+      (piece) => piece.side === 'player' && piece.pieceCode === 'TIME',
+    );
+    expect(moved?.row).toBe(4);
+    expect(moved?.col).toBe(3);
+    expect(committed.skillTriggered).toBe(false);
+  });
+
+  it('time skill only stuns adjacent enemies for 4 turns', () => {
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: '4k4/9/9/9/3p1p3/4#4/9/9/4K4 b - 1',
+      stateHash: 'seed',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'enemy', row: 4, col: 3, pieceCode: 'FU', char: '歩', promoted: false },
+          { side: 'enemy', row: 4, col: 5, pieceCode: 'FU', char: '歩', promoted: false },
+          { side: 'player', row: 5, col: 4, pieceCode: 'TIME', char: '時', promoted: false },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+      },
+      hands: { player: {}, enemy: {} },
+    };
+
+    const committed = applyMove({
+      position,
+      pieceCatalog,
+      move: {
+        fromRow: 5,
+        fromCol: 4,
+        toRow: 5,
+        toCol: 4,
+        pieceCode: 'TIME',
+        promote: false,
+        dropPieceCode: null,
+        capturedPieceCode: null,
+        notation: 'time_skill_only',
+      },
+    });
+
+    const skillState = committed.position.boardState.skill_state as
+      | { piece_statuses?: Array<Record<string, unknown>> }
+      | undefined;
+    const statuses = skillState?.piece_statuses ?? [];
+    const stuns = statuses.filter((s) => (s.status_type as string) === 'stun');
+    expect(stuns).toHaveLength(2);
+    expect(stuns.every((s) => (s.remaining_turns as number) === 4)).toBe(true);
+  });
+
+  it('ice skill stuns one adjacent enemy for 2 turns when 30% proc succeeds', () => {
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: '4k4/9/9/9/3p1p3/4@4/9/9/4K4 b - 1',
+      stateHash: 'seed',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'enemy', row: 4, col: 3, pieceCode: 'FU', char: '歩', promoted: false },
+          { side: 'enemy', row: 4, col: 5, pieceCode: 'FU', char: '歩', promoted: false },
+          { side: 'player', row: 5, col: 4, pieceCode: 'ICE', char: '氷', promoted: false },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+      },
+      hands: { player: {}, enemy: {} },
+    };
+
+    const randomSpy = jest.spyOn(Math, 'random');
+    randomSpy.mockReturnValueOnce(0.1); // 30% 発動成功
+    randomSpy.mockReturnValueOnce(0.0); // target index
+    const committed = applyMove({
+      position,
+      pieceCatalog,
+      move: {
+        fromRow: 5,
+        fromCol: 4,
+        toRow: 4,
+        toCol: 4,
+        pieceCode: 'ICE',
+        promote: false,
+        dropPieceCode: null,
+        capturedPieceCode: null,
+        notation: null,
+      },
+    });
+    randomSpy.mockRestore();
+
+    const skillState = committed.position.boardState.skill_state as
+      | { piece_statuses?: Array<Record<string, unknown>> }
+      | undefined;
+    const statuses = skillState?.piece_statuses ?? [];
+    const stuns = statuses.filter((s) => (s.status_type as string) === 'stun');
+    expect(stuns).toHaveLength(1);
+    expect(stuns[0]?.remaining_turns).toBe(2);
+  });
+
+  it('snow skill adds ICE to hand when 20% proc succeeds', () => {
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: '4k4/9/9/9/9/4^4/9/9/4K4 b - 1',
+      stateHash: 'seed',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'player', row: 5, col: 4, pieceCode: 'SNOW', char: '雪', promoted: false },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+      },
+      hands: { player: {}, enemy: {} },
+    };
+
+    const randomSpy = jest.spyOn(Math, 'random').mockReturnValue(0.05);
+    const committed = applyMove({
+      position,
+      pieceCatalog,
+      move: {
+        fromRow: 5,
+        fromCol: 4,
+        toRow: 4,
+        toCol: 4,
+        pieceCode: 'SNOW',
+        promote: false,
+        dropPieceCode: null,
+        capturedPieceCode: null,
+        notation: null,
+      },
+    });
+    randomSpy.mockRestore();
+
+    expect(committed.position.hands.player.ICE).toBe(1);
+  });
+
+  it('sand skill moves adjacent ally sand in linked movement', () => {
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: '4k4/9/9/9/9/3[[4/9/9/4K4 b - 1',
+      stateHash: 'seed',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'player', row: 5, col: 3, pieceCode: 'SAND', char: '砂', promoted: false },
+          { side: 'player', row: 5, col: 4, pieceCode: 'SAND', char: '砂', promoted: false },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+      },
+      hands: { player: {}, enemy: {} },
+    };
+
+    const committed = applyMove({
+      position,
+      pieceCatalog,
+      move: {
+        fromRow: 5,
+        fromCol: 4,
+        toRow: 4,
+        toCol: 4,
+        pieceCode: 'SAND',
+        promote: false,
+        dropPieceCode: null,
+        capturedPieceCode: null,
+        notation: null,
+      },
+    });
+
+    const linked = committed.position.boardState.pieces?.find(
+      (piece) => piece.side === 'player' && piece.pieceCode === 'SAND' && piece.col === 3,
+    );
+    expect(linked?.row).toBe(4);
+    expect(linked?.col).toBe(3);
+  });
+
+  it('wind skill pushes orthogonal adjacent enemies to edge', () => {
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: '4k4/9/9/9/4p4/3<p4/9/9/4K4 b - 1',
+      stateHash: 'seed',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'enemy', row: 4, col: 4, pieceCode: 'FU', char: '歩', promoted: false },
+          { side: 'enemy', row: 5, col: 4, pieceCode: 'FU', char: '歩', promoted: false },
+          { side: 'player', row: 5, col: 3, pieceCode: 'WIND', char: '風', promoted: false },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+      },
+      hands: { player: {}, enemy: {} },
+    };
+
+    const committed = applyMove({
+      position,
+      pieceCatalog,
+      move: {
+        fromRow: 5,
+        fromCol: 3,
+        toRow: 4,
+        toCol: 3,
+        pieceCode: 'WIND',
+        promote: false,
+        dropPieceCode: null,
+        capturedPieceCode: null,
+        notation: null,
+      },
+    });
+
+    const pushedRight = committed.position.boardState.pieces?.find(
+      (piece) => piece.side === 'enemy' && piece.col === 8 && piece.row === 4,
+    );
+    expect(pushedRight?.pieceCode).toBe('FU');
   });
 
   it('wood skill summons one wood piece when proc succeeds', () => {

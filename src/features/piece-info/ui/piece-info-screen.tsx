@@ -23,10 +23,12 @@ const GRID_SIZE = 5;
 const CENTER = 2;
 const LEAF_SKILL_DESCRIPTION = '移動時10%の確率で「葉」駒を周囲1マスに召喚する。';
 const ELECTRIC_SKILL_DESCRIPTION = '移動時20%の確率で周囲8マスの敵駒1体を3ターン行動不能にする。';
+const ICE_SKILL_DESCRIPTION = '移動時30%の確率で周囲の敵駒1体を2ターン行動不能にする。';
 
 function resolveDisplaySkillText(char: string, skill: string | null | undefined): string {
   if (char === '葉') return LEAF_SKILL_DESCRIPTION;
   if (char === '電') return ELECTRIC_SKILL_DESCRIPTION;
+  if (char === '氷') return ICE_SKILL_DESCRIPTION;
   const normalized = (skill ?? '').trim();
   return normalized.length > 0 ? normalized : '-';
 }

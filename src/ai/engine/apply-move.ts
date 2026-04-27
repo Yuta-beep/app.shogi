@@ -223,7 +223,7 @@ export function applyMove(input: {
       starReturnProcTriggered ||
       move.notation === 'time_skill' ||
       move.notation === 'time_skill_only' ||
-      Boolean(move.notation && !/^\d/.test(move.notation)),
+      Boolean(move.notation && move.notation !== 'time_normal' && !/^\d/.test(move.notation)),
     position: nextPosition,
     game,
   };
