@@ -1,0 +1,121 @@
+import { Image } from 'expo-image';
+import { Pressable, Text, View } from 'react-native';
+
+import {
+  getPieceImageSource,
+  handKeyToDisplayPieceCode,
+} from '@/features/stage-shogi/ui/stage-shogi-screen.helpers';
+import { getHandCount, HandsState, Side } from '@/features/stage-shogi/domain/game-rules';
+import { CODE_TO_CHAR, PieceSfenMapping } from '@/features/stage-shogi/domain/piece-conversion';
+import type { PieceCatalogItem } from '@/usecases/piece-info/load-piece-catalog-usecase';
+
+export function StageShogiHandsRow(props: {
+  side: Side;
+  hands: HandsState;
+  pieceSfenMapping: PieceSfenMapping;
+  pieceDefsByCode: Partial<Record<string, PieceCatalogItem>>;
+  selectedDropPieceCode: string | null;
+  sideToMove: Side;
+  isAiThinking: boolean;
+  isCreatingGame: boolean;
+  isFinished: boolean;
+  hasPendingPromotion: boolean;
+  pieceCatalog: readonly PieceCatalogItem[];
+  compact?: boolean;
+  onPressPiece: (pieceCode: string) => void;
+}) {
+  const {
+    side,
+    hands,
+    pieceSfenMapping,
+    pieceDefsByCode,
+    selectedDropPieceCode,
+    sideToMove,
+    isAiThinking,
+    isCreatingGame,
+    isFinished,
+    hasPendingPromotion,
+    pieceCatalog,
+    compact = false,
+    onPressPiece,
+  } = props;
+  const orderedCodes = [
+    ...pieceSfenMapping.handOrder,
+    ...Object.keys(hands[side]).filter((code) => !pieceSfenMapping.handOrder.includes(code)),
+  ];
+  const entries = orderedCodes
+    .map((code) => ({
+      code,
+      count: hands[side][code] ?? 0,
+    }))
+    .filter((entry) => entry.count > 0);
+
+  if (entries.length === 0) {
+    return null;
+  }
+
+  return (
+    <View className={`${compact ? 'mt-0' : 'mt-1'} flex-row flex-wrap gap-0`}>
+      {entries.map((entry) => {
+        const isPlayer = side === 'player';
+        const codeKey = handKeyToDisplayPieceCode(entry.code, pieceCatalog).toUpperCase();
+        const disabled =
+          !isPlayer ||
+          sideToMove !== 'player' ||
+          isAiThinking ||
+          isCreatingGame ||
+          isFinished ||
+          hasPendingPromotion ||
+          getHandCount(hands, 'player', codeKey) <= 0;
+        const selected =
+          isPlayer &&
+          selectedDropPieceCode != null &&
+          selectedDropPieceCode.toUpperCase() === codeKey;
+        const handImageSource = getPieceImageSource({
+          pieceCode: codeKey,
+          char:
+            pieceDefsByCode[codeKey]?.char ??
+            pieceDefsByCode[entry.code]?.char ??
+            CODE_TO_CHAR[codeKey] ??
+            null,
+          imageSignedUrl:
+            pieceDefsByCode[codeKey]?.imageSignedUrl ??
+            pieceDefsByCode[entry.code]?.imageSignedUrl ??
+            null,
+        });
+        return (
+          <Pressable
+            key={`${side}-${codeKey}`}
+            testID={`hand-${side}-${codeKey}`}
+            disabled={disabled}
+            onPress={() => {
+              onPressPiece(codeKey);
+            }}
+            className="px-0 py-0.5"
+          >
+            <View className="flex-row items-center gap-0">
+              <View className="h-10 w-10 items-center justify-center">
+                {handImageSource ? (
+                  <Image
+                    source={handImageSource}
+                    contentFit="contain"
+                    style={{ width: '100%', height: '100%' }}
+                  />
+                ) : (
+                  <Text className="text-base font-black text-[#5d3b2e]">
+                    {CODE_TO_CHAR[codeKey] ?? entry.code}
+                  </Text>
+                )}
+              </View>
+              <Text
+                className={`-ml-0.5 text-sm font-bold ${selected ? 'text-white' : 'text-white'}`}
+              >
+                {`x${entry.count}`}
+              </Text>
+            </View>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
