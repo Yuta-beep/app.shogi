@@ -299,6 +299,8 @@ export const CODE_TO_CHAR: Readonly<Record<string, string>> = {
   RAINBOW: '虹',
   POISON: '毒',
   SWAMP: '沼',
+  PRISON: '牢',
+  FENCE: '柵',
 };
 
 export const PROMOTED_CODE_TO_CHAR: Readonly<Record<string, string>> = {
@@ -353,6 +355,8 @@ export const CHAR_TO_CODE: Readonly<Record<string, string>> = {
   虹: 'RAINBOW',
   毒: 'POISON',
   沼: 'SWAMP',
+  牢: 'PRISON',
+  柵: 'FENCE',
 };
 
 // ── toSfenBoardPure ───────────────────────────────────────────────────────────

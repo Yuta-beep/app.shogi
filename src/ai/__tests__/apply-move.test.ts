@@ -280,6 +280,32 @@ const pieceCatalog: AiPieceDefinition[] = [
     isRepeatable: true,
   },
   {
+    pieceCode: 'PRISON',
+    canonicalCode: 'PRISON',
+    sfenCode: '}',
+    char: '牢',
+    name: '牢',
+    unlock: 'default',
+    desc: '',
+    skill: '',
+    move: '',
+    moveVectors: [{ dx: 0, dy: -1, maxStep: 1 }],
+    isRepeatable: true,
+  },
+  {
+    pieceCode: 'FENCE',
+    canonicalCode: 'FENCE',
+    sfenCode: '~',
+    char: '柵',
+    name: '柵',
+    unlock: 'default',
+    desc: '',
+    skill: '',
+    move: '',
+    moveVectors: [{ dx: 0, dy: -1, maxStep: 1 }],
+    isRepeatable: true,
+  },
+  {
     pieceCode: 'A',
     canonicalCode: 'A',
     sfenCode: 'a',
@@ -1736,6 +1762,97 @@ describe('ai engine apply move', () => {
     expect(
       pieces.some((piece) => piece.side === 'player' && piece.row === 4 && piece.col === 4),
     ).toBe(false);
+  });
+
+  it('prison piece on move applies prison_fence_stun for 2 turns to one random enemy', () => {
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: '4k4/9/9/9/9/9/9/9/4K4 b - 1',
+      stateHash: 'seed',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'enemy', row: 2, col: 4, pieceCode: 'FU', char: '歩', promoted: false },
+          { side: 'player', row: 5, col: 4, pieceCode: 'PRISON', char: '牢', promoted: false },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+      },
+      hands: { player: {}, enemy: {} },
+    };
+    const committed = applyMove({
+      position,
+      pieceCatalog,
+      move: {
+        fromRow: 5,
+        fromCol: 4,
+        toRow: 4,
+        toCol: 4,
+        pieceCode: 'PRISON',
+        promote: false,
+        dropPieceCode: null,
+        capturedPieceCode: null,
+        notation: null,
+      },
+    });
+    const skillState = (
+      committed.position.boardState as {
+        skill_state?: { piece_statuses?: Array<Record<string, unknown>> };
+      }
+    ).skill_state;
+    const stuns = (skillState?.piece_statuses ?? []).filter(
+      (s) => (s.status_type as string) === 'prison_fence_stun',
+    );
+    expect(stuns).toHaveLength(1);
+    expect(stuns[0]?.remaining_turns).toBe(2);
+    expect(stuns[0]?.side).toBe('enemy');
+    expect(stuns[0]?.row).toBe(2);
+    expect(stuns[0]?.col).toBe(4);
+  });
+
+  it('fence piece on move applies prison_fence_stun for 2 turns to one random enemy', () => {
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: '4k4/9/9/9/9/9/9/9/4K4 b - 1',
+      stateHash: 'seed',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'enemy', row: 2, col: 4, pieceCode: 'FU', char: '歩', promoted: false },
+          { side: 'player', row: 5, col: 4, pieceCode: 'FENCE', char: '柵', promoted: false },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+      },
+      hands: { player: {}, enemy: {} },
+    };
+    const committed = applyMove({
+      position,
+      pieceCatalog,
+      move: {
+        fromRow: 5,
+        fromCol: 4,
+        toRow: 4,
+        toCol: 4,
+        pieceCode: 'FENCE',
+        promote: false,
+        dropPieceCode: null,
+        capturedPieceCode: null,
+        notation: null,
+      },
+    });
+    const skillState = (
+      committed.position.boardState as {
+        skill_state?: { piece_statuses?: Array<Record<string, unknown>> };
+      }
+    ).skill_state;
+    const stuns = (skillState?.piece_statuses ?? []).filter(
+      (s) => (s.status_type as string) === 'prison_fence_stun',
+    );
+    expect(stuns).toHaveLength(1);
+    expect(stuns[0]?.remaining_turns).toBe(2);
   });
 
   it('a skill transforms adjacent enemy pieces into pawns', () => {

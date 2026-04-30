@@ -167,7 +167,9 @@ export function addHandPiece(
 }
 
 export function capturedToHandPieceCode(piece: BoardPiece) {
-  const code = normalizePieceCode(piece.pieceCode);
+  const code =
+    normalizePieceCode(piece.pieceCode) ??
+    (piece.char === '牢' ? 'PRISON' : piece.char === '柵' ? 'FENCE' : null);
   if (!code) return null;
   if (KING_CODES.has(code)) return null;
   return code;

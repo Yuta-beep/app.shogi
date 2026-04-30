@@ -17,6 +17,7 @@ import {
   KING_PIECE_SIZE_PERCENT,
   NORMAL_PIECE_SIZE_PERCENT,
   POISON_CELL_IMAGE_SOURCE,
+  PRISON_CHAIN_IMAGE_SOURCE,
   collectStandardBaseCodesForLocalPromotedImage,
   fallbackPiecePalette,
   getDisplayChar,
@@ -46,6 +47,7 @@ type BoardPieceSpriteProps = {
   instantPromotedKey?: string | null;
   darkVeiled?: boolean;
   aTransformed?: boolean;
+  prisonChained?: boolean;
 };
 
 const BoardPieceSprite = memo(function BoardPieceSprite({
@@ -56,6 +58,7 @@ const BoardPieceSprite = memo(function BoardPieceSprite({
   instantPromotedKey = null,
   darkVeiled = false,
   aTransformed = false,
+  prisonChained = false,
 }: BoardPieceSpriteProps) {
   const rowIndex = normalizeCellIndex(piece.row);
   const colIndex = normalizeCellIndex(piece.col);
@@ -183,6 +186,25 @@ const BoardPieceSprite = memo(function BoardPieceSprite({
                 backgroundColor: '#000000',
               }}
             />
+          ) : null}
+          {prisonChained && !darkVeiled ? (
+            <View
+              pointerEvents="none"
+              style={{
+                position: 'absolute',
+                left: '6%',
+                right: '6%',
+                top: '8%',
+                bottom: '8%',
+                opacity: 0.88,
+              }}
+            >
+              <Image
+                source={PRISON_CHAIN_IMAGE_SOURCE}
+                contentFit="contain"
+                style={{ width: '100%', height: '100%' }}
+              />
+            </View>
           ) : null}
         </View>
       </View>
@@ -383,10 +405,14 @@ const BoardPiecesLayer = memo(function BoardPiecesLayer({
   spriteEpoch?: number;
   promotionImageFlash?: PromotionImageFlash | null;
 }) {
+  const keySeqByBase = new Map<string, number>();
   return (
     <View pointerEvents="none" style={{ position: 'absolute', inset: 0 }}>
       {pieces.map((placement) => {
-        const placementKey = `${spriteEpoch}-${placement.side}-${placement.pieceCode ?? 'X'}-${placement.promoted ? 'P' : 'N'}-${getDisplayChar(placement)}-${placement.row}-${placement.col}`;
+        const basePlacementKey = `${spriteEpoch}-${placement.side}-${placement.pieceCode ?? 'X'}-${placement.promoted ? 'P' : 'N'}-${getDisplayChar(placement)}-${placement.row}-${placement.col}`;
+        const seq = keySeqByBase.get(basePlacementKey) ?? 0;
+        keySeqByBase.set(basePlacementKey, seq + 1);
+        const placementKey = `${basePlacementKey}-${seq}`;
         const flash =
           promotionImageFlash &&
           promotionImageFlash.side === placement.side &&
@@ -406,6 +432,7 @@ const BoardPiecesLayer = memo(function BoardPiecesLayer({
             instantPromotedKey={flash?.flashKey ?? null}
             darkVeiled={Boolean(placement.darkVeiled)}
             aTransformed={Boolean(placement.aTransformed)}
+            prisonChained={Boolean(placement.prisonChained)}
           />
         );
       })}

@@ -34,6 +34,8 @@ export const BOARD_PIECE_SIZE_OVERRIDES: Partial<Record<string, number>> = {
   波: 128,
 };
 export const POISON_CELL_IMAGE_SOURCE = require('../../../../assets/cells/毒マス.png');
+/** 牢・柵スキルで行動不能になった駒の上に重ねる */
+export const PRISON_CHAIN_IMAGE_SOURCE = require('../../../../assets/cells/鎖.png');
 
 const STANDARD_PIECE_CODES = new Set(['FU', 'KY', 'KE', 'GI', 'KI', 'KA', 'HI', 'OU']);
 const LOCAL_PROMOTED_PIECE_IMAGE_BY_CODE: Partial<Record<string, number>> = {
@@ -88,7 +90,7 @@ const PROMOTED_PIECE_CODE_TO_BASE_CODE: Record<string, string> = {
 };
 const VISUAL_PROMOTED_PIECE_CODES = new Set(['TO', 'NY', 'NK', 'NG', 'UM', 'RY', 'RYU']);
 const PERSISTENT_HAZARD_CHARS = new Set(['毒', '沼']);
-export const PERSISTENT_SYNC_GUARD_CHARS = new Set(['毒', '沼', '映', '鏡', 'あ']);
+export const PERSISTENT_SYNC_GUARD_CHARS = new Set(['毒', '沼', '映', '鏡', 'あ', '牢', '柵']);
 
 export type BoardPiece = {
   side: Side;
@@ -100,6 +102,8 @@ export type BoardPiece = {
   imageSignedUrl: string | null;
   darkVeiled?: boolean;
   aTransformed?: boolean;
+  /** 牢・柵スキル由来の行動不能（鎖.png） */
+  prisonChained?: boolean;
 };
 
 export type PreservedMovedPiece = {
@@ -654,6 +658,46 @@ export function applyATransformEffectToPieces(
   }));
 }
 
+function prisonChainDisplayKeysFromCanonical(position: BattleCanonicalPosition): Set<string> {
+  const keys = new Set<string>();
+  const boardState = asRecord(position.boardState);
+  if (!boardState) return keys;
+  const skillState = asRecord(boardState.skill_state ?? boardState.skillState);
+  const rawList = (skillState?.piece_statuses ??
+    skillState?.pieceStatuses ??
+    boardState.piece_statuses ??
+    boardState.pieceStatuses) as unknown;
+  if (!Array.isArray(rawList)) return keys;
+  for (const raw of rawList) {
+    const st = asRecord(raw);
+    if (!st) continue;
+    const statusType = asString(st.status_type ?? st.statusType) ?? '';
+    if (statusType !== 'prison_fence_stun') continue;
+    const turns = Number(st.remaining_turns ?? st.remainingTurns ?? 1);
+    if (!Number.isFinite(turns) || turns <= 0) continue;
+    const row = normalizeCellIndex(Number(st.row));
+    const col = normalizeCellIndex(Number(st.col));
+    if (row === null || col === null) continue;
+    const side = normalizeSide(asString(st.side) ?? 'player');
+    keys.add(`${side}:${row}:${col}`);
+  }
+  return keys;
+}
+
+export function applyPrisonChainEffectToPieces(
+  pieces: BoardPiece[],
+  position: BattleCanonicalPosition,
+): BoardPiece[] {
+  const keys = prisonChainDisplayKeysFromCanonical(position);
+  if (keys.size === 0) {
+    return pieces.map((p) => ({ ...p, prisonChained: false }));
+  }
+  return pieces.map((p) => ({
+    ...p,
+    prisonChained: keys.has(`${p.side}:${p.row}:${p.col}`),
+  }));
+}
+
 export function poisonHazardCellsForDisplay(position: BattleCanonicalPosition): BoardCell[] {
   const boardState = asRecord(position.boardState);
   if (!boardState) return [];
@@ -725,7 +769,12 @@ export function immobilizedKeysFromCanonical(position: BattleCanonicalPosition) 
     const remaining = Number(entry.remaining_turns ?? entry.remainingTurns ?? 1);
     if (!Number.isFinite(remaining) || remaining <= 0) continue;
     const statusType = asString(entry.status_type ?? entry.statusType) ?? '';
-    if (statusType !== 'stun' && statusType !== 'time_stop' && statusType !== 'dark_blind') {
+    if (
+      statusType !== 'stun' &&
+      statusType !== 'time_stop' &&
+      statusType !== 'dark_blind' &&
+      statusType !== 'prison_fence_stun'
+    ) {
       continue;
     }
     const side = normalizeSide(asString(entry.side) ?? 'player');
@@ -1591,6 +1640,7 @@ export function syncCanonicalState(params: {
   const withPersistentCells = enforcePersistentHazardCells(withPromotionOverlay, persistentHazards);
   const withDarkVeil = applyDarkVeilFromSkillStateToPieces(withPersistentCells, position);
   const withATransformEffect = applyATransformEffectToPieces(withDarkVeil, position);
+  const withPrisonChain = applyPrisonChainEffectToPieces(withATransformEffect, position);
   const poisonHazardCells = poisonHazardCellsForDisplay(position);
   const movementRuleByCell = movementRuleByCellFromCanonical(position);
   const immobilizedKeys = immobilizedKeysFromCanonical(position);
@@ -1599,7 +1649,7 @@ export function syncCanonicalState(params: {
     pieceCatalog,
   );
   const reconciledHands = reconcileExtendedPieceHandsAgainstBoard(nextHands, withPromotionOverlay);
-  const stabilizedPieces = enforcePersistentHazardCells(withATransformEffect, persistentHazards);
+  const stabilizedPieces = enforcePersistentHazardCells(withPrisonChain, persistentHazards);
   const nextPersistentHazards = stabilizedPieces.filter((p) =>
     PERSISTENT_SYNC_GUARD_CHARS.has(p.char),
   );

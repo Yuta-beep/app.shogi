@@ -314,11 +314,24 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
 
   useEffect(() => {
     const next: BoardPiece[] = [];
+    const snapshotLooksZeroBased = snapshot.placements.some(
+      (placement) => placement.row === 0 || placement.col === 0,
+    );
+    const snapshotLooksOneBased =
+      !snapshotLooksZeroBased &&
+      snapshot.placements.length > 0 &&
+      snapshot.placements.every(
+        (placement) =>
+          Number.isInteger(placement.row) &&
+          Number.isInteger(placement.col) &&
+          placement.row >= 1 &&
+          placement.row <= BOARD_SIZE &&
+          placement.col >= 1 &&
+          placement.col <= BOARD_SIZE,
+      );
     for (const placement of snapshot.placements) {
-      const row =
-        placement.row >= 1 && placement.row <= BOARD_SIZE ? placement.row - 1 : placement.row;
-      const col =
-        placement.col >= 1 && placement.col <= BOARD_SIZE ? placement.col - 1 : placement.col;
+      const row = snapshotLooksOneBased ? placement.row - 1 : placement.row;
+      const col = snapshotLooksOneBased ? placement.col - 1 : placement.col;
       if (row < 0 || row >= BOARD_SIZE || col < 0 || col >= BOARD_SIZE) continue;
       next.push({
         side: placement.side === 'enemy' ? 'enemy' : 'player',

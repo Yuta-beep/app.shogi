@@ -42,7 +42,26 @@ const WOOD_PIECE_CODES = new Set(['WOOD', 'MOK', '木']);
 const LEAF_PIECE_CODES = new Set(['LEAF', 'HAA', '葉']);
 const DEMON_PIECE_CODES = new Set(['DEMON', 'MAK', '魔']);
 const DARK_PIECE_CODES = new Set(['DARK', 'YAM', '闇']);
+/** 牢・柵（不透明 piece ID のサフィックスでも判定） */
+const PRISON_FENCE_PIECE_CODES = new Set([
+  'PRISON',
+  'ROU',
+  'FENCE',
+  'SAKU',
+  'SAKUI',
+  '406177108665',
+  '95E4E9F3D8E5',
+]);
 const TREASURE_REWARD_CODES = ['KI', 'GI', 'COPPER'] as const;
+
+function stableHashSkillSeed(value: string): number {
+  let hash = 2166136261;
+  for (let i = 0; i < value.length; i += 1) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
 
 function normalizeSkillPieceCode(raw: string | null | undefined): string {
   if (!raw) return '';
@@ -455,7 +474,12 @@ export function createSkillRuntimeView(position: AiBattlePosition): SkillRuntime
     const statusType = asString(entry.status_type ?? entry.statusType) ?? '';
     if (row == null || col == null || remaining <= 0) continue;
     const key = cellKey(side, row, col);
-    if (statusType === 'stun' || statusType === 'time_stop' || statusType === 'dark_blind') {
+    if (
+      statusType === 'stun' ||
+      statusType === 'time_stop' ||
+      statusType === 'dark_blind' ||
+      statusType === 'prison_fence_stun'
+    ) {
       immobilizedCells.add(key);
     }
     if (statusType === 'dark_blind') {
@@ -663,6 +687,11 @@ export function applyMoveSkillEffects(input: {
     DEMON_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '魔';
   const isDarkMover =
     DARK_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '闇';
+  const isPrisonFenceMover =
+    PRISON_FENCE_PIECE_CODES.has(movedCode) ||
+    normalizeSkillPieceCode(input.move.pieceCode) === '牢' ||
+    normalizeSkillPieceCode(input.move.pieceCode) === '柵' ||
+    (movedPiece ? movedPiece.char === '牢' || movedPiece.char === '柵' : false);
 
   // ai.shogi の explicit override 相当: 定義読み込み失敗時でも炎スキルは発動可能にする。
   if (
@@ -1168,6 +1197,59 @@ export function applyMoveSkillEffects(input: {
           side: targetPiece.side,
           status_type: 'dark_blind',
           remaining_turns: 2,
+        });
+      }
+    }
+  }
+  // 牢・柵: 移動時、盤上の敵駒からランダムで1体（玉除く）を2ターン行動不能（鎖表示用 status）。
+  if (isPrisonFenceMover && input.move.fromRow != null && input.move.fromCol != null && movedPiece) {
+    const candidates = input.pieces.filter((piece) => {
+      if (piece.side === input.actorSide) return false;
+      const base = toBasePieceCode(piece.pieceCode);
+      if (base === 'OU' || piece.char === '王' || piece.char === '玉') return false;
+      return true;
+    });
+    const moverChar = movedPiece.char === '牢' || movedPiece.char === '柵' ? movedPiece.char : '牢/柵';
+    if (candidates.length === 0) {
+      if (typeof __DEV__ !== 'undefined' && __DEV__) {
+        console.info('[prison-fence-skill-debug]', {
+          moveCount: input.position.moveCount,
+          turnNumber: input.position.turnNumber,
+          moverChar,
+          moverSide: input.actorSide,
+          triggered: false,
+          reason: 'no_enemy_candidates',
+        });
+      }
+    } else {
+      const seed = `${input.position.stateHash ?? ''}:${input.position.turnNumber}:${input.position.moveCount}:${movedPiece.row}:${movedPiece.col}:${input.actorSide}`;
+      const idx = stableHashSkillSeed(seed) % candidates.length;
+      const target = candidates[idx]!;
+      state.piece_statuses = state.piece_statuses.filter((entry) => {
+        const statusType = asString(entry.status_type ?? entry.statusType) ?? '';
+        if (statusType !== 'prison_fence_stun') return true;
+        const side = (asString(entry.side) ?? 'player') === 'enemy' ? 'enemy' : 'player';
+        return !(side === target.side && asNumber(entry.row) === target.row && asNumber(entry.col) === target.col);
+      });
+      state.piece_statuses.push({
+        row: target.row,
+        col: target.col,
+        side: target.side,
+        status_type: 'prison_fence_stun',
+        remaining_turns: 2,
+      });
+      if (typeof __DEV__ !== 'undefined' && __DEV__) {
+        console.info('[prison-fence-skill-debug]', {
+          moveCount: input.position.moveCount,
+          turnNumber: input.position.turnNumber,
+          moverChar,
+          moverSide: input.actorSide,
+          triggered: true,
+          targetSide: target.side,
+          targetRow: target.row,
+          targetCol: target.col,
+          candidateCount: candidates.length,
+          pickedIndex: idx,
         });
       }
     }

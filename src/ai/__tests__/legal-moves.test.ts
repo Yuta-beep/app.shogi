@@ -304,6 +304,38 @@ describe('ai engine legal moves', () => {
     expect(legal.legalMoves.some((move) => move.fromRow === 5 && move.fromCol === 4)).toBe(false);
   });
 
+  it('blocks moves for prison_fence_stun pieces like stun', () => {
+    const position: AiBattlePosition = {
+      sideToMove: 'enemy',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: '4k4/9/9/9/9/4p4/9/9/4K4 w - 1',
+      stateHash: 'seed',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'enemy', row: 5, col: 4, pieceCode: 'FU', char: '歩', promoted: false },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+        skill_state: {
+          piece_statuses: [
+            {
+              side: 'enemy',
+              row: 5,
+              col: 4,
+              status_type: 'prison_fence_stun',
+              remaining_turns: 2,
+            },
+          ],
+        },
+      },
+      hands: { player: {}, enemy: {} },
+    };
+
+    const legal = generateLegalMoves({ position, pieceCatalog });
+    expect(legal.legalMoves.some((move) => move.fromRow === 5 && move.fromCol === 4)).toBe(false);
+  });
+
   it('does not immobilize king even with time_stop status', () => {
     const position: AiBattlePosition = {
       sideToMove: 'player',

@@ -32,6 +32,8 @@ const SWAMP_SKILL_DESCRIPTION =
   'この駒の周囲8マスにいる敵駒の移動範囲は上下1マスのみに制限される。';
 const POISON_SKILL_DESCRIPTION =
   'この駒が移動したとき移動前のマスは4ターン毒マスになる。毒マスを敵駒が通るとその駒は消滅する。';
+const PRISON_FENCE_SKILL_DESCRIPTION =
+  '移動時、盤上の敵駒のうちランダムで1体を2ターン行動不能にする。';
 
 function resolveDisplaySkillText(char: string, skill: string | null | undefined): string {
   if (char === '葉') return LEAF_SKILL_DESCRIPTION;
@@ -42,6 +44,7 @@ function resolveDisplaySkillText(char: string, skill: string | null | undefined)
   if (char === '虹') return RAINBOW_SKILL_DESCRIPTION;
   if (char === '沼') return SWAMP_SKILL_DESCRIPTION;
   if (char === '毒') return POISON_SKILL_DESCRIPTION;
+  if (char === '牢' || char === '柵') return PRISON_FENCE_SKILL_DESCRIPTION;
   const normalized = (skill ?? '').trim();
   return normalized.length > 0 ? normalized : '-';
 }
