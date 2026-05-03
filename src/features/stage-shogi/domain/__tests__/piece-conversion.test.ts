@@ -403,4 +403,62 @@ describe('piece conversion via DB-derived mapping', () => {
     ]);
     expect(parseSfenHandsPart('2?', mineralMapping)).toEqual({ player: {}, enemy: { LEAD: 2 } });
   });
+
+  it('多文字 sfen（Rust 1 文字未割当）を盤面 SFEN に落とさず載せる（幻・霧の拡張トークン向け）', () => {
+    const phantomMapping = createPieceSfenMapping([
+      {
+        pieceCode: 'PHANTOM',
+        sfenCode: 'ZPH',
+        isPromoted: false,
+        char: '幻',
+        name: '',
+        unlock: '',
+        desc: '',
+        skill: '',
+        move: '',
+        moveVectors: [],
+        isRepeatable: false,
+      },
+    ]);
+    const pieces: TestPiece[] = [
+      { side: 'enemy', row: 0, col: 4, pieceCode: 'PHANTOM', char: '幻' },
+    ];
+    expect(toSfenBoardPure(pieces, phantomMapping)).toBe('4zph4/9/9/9/9/9/9/9/9');
+  });
+
+  it('舟の opaque 行に誤った sfen K が付いていても玉と衝突せず ZBO に寄せる', () => {
+    const boatMapping = createPieceSfenMapping([
+      {
+        pieceCode: 'OU',
+        sfenCode: 'K',
+        isPromoted: false,
+        char: '王',
+        name: '',
+        unlock: '',
+        desc: '',
+        skill: '',
+        move: '',
+        moveVectors: [],
+        isRepeatable: false,
+      },
+      {
+        pieceCode: 'PIECE_31EA6722B2B4',
+        sfenCode: 'K',
+        isPromoted: false,
+        char: '舟',
+        name: '',
+        unlock: '',
+        desc: '',
+        skill: '',
+        move: '',
+        moveVectors: [],
+        isRepeatable: false,
+      },
+    ]);
+    expect(boatMapping.sfenToCode.unpromoted.K).toBe('OU');
+    expect(boatMapping.sfenToCode.unpromoted.ZBO).toBe('BOAT');
+    expect(boatMapping.codeToSfen.BOAT).toBe('ZBO');
+    const pieces: TestPiece[] = [{ side: 'enemy', row: 0, col: 4, pieceCode: 'BOAT', char: '舟' }];
+    expect(toSfenBoardPure(pieces, boatMapping)).toBe('4zbo4/9/9/9/9/9/9/9/9');
+  });
 });

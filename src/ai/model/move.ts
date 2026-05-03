@@ -6,9 +6,23 @@ export function normalizePieceCode(value: string | null | undefined): string | n
   return value ? value.toUpperCase() : null;
 }
 
+/** DB の `piece_<hex>` を `PIECE_` 付きで正規化したもの。PIECE_ を剥がすと SFEN/カタログキーが壊れるためそのまま返す。 */
+function shouldPreservePrefixedPieceInstanceId(normalized: string): boolean {
+  for (const prefix of ['PIECE_SHOGI_', 'PIECE_'] as const) {
+    if (!normalized.startsWith(prefix)) continue;
+    const rest = normalized.slice(prefix.length);
+    if (rest.length < 8) continue;
+    if (/^[0-9A-F]+$/i.test(rest)) return true;
+  }
+  return false;
+}
+
 export function toBasePieceCode(pieceCode: string | null | undefined): string | null {
   const normalized = normalizePieceCode(pieceCode);
   if (!normalized) return null;
+  if (shouldPreservePrefixedPieceInstanceId(normalized)) {
+    return normalized;
+  }
   let code = normalized;
   if (code.startsWith('PIECE_SHOGI_')) {
     code = code.slice('PIECE_SHOGI_'.length);

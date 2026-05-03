@@ -147,6 +147,19 @@ const pieceCatalog: AiPieceDefinition[] = [
     moveVectors: [{ dx: 0, dy: -1, maxStep: 1 }],
     isRepeatable: true,
   },
+  {
+    pieceCode: 'PEAK',
+    canonicalCode: 'PEAK',
+    sfenCode: 'p',
+    char: '峰',
+    name: '峰',
+    unlock: 'default',
+    desc: '',
+    skill: '',
+    move: '',
+    moveVectors: [{ dx: 0, dy: -1, maxStep: 1 }],
+    isRepeatable: true,
+  },
 ];
 
 describe('ai engine legal moves', () => {
@@ -272,6 +285,40 @@ describe('ai engine legal moves', () => {
     );
   });
 
+  it('rejects drops onto rock obstacle cells', () => {
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: '4k4/9/9/9/9/9/9/9/4K4 b P 1',
+      stateHash: 'seed',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+        skill_state: {
+          board_hazards: [
+            {
+              row: 6,
+              col: 4,
+              hazard_type: 'rock_obstacle',
+              affects_side: 'both',
+              remaining_turns: 2,
+            },
+          ],
+        },
+      },
+      hands: { player: { FU: 1 }, enemy: {} },
+    };
+    const legal = generateLegalMoves({ position, pieceCatalog });
+    expect(
+      legal.legalMoves.some(
+        (move) => move.dropPieceCode === 'FU' && move.toRow === 6 && move.toCol === 4,
+      ),
+    ).toBe(false);
+  });
+
   it('blocks moves for stunned pieces from piece_statuses', () => {
     const position: AiBattlePosition = {
       sideToMove: 'enemy',
@@ -334,6 +381,38 @@ describe('ai engine legal moves', () => {
 
     const legal = generateLegalMoves({ position, pieceCatalog });
     expect(legal.legalMoves.some((move) => move.fromRow === 5 && move.fromCol === 4)).toBe(false);
+  });
+
+  it('blocks moves for enemy special pieces when peak exists on board', () => {
+    const position: AiBattlePosition = {
+      sideToMove: 'enemy',
+      turnNumber: 2,
+      moveCount: 1,
+      sfen: '4k4/9/9/9/4m4/4P4/9/9/4K4 w - 1',
+      stateHash: 'seed',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'enemy', row: 4, col: 4, pieceCode: 'MIRROR', char: '鏡', promoted: false },
+          { side: 'player', row: 5, col: 4, pieceCode: 'PEAK', char: '峰', promoted: false },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+        skill_state: {
+          piece_statuses: [
+            {
+              side: 'enemy',
+              row: 4,
+              col: 4,
+              status_type: 'peak_lock',
+              remaining_turns: 1,
+            },
+          ],
+        },
+      },
+      hands: { player: {}, enemy: {} },
+    };
+    const legal = generateLegalMoves({ position, pieceCatalog });
+    expect(legal.legalMoves.some((move) => move.fromRow === 4 && move.fromCol === 4)).toBe(false);
   });
 
   it('does not immobilize king even with time_stop status', () => {
@@ -533,6 +612,41 @@ describe('ai engine legal moves', () => {
     expect(
       legal.legalMoves.some(
         (move) => move.fromRow === 7 && move.fromCol === 4 && move.toRow === 6 && move.toCol === 4,
+      ),
+    ).toBe(false);
+  });
+
+  it('any piece cannot move onto rock obstacle cell', () => {
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 6,
+      moveCount: 5,
+      sfen: '4k4/9/9/9/9/4P4/9/9/4K4 b - 1',
+      stateHash: 'seed',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'player', row: 5, col: 4, pieceCode: 'FU', char: '歩', promoted: false },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+        skill_state: {
+          board_hazards: [
+            {
+              row: 4,
+              col: 4,
+              hazard_type: 'rock_obstacle',
+              affects_side: 'both',
+              remaining_turns: 2,
+            },
+          ],
+        },
+      },
+      hands: { player: {}, enemy: {} },
+    };
+    const legal = generateLegalMoves({ position, pieceCatalog });
+    expect(
+      legal.legalMoves.some(
+        (move) => move.fromRow === 5 && move.fromCol === 4 && move.toRow === 4 && move.toCol === 4,
       ),
     ).toBe(false);
   });

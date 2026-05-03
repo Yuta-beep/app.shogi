@@ -1,8 +1,12 @@
 import { ImageSourcePropType } from 'react-native';
 
+import { assembleSkillDefinitionsV2ForSession } from '@/ai/engine/session-skill-definitions-v2';
 import { ApiClientError } from '@/infra/http/api-client';
 import { resolvePieceImageSource } from '@/lib/piece-image';
-import type { PieceCatalogItem } from '@/usecases/piece-info/load-piece-catalog-usecase';
+import type {
+  MoveVector,
+  PieceCatalogItem,
+} from '@/usecases/piece-info/load-piece-catalog-usecase';
 import { BattleCanonicalPosition, BattleMove } from '@/usecases/stage-battle/game-move-contract';
 
 import {
@@ -36,6 +40,8 @@ export const BOARD_PIECE_SIZE_OVERRIDES: Partial<Record<string, number>> = {
 export const POISON_CELL_IMAGE_SOURCE = require('../../../../assets/cells/毒マス.png');
 /** 牢・柵スキルで行動不能になった駒の上に重ねる */
 export const PRISON_CHAIN_IMAGE_SOURCE = require('../../../../assets/cells/鎖.png');
+/** 岩スキルの障害物セル表示 */
+export const ROCK_OBSTACLE_IMAGE_SOURCE = require('../../../../assets/pieces/岩の障害物.png');
 
 const STANDARD_PIECE_CODES = new Set(['FU', 'KY', 'KE', 'GI', 'KI', 'KA', 'HI', 'OU']);
 const LOCAL_PROMOTED_PIECE_IMAGE_BY_CODE: Partial<Record<string, number>> = {
@@ -90,7 +96,21 @@ const PROMOTED_PIECE_CODE_TO_BASE_CODE: Record<string, string> = {
 };
 const VISUAL_PROMOTED_PIECE_CODES = new Set(['TO', 'NY', 'NK', 'NG', 'UM', 'RY', 'RYU']);
 const PERSISTENT_HAZARD_CHARS = new Set(['毒', '沼']);
-export const PERSISTENT_SYNC_GUARD_CHARS = new Set(['毒', '沼', '映', '鏡', 'あ', '牢', '柵']);
+export const PERSISTENT_SYNC_GUARD_CHARS = new Set([
+  '毒',
+  '沼',
+  '映',
+  '鏡',
+  'あ',
+  '牢',
+  '柵',
+  '峰',
+  '嶺',
+  '岩',
+  '鉱',
+  '墓',
+  '霊',
+]);
 
 export type BoardPiece = {
   side: Side;
@@ -140,6 +160,41 @@ export function toBasePieceCode(pieceCode: string | null | undefined): string | 
   if (!pieceCode) return null;
   const upper = pieceCode.toUpperCase();
   return PROMOTED_PIECE_CODE_TO_BASE_CODE[upper] ?? upper;
+}
+
+const PEOPLE_FIELD_DIAGONAL_BUFF_VECTORS: MoveVector[] = [
+  { dx: -1, dy: -1, maxStep: 1 },
+  { dx: 1, dy: -1, maxStep: 1 },
+  { dx: -1, dy: 1, maxStep: 1 },
+  { dx: 1, dy: 1, maxStep: 1 },
+];
+
+function isFieldPieceForPeopleMovePreview(piece: BoardPiece): boolean {
+  const code = toBasePieceCode(piece.pieceCode ?? null);
+  if (code === 'FIELD') return true;
+  if (piece.char === '畑') return true;
+  return CHAR_TO_CODE[piece.char] === 'FIELD';
+}
+
+function isPeoplePieceForFieldMovePreview(piece: BoardPiece): boolean {
+  const code = toBasePieceCode(piece.pieceCode ?? null);
+  if (code === 'PEOPLE') return true;
+  if (piece.char === '民') return true;
+  return CHAR_TO_CODE[piece.char] === 'PEOPLE';
+}
+
+/** 敵駒タップ時の移動範囲表示など：味方に畑があるとき民の斜め1マスをカタログベクトルに足す（合法手エンジンと同条件） */
+export function mergePeopleFieldDiagonalMoveVectors(
+  piece: BoardPiece,
+  baseVectors: readonly MoveVector[],
+  allPieces: BoardPiece[],
+): MoveVector[] {
+  if (!isPeoplePieceForFieldMovePreview(piece)) return [...baseVectors];
+  const hasAllyField = allPieces.some(
+    (p) => p.side === piece.side && isFieldPieceForPeopleMovePreview(p),
+  );
+  if (!hasAllyField) return [...baseVectors];
+  return [...baseVectors, ...PEOPLE_FIELD_DIAGONAL_BUFF_VECTORS];
 }
 
 export function isEnemySide(side: string) {
@@ -285,6 +340,7 @@ export function buildBoardState(
 
   return {
     pieces,
+    skill_definitions_v2: assembleSkillDefinitionsV2ForSession(pieceDefsByCode),
     custom_move_vectors: Object.fromEntries(
       Object.entries(pieceDefsByCode)
         .filter((entry): entry is [string, PieceCatalogItem] => Boolean(entry[1]))
@@ -553,7 +609,12 @@ export function reconcileExtendedPieceHandsAgainstBoard(
         codeU === 'SAND' ||
         codeU === 'WIND' ||
         codeU === 'HIK' ||
-        codeU === 'SWAMP'
+        codeU === 'SWAMP' ||
+        codeU === 'GEAR' ||
+        codeU === 'MACHINE' ||
+        codeU === 'HOUSE' ||
+        codeU === 'PEOPLE' ||
+        codeU === 'FIELD'
       ) {
         continue;
       }
@@ -728,6 +789,36 @@ export function poisonHazardCellsForDisplay(position: BattleCanonicalPosition): 
   return out;
 }
 
+export function rockObstacleCellsForDisplay(position: BattleCanonicalPosition): BoardCell[] {
+  const boardState = asRecord(position.boardState);
+  if (!boardState) return [];
+  const skillState = asRecord(boardState.skill_state ?? boardState.skillState);
+  const rawList = (skillState?.board_hazards ??
+    skillState?.boardHazards ??
+    boardState.board_hazards ??
+    boardState.boardHazards) as unknown;
+  if (!Array.isArray(rawList)) return [];
+
+  const out: BoardCell[] = [];
+  const seen = new Set<string>();
+  for (const raw of rawList) {
+    const hazard = asRecord(raw);
+    if (!hazard) continue;
+    const hazardType = asString(hazard.hazard_type ?? hazard.hazardType) ?? '';
+    const remaining = Number(hazard.remaining_turns ?? hazard.remainingTurns ?? 1);
+    const row = normalizeCellIndex(Number(hazard.row));
+    const col = normalizeCellIndex(Number(hazard.col));
+    if (hazardType !== 'rock_obstacle') continue;
+    if (!Number.isFinite(remaining) || remaining <= 0) continue;
+    if (row === null || col === null) continue;
+    const key = `${row}:${col}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ row, col });
+  }
+  return out;
+}
+
 export function movementRuleByCellFromCanonical(position: BattleCanonicalPosition) {
   const out = new Map<string, string>();
   const boardState = asRecord(position.boardState);
@@ -773,7 +864,8 @@ export function immobilizedKeysFromCanonical(position: BattleCanonicalPosition) 
       statusType !== 'stun' &&
       statusType !== 'time_stop' &&
       statusType !== 'dark_blind' &&
-      statusType !== 'prison_fence_stun'
+      statusType !== 'prison_fence_stun' &&
+      statusType !== 'peak_lock'
     ) {
       continue;
     }
@@ -790,13 +882,26 @@ export function applyMovementRuleToTargets(
   origin: BoardCell,
   targets: BoardCell[],
   movementRule: string | null,
+  context?: { movingPiece: BoardPiece; allPieces: BoardPiece[] },
 ): BoardCell[] {
   if (!movementRule) return targets;
   if (movementRule === 'vertical_step_only') {
     return targets.filter((t) => t.col === origin.col && Math.abs(t.row - origin.row) === 1);
   }
   if (movementRule === 'orthogonal_step_only') {
-    return targets.filter((t) => Math.abs(t.row - origin.row) + Math.abs(t.col - origin.col) === 1);
+    const peopleFieldBuff =
+      context != null &&
+      isPeoplePieceForFieldMovePreview(context.movingPiece) &&
+      context.allPieces.some(
+        (p) => p.side === context.movingPiece.side && isFieldPieceForPeopleMovePreview(p),
+      );
+    return targets.filter((t) => {
+      const adr = Math.abs(t.row - origin.row);
+      const adc = Math.abs(t.col - origin.col);
+      if (adr + adc === 1) return true;
+      if (peopleFieldBuff && adr === 1 && adc === 1) return true;
+      return false;
+    });
   }
   return targets;
 }
@@ -892,6 +997,13 @@ function piecesFromCanonicalBoardState(
   return next.length > 0 ? next : null;
 }
 
+/** 拡張 SFEN（多文字トークン）を最長一致で読むため、未成り sfen キーを長い順に並べる */
+function sortedUnpromotedSfenTokens(mapping: PieceSfenMapping): string[] {
+  return Object.keys(mapping.sfenToCode.unpromoted).sort(
+    (a, b) => b.length - a.length || a.localeCompare(b),
+  );
+}
+
 export function piecesFromCanonicalPosition(
   position: BattleCanonicalPosition,
   pieceSfenMapping: PieceSfenMapping,
@@ -902,28 +1014,108 @@ export function piecesFromCanonicalPosition(
   const board = position.sfen.split(' ')[0] ?? '';
   const ranks = board.split('/');
   const next: BoardPiece[] = [];
+  const tokensByLenDesc = sortedUnpromotedSfenTokens(pieceSfenMapping);
 
   ranks.forEach((rank, row) => {
     let col = 0;
     let promoted = false;
-    for (const ch of rank) {
+    let i = 0;
+    while (i < rank.length) {
+      const ch = rank[i] ?? '';
       if (ch === '+') {
         promoted = true;
+        i += 1;
         continue;
       }
       if (/\d/.test(ch)) {
         col += Number(ch);
+        i += 1;
         promoted = false;
         continue;
       }
 
-      let side: Side = ch >= 'A' && ch <= 'Z' ? 'player' : 'enemy';
-      if ('$!&(#@^[<{:.\"=|'.includes(ch)) side = 'player';
-      if ("%?*)~`_]>};,'-\\".includes(ch)) side = 'enemy';
-      let pieceCode = sfenCharToDisplayChar(ch, promoted, pieceSfenMapping);
-      if (!pieceCode && promoted) {
-        pieceCode = sfenCharToDisplayChar(ch, false, pieceSfenMapping);
+      if (promoted) {
+        let side: Side = ch >= 'A' && ch <= 'Z' ? 'player' : 'enemy';
+        if ('$!&(#@^[<{:.\"=|'.includes(ch)) side = 'player';
+        if ("%?*)~`_]>};,'-\\".includes(ch)) side = 'enemy';
+        let pieceCode = sfenCharToDisplayChar(ch, true, pieceSfenMapping);
+        if (!pieceCode) {
+          pieceCode = sfenCharToDisplayChar(ch, false, pieceSfenMapping);
+        }
+        const preservedAtCellSameSide = existingPieces.find(
+          (p) => p.side === side && p.row === row && p.col === col,
+        );
+        const preservedAtCellAnySide =
+          preservedAtCellSameSide ??
+          existingPieces.find((p) => p.row === row && p.col === col) ??
+          null;
+        const usedPreservedCode = !pieceCode && preservedAtCellAnySide?.pieceCode != null;
+        if (usedPreservedCode && preservedAtCellAnySide?.pieceCode) {
+          pieceCode = preservedAtCellAnySide.pieceCode;
+        }
+        const effectiveSide = usedPreservedCode ? (preservedAtCellAnySide?.side ?? side) : side;
+        if (pieceCode && row >= 0 && row < BOARD_SIZE && col >= 0 && col < BOARD_SIZE) {
+          const pieceDef = promotedPieceDefsByCode[pieceCode] ?? pieceDefsByCode[pieceCode];
+          const char =
+            (usedPreservedCode ? preservedAtCellAnySide?.char : null) ??
+            pieceCharFromCode(pieceCode, effectiveSide, true);
+          const imageSignedUrl = preferBundledPromotedImageOverRemoteUrl(
+            pieceCode,
+            true,
+            pieceDef?.imageSignedUrl ??
+              findBestExistingImage(existingPieces, {
+                side: effectiveSide,
+                row,
+                col,
+                pieceCode,
+                char,
+                promoted: true,
+              }) ??
+              null,
+          );
+
+          next.push({
+            side: effectiveSide,
+            row,
+            col,
+            pieceCode,
+            char,
+            promoted: true,
+            imageSignedUrl,
+          });
+        }
+
+        col += 1;
+        i += 1;
+        promoted = false;
+        continue;
       }
+
+      const rest = rank.slice(i);
+      let consume = 0;
+      let pieceCode: string | null = null;
+      for (const token of tokensByLenDesc) {
+        if (rest.length < token.length) continue;
+        const slice = rest.slice(0, token.length);
+        if (slice.toUpperCase() !== token.toUpperCase()) continue;
+        const code = pieceSfenMapping.sfenToCode.unpromoted[token];
+        if (!code) continue;
+        pieceCode = code;
+        consume = token.length;
+        break;
+      }
+
+      if (consume === 0) {
+        pieceCode = sfenCharToDisplayChar(ch, false, pieceSfenMapping);
+        consume = 1;
+      }
+
+      const rawToken = rest.slice(0, consume);
+      const sideCh = rawToken[0] ?? ch;
+      let side: Side = sideCh >= 'A' && sideCh <= 'Z' ? 'player' : 'enemy';
+      if ('$!&(#@^[<{:.\"=|'.includes(sideCh)) side = 'player';
+      if ("%?*)~`_]>};,'-\\".includes(sideCh)) side = 'enemy';
+
       const preservedAtCellSameSide = existingPieces.find(
         (p) => p.side === side && p.row === row && p.col === col,
       );
@@ -937,15 +1129,13 @@ export function piecesFromCanonicalPosition(
       }
       const effectiveSide = usedPreservedCode ? (preservedAtCellAnySide?.side ?? side) : side;
       if (pieceCode && row >= 0 && row < BOARD_SIZE && col >= 0 && col < BOARD_SIZE) {
-        const pieceDef = promoted
-          ? (promotedPieceDefsByCode[pieceCode] ?? pieceDefsByCode[pieceCode])
-          : pieceDefsByCode[pieceCode];
+        const pieceDef = pieceDefsByCode[pieceCode];
         const char =
           (usedPreservedCode ? preservedAtCellAnySide?.char : null) ??
-          pieceCharFromCode(pieceCode, effectiveSide, promoted);
+          pieceCharFromCode(pieceCode, effectiveSide, false);
         const imageSignedUrl = preferBundledPromotedImageOverRemoteUrl(
           pieceCode,
-          promoted,
+          false,
           pieceDef?.imageSignedUrl ??
             findBestExistingImage(existingPieces, {
               side: effectiveSide,
@@ -953,7 +1143,7 @@ export function piecesFromCanonicalPosition(
               col,
               pieceCode,
               char,
-              promoted,
+              promoted: false,
             }) ??
             null,
         );
@@ -964,12 +1154,13 @@ export function piecesFromCanonicalPosition(
           col,
           pieceCode,
           char,
-          promoted,
+          promoted: false,
           imageSignedUrl,
         });
       }
 
       col += 1;
+      i += consume;
       promoted = false;
     }
   });
@@ -1642,6 +1833,7 @@ export function syncCanonicalState(params: {
   const withATransformEffect = applyATransformEffectToPieces(withDarkVeil, position);
   const withPrisonChain = applyPrisonChainEffectToPieces(withATransformEffect, position);
   const poisonHazardCells = poisonHazardCellsForDisplay(position);
+  const rockObstacleCells = rockObstacleCellsForDisplay(position);
   const movementRuleByCell = movementRuleByCellFromCanonical(position);
   const immobilizedKeys = immobilizedKeysFromCanonical(position);
   const nextHands = remapHandsStateToDisplayPieceCodes(
@@ -1658,6 +1850,7 @@ export function syncCanonicalState(params: {
     pieces: stabilizedPieces,
     persistentHazards: nextPersistentHazards,
     poisonHazardCells,
+    rockObstacleCells,
     hands: reconciledHands,
     sideToMove: position.sideToMove,
     moveNo: position.turnNumber,

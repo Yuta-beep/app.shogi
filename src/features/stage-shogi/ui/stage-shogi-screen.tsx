@@ -8,6 +8,7 @@ import { getNormalDungeonStagePreviewSource } from '@/constants/normal-dungeon-s
 import { StageShogiBoard } from '@/features/stage-shogi/ui/components/stage-shogi-board';
 import { StageShogiHandsRow } from '@/features/stage-shogi/ui/components/stage-shogi-hands-row';
 import {
+  StageShogiHouseSkillModal,
   StageShogiInspectModal,
   StageShogiPromotionModal,
   StageShogiResultOverlay,
@@ -111,6 +112,7 @@ export function StageShogiScreen() {
           aiPreviewTarget={vm.aiPreviewTarget}
           enemyPreviewTargets={vm.enemyPreviewTargets}
           poisonHazardCells={vm.poisonHazardCells}
+          rockObstacleCells={vm.rockObstacleCells}
           onCellPress={vm.handleBoardCellPress}
           onCellLongPress={vm.handleCellLongPress}
         />
@@ -125,6 +127,11 @@ export function StageShogiScreen() {
         pending={vm.pendingTimeActionCell}
         onConfirm={vm.confirmTimeAction}
         onCancel={vm.cancelTimeAction}
+      />
+      <StageShogiHouseSkillModal
+        pending={vm.pendingHouseSkillCell}
+        onUseSkill={vm.confirmHouseSkill}
+        onCancel={vm.cancelHouseSkill}
       />
       <StageShogiSkillToast text={vm.skillActivationText} />
 

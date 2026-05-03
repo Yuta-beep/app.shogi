@@ -79,6 +79,14 @@ const RUST_ENGINE_ONE_CHAR_SFEN: Readonly<Record<string, string>> = {
   RAINBOW: '"',
   POISON: '=',
   SWAMP: '|',
+  /** 多字 SFEN（ZPH / ZMI と同系）。アルファベット 1 文字は枯渇のため Z 接頭 */
+  MOON: 'ZMO',
+  BOAT: 'ZBO',
+  MACHINE: 'ZMC',
+  GEAR: 'ZGR',
+  HOUSE: 'ZIE',
+  PEOPLE: 'ZMN',
+  FIELD: 'ZTA',
 };
 
 /** カタログに行が無い／sfen が未同期でも、エンジン SFEN 1 文字 → pieceCode を復元する */
@@ -101,6 +109,13 @@ const CODES_WITH_ENGINE_SFEN_FALLBACK: ReadonlySet<string> = new Set([
   'RAINBOW',
   'POISON',
   'SWAMP',
+  'MOON',
+  'BOAT',
+  'MACHINE',
+  'GEAR',
+  'HOUSE',
+  'PEOPLE',
+  'FIELD',
 ]);
 
 /** `sfenCharToDisplayChar` 用（`a`→`A` と `!` の両方で引けるよう atom をキーにする） */
@@ -133,6 +148,74 @@ const ENGINE_SFEN_ATOM_TO_FALLBACK_CODE: Readonly<Record<string, string>> = (() 
 })();
 
 /**
+ * 漢字駒（幻・霧・月・舟など）の canonical pieceCode と CHAR_TO_CODE を同期すること。
+ * opaque な `pieceId` 行だけがカタログにあるとき、SFEN 逆引きが opaque のままだと
+ * `toSfenBoardPure` で atom 解決に失敗して駒が消えるため、ZMO 等のトークンを canonical へ寄せる。
+ */
+const KANJI_CHAR_ALIAS_TO_CANONICAL_PIECE_CODE: Readonly<Record<string, string>> = {
+  幻: 'PHANTOM',
+  霧: 'MIST',
+  月: 'MOON',
+  舟: 'BOAT',
+  機: 'MACHINE',
+  歯: 'GEAR',
+  家: 'HOUSE',
+  民: 'PEOPLE',
+  畑: 'FIELD',
+};
+
+function aliasSfenTokensToCanonicalPieceCodesForOpaqueRows(
+  items: PieceCatalogItem[],
+  codeToSfen: Record<string, string>,
+  sfenToCodeUnpromoted: Record<string, string>,
+): void {
+  for (const item of items) {
+    if (item.isPromoted) continue;
+    const rawPc = item.pieceCode?.toUpperCase();
+    if (!rawPc) continue;
+    const canonical = KANJI_CHAR_ALIAS_TO_CANONICAL_PIECE_CODE[item.char];
+    if (!canonical || canonical.toUpperCase() === rawPc) continue;
+
+    const sfenFromCatalog = codeToSfen[rawPc];
+    if (!sfenFromCatalog) continue;
+
+    const canonicalU = canonical.toUpperCase();
+    const forcedMulti = RUST_ENGINE_ONE_CHAR_SFEN[canonicalU];
+    const wrongSfen = sfenFromCatalog.toUpperCase();
+    let effectiveSfen = wrongSfen;
+    if (typeof forcedMulti === 'string' && forcedMulti.length > 1) {
+      effectiveSfen = forcedMulti.toUpperCase();
+      if (wrongSfen !== effectiveSfen && sfenToCodeUnpromoted[wrongSfen] === rawPc) {
+        delete sfenToCodeUnpromoted[wrongSfen];
+      }
+    }
+
+    const atom = resolveRustSfenAtom(rawPc, effectiveSfen);
+    if (!atom) continue;
+
+    sfenToCodeUnpromoted[atom.toUpperCase()] = canonicalU;
+    sfenToCodeUnpromoted[effectiveSfen] = canonicalU;
+    codeToSfen[canonicalU] = effectiveSfen;
+  }
+}
+
+/** 舟などの誤 sfen で `K` 逆引きを消したあと、玉（OU）の `K` を必ず復元する */
+function syncOuKingSfenTokenFromCatalog(
+  items: PieceCatalogItem[],
+  codeToSfen: Record<string, string>,
+  sfenToCodeUnpromoted: Record<string, string>,
+): void {
+  for (const item of items) {
+    if (item.isPromoted) continue;
+    if (item.pieceCode?.toUpperCase() !== 'OU') continue;
+    const sym = (item.sfenCode ?? 'K').toUpperCase();
+    sfenToCodeUnpromoted[sym] = 'OU';
+    codeToSfen['OU'] = sym;
+    return;
+  }
+}
+
+/**
  * DB カタログに無い駒でも、Rust エンジンと同じ SFEN 原子の逆引きを載せる。
  * （`sfenCharToDisplayChar` が `null` になり盤から駒が消えるのを防ぐ）
  */
@@ -161,7 +244,11 @@ function resolveRustSfenAtom(
   if (core.length === 1) {
     return core.toUpperCase();
   }
-  return RUST_ENGINE_ONE_CHAR_SFEN[pieceCodeUpper] ?? null;
+  const rust = RUST_ENGINE_ONE_CHAR_SFEN[pieceCodeUpper];
+  if (rust != null) return rust;
+  // DB の拡張トークン（例: ZAA）をそのまま盤面 SFEN に載せる（1 文字ずつ解釈すると駒が消える）
+  if (core.length > 1) return core.toUpperCase();
+  return null;
 }
 
 /** DB の多字 sfen をエンジン用 1 文字へ寄せ、逆引き sfenToCode も整合させる */
@@ -216,6 +303,8 @@ export function createPieceSfenMapping(items: PieceCatalogItem[]): PieceSfenMapp
 
   normalizeCatalogSfenToRustAtoms(items, codeToSfen, sfenToCodeUnpromoted, sfenToCodePromoted);
   injectEngineSfenFallbackIntoMapping(codeToSfen, sfenToCodeUnpromoted);
+  aliasSfenTokensToCanonicalPieceCodesForOpaqueRows(items, codeToSfen, sfenToCodeUnpromoted);
+  syncOuKingSfenTokenFromCatalog(items, codeToSfen, sfenToCodeUnpromoted);
 
   const customHandCodes = Object.entries(codeToSfen)
     .filter(([code]) => !LEGACY_STANDARD_HAND_ORDER.includes(code))
@@ -301,6 +390,22 @@ export const CODE_TO_CHAR: Readonly<Record<string, string>> = {
   SWAMP: '沼',
   PRISON: '牢',
   FENCE: '柵',
+  RIDGE: '嶺',
+  PEAK: '峰',
+  YAMA: '山',
+  ROCK: '岩',
+  ORE: '鉱',
+  GRAVE: '墓',
+  SPIRIT: '霊',
+  PHANTOM: '幻',
+  MIST: '霧',
+  MOON: '月',
+  BOAT: '舟',
+  MACHINE: '機',
+  GEAR: '歯',
+  HOUSE: '家',
+  PEOPLE: '民',
+  FIELD: '畑',
 };
 
 export const PROMOTED_CODE_TO_CHAR: Readonly<Record<string, string>> = {
@@ -357,6 +462,22 @@ export const CHAR_TO_CODE: Readonly<Record<string, string>> = {
   沼: 'SWAMP',
   牢: 'PRISON',
   柵: 'FENCE',
+  嶺: 'RIDGE',
+  峰: 'PEAK',
+  山: 'YAMA',
+  岩: 'ROCK',
+  鉱: 'ORE',
+  墓: 'GRAVE',
+  霊: 'SPIRIT',
+  幻: 'PHANTOM',
+  霧: 'MIST',
+  月: 'MOON',
+  舟: 'BOAT',
+  機: 'MACHINE',
+  歯: 'GEAR',
+  家: 'HOUSE',
+  民: 'PEOPLE',
+  畑: 'FIELD',
 };
 
 // ── toSfenBoardPure ───────────────────────────────────────────────────────────

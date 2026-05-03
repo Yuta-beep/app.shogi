@@ -169,7 +169,19 @@ export function addHandPiece(
 export function capturedToHandPieceCode(piece: BoardPiece) {
   const code =
     normalizePieceCode(piece.pieceCode) ??
-    (piece.char === '牢' ? 'PRISON' : piece.char === '柵' ? 'FENCE' : null);
+    (piece.char === '牢'
+      ? 'PRISON'
+      : piece.char === '柵'
+        ? 'FENCE'
+        : piece.char === '岩'
+          ? 'ROCK'
+          : piece.char === '鉱'
+            ? 'ORE'
+            : piece.char === '墓'
+              ? 'GRAVE'
+              : piece.char === '霊'
+                ? 'SPIRIT'
+                : null);
   if (!code) return null;
   if (KING_CODES.has(code)) return null;
   return code;

@@ -12,48 +12,21 @@ import { PieceSwipeCarousel } from '@/features/piece-info/ui/components/piece-sw
 import { usePieceCatalogScreen } from '@/features/piece-info/ui/use-piece-catalog-screen';
 import { useAssetPreload } from '@/hooks/common/use-asset-preload';
 import { useScreenBgm } from '@/hooks/common/use-screen-bgm';
-import { listLocalPieceImageModules } from '@/lib/piece-image';
 import { playSe } from '@/lib/audio/audio-manager';
 import { MoveVector } from '@/domain/models/piece';
 
 const pieceInfoBackground = require('../../../../assets/piece-info/piece-info-bg.png');
+const pieceImages: Record<string, number> = {
+  香: require('../../../../assets/piece-info/pieces/香.png'),
+  桂: require('../../../../assets/piece-info/pieces/桂.png'),
+  銀: require('../../../../assets/piece-info/pieces/銀.png'),
+  忍: require('../../../../assets/piece-info/pieces/忍.png'),
+  竜: require('../../../../assets/piece-info/pieces/竜.png'),
+};
 
 // 5x5グリッド（中心 [2][2] = 駒位置）
 const GRID_SIZE = 5;
 const CENTER = 2;
-const LEAF_SKILL_DESCRIPTION = '移動時10%の確率で「葉」駒を周囲1マスに召喚する。';
-const ELECTRIC_SKILL_DESCRIPTION = '移動時20%の確率で周囲8マスの敵駒1体を3ターン行動不能にする。';
-const ICE_SKILL_DESCRIPTION = '移動時30%の確率で周囲の敵駒1体を2ターン行動不能にする。';
-const FISH_SKILL_DESCRIPTION = '移動時30%の確率で周囲の敵駒1体を3ターン行動不能にする。';
-const MOSS_SKILL_DESCRIPTION = '移動時30%の確率で周囲の空きマスに「苔」駒を1体召喚する。';
-const RAINBOW_SKILL_DESCRIPTION =
-  'この駒の周囲8マスにいる敵駒の移動範囲は縦横1マスのみに制限される。';
-const SWAMP_SKILL_DESCRIPTION =
-  'この駒の周囲8マスにいる敵駒の移動範囲は上下1マスのみに制限される。';
-const POISON_SKILL_DESCRIPTION =
-  'この駒が移動したとき移動前のマスは4ターン毒マスになる。毒マスを敵駒が通るとその駒は消滅する。';
-const PRISON_FENCE_SKILL_DESCRIPTION =
-  '移動時、盤上の敵駒のうちランダムで1体を2ターン行動不能にする。';
-
-function resolveDisplaySkillText(char: string, skill: string | null | undefined): string {
-  if (char === '葉') return LEAF_SKILL_DESCRIPTION;
-  if (char === '電') return ELECTRIC_SKILL_DESCRIPTION;
-  if (char === '氷') return ICE_SKILL_DESCRIPTION;
-  if (char === '魚') return FISH_SKILL_DESCRIPTION;
-  if (char === '苔') return MOSS_SKILL_DESCRIPTION;
-  if (char === '虹') return RAINBOW_SKILL_DESCRIPTION;
-  if (char === '沼') return SWAMP_SKILL_DESCRIPTION;
-  if (char === '毒') return POISON_SKILL_DESCRIPTION;
-  if (char === '牢' || char === '柵') return PRISON_FENCE_SKILL_DESCRIPTION;
-  const normalized = (skill ?? '').trim();
-  return normalized.length > 0 ? normalized : '-';
-}
-
-function resolveDisplayMoveText(char: string, move: string | null | undefined): string {
-  if (char === '闇') return '全方向に1マス';
-  const normalized = (move ?? '').trim();
-  return normalized.length > 0 ? normalized : '-';
-}
 
 function MovementGrid({ vectors, isRepeatable }: { vectors: MoveVector[]; isRepeatable: boolean }) {
   // グリッドセルに移動可能かどうかをマーク
@@ -105,8 +78,15 @@ export function PieceInfoScreen() {
   const router = useRouter();
   const { piece, items, index, total, selectIndex, isLoading } = usePieceCatalogScreen();
   const carouselItems = useMemo(() => (items.length > 0 ? items : [piece]), [items, piece]);
+  const remotePieceUrls = useMemo(
+    () =>
+      items
+        .map((item) => item.imageSignedUrl)
+        .filter((url): url is string => typeof url === 'string' && url.length > 0),
+    [items],
+  );
   const { isReady: areAssetsReady } = useAssetPreload(
-    [pieceInfoBackground, ...listLocalPieceImageModules()],
+    [pieceInfoBackground, ...Object.values(pieceImages), ...remotePieceUrls],
     {
       enabled: !isLoading,
     },
@@ -156,9 +136,8 @@ export function PieceInfoScreen() {
 
           <ScrollView
             className="mt-1 flex-1"
-            showsVerticalScrollIndicator
-            nestedScrollEnabled
-            contentContainerStyle={{ paddingBottom: 28 }}
+            showsVerticalScrollIndicator={false}
+            scrollEnabled={false}
           >
             <View style={{ transform: [{ translateY: -24 }] }}>
               <View className="-mx-4 -mt-2 h-[300px] justify-center">
@@ -170,6 +149,7 @@ export function PieceInfoScreen() {
                     onChangeEffect={() => {
                       void playSe('tap');
                     }}
+                    pieceImages={pieceImages}
                     itemWidth={144}
                     itemGap={0}
                     cellHeight={300}
@@ -188,14 +168,10 @@ export function PieceInfoScreen() {
                 )}
 
                 <Text className="mt-3 text-sm font-black text-[#7f1d1d]">【スキル】</Text>
-                <Text className="mt-1 text-base leading-6 text-[#1f2937]">
-                  {resolveDisplaySkillText(piece.char, piece.skill)}
-                </Text>
+                <Text className="mt-1 text-base leading-6 text-[#1f2937]">{piece.skill}</Text>
 
                 <Text className="mt-3 text-sm font-black text-[#7f1d1d]">【移動】</Text>
-                <Text className="mt-1 text-base leading-6 text-[#1f2937]">
-                  {resolveDisplayMoveText(piece.char, piece.move)}
-                </Text>
+                <Text className="mt-1 text-base leading-6 text-[#1f2937]">{piece.move}</Text>
                 {piece.canJump && (
                   <Text className="mt-1 text-xs font-bold text-[#92400e]">
                     障害物を飛び越えて移動可能

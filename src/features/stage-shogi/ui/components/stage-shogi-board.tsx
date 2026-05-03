@@ -18,6 +18,7 @@ import {
   NORMAL_PIECE_SIZE_PERCENT,
   POISON_CELL_IMAGE_SOURCE,
   PRISON_CHAIN_IMAGE_SOURCE,
+  ROCK_OBSTACLE_IMAGE_SOURCE,
   collectStandardBaseCodesForLocalPromotedImage,
   fallbackPiecePalette,
   getDisplayChar,
@@ -287,6 +288,35 @@ const PoisonHazardLayer = memo(function PoisonHazardLayer({
   );
 });
 
+const RockObstacleLayer = memo(function RockObstacleLayer({
+  rockObstacles,
+}: {
+  rockObstacles: BoardCell[];
+}) {
+  return (
+    <View pointerEvents="none" style={{ position: 'absolute', inset: 0, zIndex: 22 }}>
+      {rockObstacles.map((cell) => (
+        <View
+          key={`rock-obstacle-image-${cell.row}-${cell.col}`}
+          style={{
+            position: 'absolute',
+            top: `${cell.row * BOARD_CELL_INNER_RATIO * 100}%`,
+            left: `${cell.col * BOARD_CELL_INNER_RATIO * 100}%`,
+            width: `${BOARD_CELL_INNER_RATIO * 100}%`,
+            height: `${BOARD_CELL_INNER_RATIO * 100}%`,
+          }}
+        >
+          <Image
+            source={ROCK_OBSTACLE_IMAGE_SOURCE}
+            contentFit="cover"
+            style={{ width: '100%', height: '100%' }}
+          />
+        </View>
+      ))}
+    </View>
+  );
+});
+
 const BoardHighlightsLayer = memo(function BoardHighlightsLayer({
   selectedCell,
   legalTargets,
@@ -451,6 +481,7 @@ export function StageShogiBoard(props: {
   aiPreviewTarget: BoardCell | null;
   enemyPreviewTargets: BoardCell[];
   poisonHazardCells: BoardCell[];
+  rockObstacleCells: BoardCell[];
   onCellPress: (row: number, col: number) => void;
   onCellLongPress: (row: number, col: number) => void;
 }) {
@@ -465,6 +496,7 @@ export function StageShogiBoard(props: {
     aiPreviewTarget,
     enemyPreviewTargets,
     poisonHazardCells,
+    rockObstacleCells,
     onCellPress,
     onCellLongPress,
   } = props;
@@ -497,6 +529,7 @@ export function StageShogiBoard(props: {
             promotionImageFlash={promotionImageFlash}
           />
           <PoisonHazardLayer poisonHazards={poisonHazardCells} />
+          <RockObstacleLayer rockObstacles={rockObstacleCells} />
           <BoardTouchLayer onCellPress={onCellPress} onCellLongPress={onCellLongPress} />
         </View>
       </View>

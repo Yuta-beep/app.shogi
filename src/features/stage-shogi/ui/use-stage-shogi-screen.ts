@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 
-import { setLocalBattlePieceCatalog } from '@/ai/local-battle-registry';
+import { generateLegalMoves } from '@/ai/engine';
+import { getLocalBattleGame, setLocalBattlePieceCatalog } from '@/ai/local-battle-registry';
+import { normalizePieceCatalog } from '@/ai/model';
+import { toBasePieceCode as toAiBasePieceCode } from '@/ai/model/move';
 import {
   addHandPiece,
   BoardCell,
@@ -41,6 +44,7 @@ import {
   computePiecesAfterOptimisticMove,
   enforcePersistentHazardCells,
   findPieceAt,
+  getDisplayChar,
   getPieceImageSource,
   hasAdjacentEnemyPiece,
   isGameAlreadyFinishedError,
@@ -49,6 +53,7 @@ import {
   legalMovesForDropPiece,
   legalMovesToTarget,
   localPromotedModuleFromBaseCodeCandidates,
+  mergePeopleFieldDiagonalMoveVectors,
   patchHandsForStarReturnSkill,
   pieceCodeFromPlacement,
   pieceCharFromCode,
@@ -81,6 +86,54 @@ export type PendingPromotion = {
 
 export type TimeActionMode = 'skill' | 'normal';
 
+function normalizeKanjiForSkillId(ch: string): string {
+  if (!ch) return ch;
+  try {
+    return ch.normalize('NFKC');
+  } catch {
+    return ch;
+  }
+}
+
+function isPlayerHousePieceForSkillUi(
+  piece: BoardPiece,
+  pieceDefsByChar: Partial<Record<string, PieceCatalogItem>>,
+): boolean {
+  if (piece.side !== 'player') return false;
+  const charN = normalizeKanjiForSkillId(piece.char);
+  const resolved = pieceCodeFromPlacement(
+    piece.pieceCode ?? null,
+    piece.char,
+    pieceDefsByChar,
+  )?.toUpperCase();
+  const pc = piece.pieceCode?.toUpperCase() ?? '';
+  if (resolved === 'HOUSE' || pc === 'HOUSE') return true;
+  if (piece.char === '家' || charN === '家') return true;
+  if (CHAR_TO_CODE[piece.char] === 'HOUSE' || CHAR_TO_CODE[charN] === 'HOUSE') return true;
+  if (normalizeKanjiForSkillId(getDisplayChar(piece)) === '家') return true;
+  const stripped = (toAiBasePieceCode(pc) ?? pc).toUpperCase();
+  if (stripped === 'HOUSE') return true;
+  if (CODE_TO_CHAR[stripped] === '家') return true;
+  return false;
+}
+
+function countPeopleOnBoardUi(
+  board: BoardPiece[],
+  pieceDefsByChar: Partial<Record<string, PieceCatalogItem>>,
+): number {
+  return board.filter((p) => {
+    const c = pieceCodeFromPlacement(p.pieceCode ?? null, p.char, pieceDefsByChar)?.toUpperCase();
+    const ch = normalizeKanjiForSkillId(p.char);
+    return (
+      c === 'PEOPLE' ||
+      p.char === '民' ||
+      ch === '民' ||
+      CHAR_TO_CODE[p.char] === 'PEOPLE' ||
+      CHAR_TO_CODE[ch] === 'PEOPLE'
+    );
+  }).length;
+}
+
 export function useStageShogiScreen(stageParam: string | undefined, userId?: string) {
   const { snapshot, isLoading, loadError } = useStageBattleScreen(stageParam, userId);
   const [failedImageKeys, setFailedImageKeys] = useState<Record<string, true>>({});
@@ -101,10 +154,12 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
   const [playerLegalMoves, setPlayerLegalMoves] = useState<BattleMove[]>([]);
   const [enemyPreviewTargets, setEnemyPreviewTargets] = useState<BoardCell[]>([]);
   const [poisonHazardCells, setPoisonHazardCells] = useState<BoardCell[]>([]);
+  const [rockObstacleCells, setRockObstacleCells] = useState<BoardCell[]>([]);
   const [isLoadingPlayerLegalMoves, setIsLoadingPlayerLegalMoves] = useState(false);
   const [hands, setHands] = useState<HandsState>(createEmptyHandsState());
   const [pendingPromotion, setPendingPromotion] = useState<PendingPromotion | null>(null);
   const [pendingTimeActionCell, setPendingTimeActionCell] = useState<BoardCell | null>(null);
+  const [pendingHouseSkillCell, setPendingHouseSkillCell] = useState<BoardCell | null>(null);
   const [timeActionMode, setTimeActionMode] = useState<TimeActionMode | null>(null);
   const [promotionImageFlash, setPromotionImageFlash] = useState<PromotionImageFlash | null>(null);
   const [stateHash, setStateHash] = useState<string | null>(null);
@@ -285,6 +340,7 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
     setPieces(synced.pieces);
     persistentHazardsRef.current = synced.persistentHazards;
     setPoisonHazardCells(synced.poisonHazardCells);
+    setRockObstacleCells(synced.rockObstacleCells);
     setHands(synced.hands);
     setSideToMove(synced.sideToMove);
     setMoveNo(synced.moveNo);
@@ -295,6 +351,9 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
     setAiPreviewTarget(null);
     setPlayerLegalMoves([]);
     setPendingPromotion(null);
+    setPendingTimeActionCell(null);
+    setTimeActionMode(null);
+    setPendingHouseSkillCell(null);
     latestMovementRuleByCellRef.current = synced.movementRuleByCell;
     latestImmobilizedByCellRef.current = synced.immobilizedKeys;
     stateHashRef.current = synced.stateHash;
@@ -361,6 +420,7 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
     setLegalTargets([]);
     setEnemyPreviewTargets([]);
     setPoisonHazardCells([]);
+    setRockObstacleCells([]);
     setAiPreviewTarget(null);
     setPlayerLegalMoves([]);
     setHands(createEmptyHandsState());
@@ -523,6 +583,52 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
       setEnemyPreviewTargets([]);
     }
   }, [pieces, selectedCell]);
+
+  /** 合法手が非同期で届いたあと・盤面同期後も、選択中の自駒の緑ハイライトを最新の playerLegalMoves に追従させる */
+  useEffect(() => {
+    if (!selectedCell) return;
+    if (sideToMove !== 'player' || isAiThinking || isCreatingGame || isFinished) return;
+    if (selectedDropPieceCode) return;
+    if (
+      pendingPromotion !== null ||
+      pendingTimeActionCell !== null ||
+      pendingHouseSkillCell !== null
+    ) {
+      return;
+    }
+    const at = findPieceAt(pieces, selectedCell.row, selectedCell.col);
+    if (!at || at.side !== 'player') {
+      setLegalTargets([]);
+      setEnemyPreviewTargets([]);
+      return;
+    }
+    if (at.darkVeiled) {
+      setLegalTargets([]);
+      setEnemyPreviewTargets([]);
+      return;
+    }
+    const legalForCell = legalMovesForBoardPiece(
+      playerLegalMoves,
+      selectedCell.row,
+      selectedCell.col,
+    );
+    setLegalTargets(
+      uniqueTargetsFromMoves(legalForCell.filter((m) => m.notation !== 'house_skill_only')),
+    );
+    setEnemyPreviewTargets([]);
+  }, [
+    isAiThinking,
+    isCreatingGame,
+    isFinished,
+    pendingHouseSkillCell,
+    pendingPromotion,
+    pendingTimeActionCell,
+    pieces,
+    playerLegalMoves,
+    selectedCell,
+    selectedDropPieceCode,
+    sideToMove,
+  ]);
 
   async function claimStageClearRewardIfNeeded() {
     if (clearRewardClaimedRef.current) return;
@@ -938,6 +1044,41 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
     );
   }
 
+  async function commitHouseSkillOnly(cell: BoardCell, piece: BoardPiece) {
+    if (!gameId || isAiThinking || isCreatingGame || isFinished) return;
+    const rollbackSnapshot = {
+      pieces: piecesRenderRef.current,
+      hands: handsRef.current,
+    };
+    const move: BattleMove = {
+      fromRow: cell.row,
+      fromCol: cell.col,
+      toRow: cell.row,
+      toCol: cell.col,
+      pieceCode: (piece.pieceCode ?? 'HOUSE').toUpperCase(),
+      promote: false,
+      dropPieceCode: null,
+      capturedPieceCode: null,
+      notation: 'house_skill_only',
+    };
+    setPendingHouseSkillCell(null);
+    setSelectedCell(null);
+    setSelectedDropPieceCode(null);
+    setLegalTargets([]);
+    setEnemyPreviewTargets([]);
+    setPlayerLegalMoves([]);
+    setPendingPromotion(null);
+    setPendingTimeActionCell(null);
+    setTimeActionMode(null);
+    setAiError(null);
+    await sendCommittedPlayerMoveToServer(
+      move,
+      piecesRenderRef.current,
+      undefined,
+      rollbackSnapshot,
+    );
+  }
+
   function commitPromotionChoice(move: BattleMove, pending: PendingPromotion) {
     if (!gameId || isAiThinking || isCreatingGame) return;
     const preBoard = piecesRenderRef.current;
@@ -1064,7 +1205,29 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
         legalMovesForBoardPiece(playerLegalMoves, selectedCell.row, selectedCell.col),
         tapped,
       );
-      if (targetMoves.length > 0) {
+      const actionableMoves = targetMoves.filter((m) => m.notation !== 'house_skill_only');
+      const sameCellHouseSkillOnly =
+        targetMoves.length > 0 &&
+        actionableMoves.length === 0 &&
+        selectedCell.row === tapped.row &&
+        selectedCell.col === tapped.col;
+      if (sameCellHouseSkillOnly) {
+        const selectedPiece = findPieceAt(pieces, selectedCell.row, selectedCell.col);
+        if (
+          selectedPiece &&
+          countPeopleOnBoardUi(pieces, pieceDefsByChar) < 5 &&
+          isPlayerHousePieceForSkillUi(selectedPiece, pieceDefsByChar)
+        ) {
+          setPendingHouseSkillCell({ row: tapped.row, col: tapped.col });
+          setSelectedCell(null);
+          setLegalTargets([]);
+          setEnemyPreviewTargets([]);
+          setPendingTimeActionCell(null);
+          setTimeActionMode(null);
+          return;
+        }
+      }
+      if (actionableMoves.length > 0) {
         const selectedPiece = findPieceAt(pieces, selectedCell.row, selectedCell.col);
         const isTimeSelected =
           selectedPiece?.side === 'player' &&
@@ -1075,8 +1238,8 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
           if (timeActionMode === 'normal') return { ...m, notation: null };
           return { ...m, notation: 'time_skill' };
         };
-        const promoteMove = targetMoves.find((move) => move.promote);
-        const nonPromoteMove = targetMoves.find((move) => !move.promote);
+        const promoteMove = actionableMoves.find((move) => move.promote);
+        const nonPromoteMove = actionableMoves.find((move) => !move.promote);
         if (promoteMove && nonPromoteMove) {
           setPromotionImageFlash(null);
           piecesBeforePromotionDialogRef.current = pieces.map((p) => ({ ...p }));
@@ -1104,35 +1267,96 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
           });
           return;
         }
-        void commitPlayerMove(moveWithTimeAction(promoteMove ?? nonPromoteMove ?? targetMoves[0]));
+        void commitPlayerMove(
+          moveWithTimeAction(promoteMove ?? nonPromoteMove ?? actionableMoves[0]),
+        );
         return;
       }
     }
 
     const piece = findPieceAt(pieces, row, col);
     if (piece?.side === 'enemy') {
-      const enemyPieceDef =
-        piece.promoted && piece.pieceCode
-          ? (promotedPieceDefsByCode[piece.pieceCode] ?? pieceDefsByCode[piece.pieceCode])
-          : ((piece.pieceCode ? pieceDefsByCode[piece.pieceCode] : null) ??
-            pieceDefsByChar[piece.char] ??
-            null);
-
-      const rawTargets = enemyPieceDef?.moveVectors?.length
-        ? getLegalTargetsFromVectors(pieces, piece, enemyPieceDef.moveVectors, BOARD_SIZE, {
-            canJump: enemyPieceDef.canJump === true,
-          })
-        : [];
-      const movementRule =
-        latestMovementRuleByCellRef.current.get(`${piece.side}:${piece.row}:${piece.col}`) ?? null;
       const pieceKey = `${piece.side}:${piece.row}:${piece.col}`;
       const immobilizedBySkill = latestImmobilizedByCellRef.current.has(pieceKey);
-      const targets = applyMovementRuleToTargets(
-        { row: piece.row, col: piece.col },
-        rawTargets,
-        movementRule,
-      );
-      const previewTargets = immobilizedBySkill ? [{ row: piece.row, col: piece.col }] : targets;
+      if (immobilizedBySkill) {
+        setSelectedCell(null);
+        setSelectedDropPieceCode(null);
+        setLegalTargets([]);
+        setEnemyPreviewTargets([{ row: piece.row, col: piece.col }]);
+        return;
+      }
+
+      let previewTargets: BoardCell[] = [];
+      if (gameId && pieceCatalog.length > 0) {
+        try {
+          const record = getLocalBattleGame(gameId);
+          const built = buildBoardState(pieces, pieceDefsByCode) as Record<string, unknown>;
+          const regBoard = record?.position?.boardState as Record<string, unknown> | undefined;
+          const mergedBoard: Record<string, unknown> = { ...built };
+          if (regBoard != null) {
+            const skillState = regBoard.skill_state ?? regBoard.skillState;
+            if (skillState != null) {
+              mergedBoard.skill_state = skillState;
+            }
+          }
+          const inspectPosition: BattleCanonicalPosition = {
+            sideToMove: 'enemy',
+            turnNumber: moveNo,
+            moveCount: Math.max(0, moveNo - 1),
+            sfen: buildSfen(pieces, hands, 'enemy', moveNo, pieceSfenMapping, pieceDefsByChar),
+            stateHash: stateHashRef.current ?? stateHash,
+            boardState: mergedBoard,
+            hands: {
+              player: { ...hands.player },
+              enemy: { ...hands.enemy },
+            },
+          };
+          const { legalMoves } = generateLegalMoves({
+            position: inspectPosition,
+            pieceCatalog: normalizePieceCatalog(pieceCatalog),
+          });
+          previewTargets = uniqueTargetsFromMoves(
+            legalMoves.filter(
+              (m) =>
+                m.dropPieceCode === null &&
+                m.fromRow === piece.row &&
+                m.fromCol === piece.col &&
+                m.notation !== 'house_skill_only' &&
+                m.notation !== 'time_skill_only',
+            ),
+          );
+        } catch {
+          previewTargets = [];
+        }
+      }
+
+      if (previewTargets.length === 0) {
+        const enemyPieceDef =
+          piece.promoted && piece.pieceCode
+            ? (promotedPieceDefsByCode[piece.pieceCode] ?? pieceDefsByCode[piece.pieceCode])
+            : ((piece.pieceCode ? pieceDefsByCode[piece.pieceCode] : null) ??
+              pieceDefsByChar[piece.char] ??
+              null);
+        const previewVectors = mergePeopleFieldDiagonalMoveVectors(
+          piece,
+          enemyPieceDef?.moveVectors ?? [],
+          pieces,
+        );
+        const rawTargets = previewVectors.length
+          ? getLegalTargetsFromVectors(pieces, piece, previewVectors, BOARD_SIZE, {
+              canJump: enemyPieceDef?.canJump === true,
+            })
+          : [];
+        const movementRule =
+          latestMovementRuleByCellRef.current.get(`${piece.side}:${piece.row}:${piece.col}`) ??
+          null;
+        previewTargets = applyMovementRuleToTargets(
+          { row: piece.row, col: piece.col },
+          rawTargets,
+          movementRule,
+          { movingPiece: piece, allPieces: pieces },
+        );
+      }
 
       setSelectedCell(null);
       setSelectedDropPieceCode(null);
@@ -1159,7 +1383,25 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
       setTimeActionMode('normal');
     }
 
-    const targets = uniqueTargetsFromMoves(legalMovesForBoardPiece(playerLegalMoves, row, col));
+    const legalForCell = legalMovesForBoardPiece(playerLegalMoves, row, col);
+    const isHousePieceTap =
+      !selectedDropPieceCode && isPlayerHousePieceForSkillUi(piece, pieceDefsByChar);
+    if (isHousePieceTap) {
+      const peopleOnBoard = countPeopleOnBoardUi(pieces, pieceDefsByChar);
+      if (peopleOnBoard < 5) {
+        setPendingHouseSkillCell({ row, col });
+        setSelectedCell(null);
+        setLegalTargets([]);
+        setEnemyPreviewTargets([]);
+        setPendingTimeActionCell(null);
+        setTimeActionMode(null);
+        return;
+      }
+    }
+
+    const targets = uniqueTargetsFromMoves(
+      legalForCell.filter((m) => m.notation !== 'house_skill_only'),
+    );
     const pieceKey = `${piece.side}:${piece.row}:${piece.col}`;
     const movementRule = latestMovementRuleByCellRef.current.get(pieceKey) ?? null;
     const immobilizedBySkill = latestImmobilizedByCellRef.current.has(pieceKey);
@@ -1184,14 +1426,31 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
 
     setSelectedDropPieceCode(null);
     setSelectedCell({ row, col });
-    if (affectedBySkill) {
-      setLegalTargets([]);
-      setEnemyPreviewTargets(targets);
-    } else {
-      setLegalTargets(piece.darkVeiled ? [] : targets);
-      setEnemyPreviewTargets([]);
-    }
+    // 自駒の合法マスは常に legalTargets（緑枠）で示す。畑バフの斜めなどもここに載せる。
+    setLegalTargets(piece.darkVeiled ? [] : targets);
+    setEnemyPreviewTargets([]);
     setPendingTimeActionCell(null);
+  }
+
+  function confirmHouseSkill() {
+    const cell = pendingHouseSkillCell;
+    if (!cell) return;
+    const piece = findPieceAt(pieces, cell.row, cell.col);
+    if (!piece || piece.side !== 'player') {
+      setPendingHouseSkillCell(null);
+      return;
+    }
+    const okLegal = playerLegalMoves.some(
+      (m) => m.notation === 'house_skill_only' && m.fromRow === cell.row && m.fromCol === cell.col,
+    );
+    const okHeuristic =
+      countPeopleOnBoardUi(pieces, pieceDefsByChar) < 5 &&
+      isPlayerHousePieceForSkillUi(piece, pieceDefsByChar);
+    if (!okLegal && !okHeuristic) {
+      setPendingHouseSkillCell(null);
+      return;
+    }
+    void commitHouseSkillOnly(cell, piece);
   }
 
   function confirmTimeAction(mode: TimeActionMode) {
@@ -1321,9 +1580,11 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
     aiPreviewTarget,
     enemyPreviewTargets,
     poisonHazardCells,
+    rockObstacleCells,
     hands,
     pendingPromotion,
     pendingTimeActionCell,
+    pendingHouseSkillCell,
     promotionImageFlash,
     pieceCatalog,
     pieceDefsByCode,
@@ -1340,6 +1601,10 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
     cancelTimeAction: () => {
       setPendingTimeActionCell(null);
       setTimeActionMode(null);
+    },
+    confirmHouseSkill,
+    cancelHouseSkill: () => {
+      setPendingHouseSkillCell(null);
     },
     commitPendingPromotion: (kind: 'promote' | 'nonPromote') => {
       const pending = pendingPromotion;

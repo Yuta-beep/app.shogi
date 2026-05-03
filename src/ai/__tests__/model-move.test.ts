@@ -18,6 +18,11 @@ describe('ai model move', () => {
     expect(toBasePieceCode('PIECE_MAK')).toBe('MAK');
   });
 
+  it('preserves opaque DB piece instance ids (hex after PIECE_) for SFEN/catalog keys', () => {
+    expect(toBasePieceCode('PIECE_D4B4C9E252E1')).toBe('PIECE_D4B4C9E252E1');
+    expect(toBasePieceCode('piece_bc786fd783f2')).toBe('PIECE_BC786FD783F2');
+  });
+
   it('normalizes a battle move payload', () => {
     const move = normalizeBattleMove({
       fromRow: 7,

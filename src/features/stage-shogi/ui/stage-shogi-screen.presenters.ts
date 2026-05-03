@@ -5,6 +5,11 @@ const ELECTRIC_SKILL_DESCRIPTION = '移動時20%の確率で周囲8マスの敵�
 const ICE_SKILL_DESCRIPTION = '移動時30%の確率で周囲の敵駒1体を2ターン行動不能にする。';
 const FISH_SKILL_DESCRIPTION = '移動時30%の確率で周囲の敵駒1体を3ターン行動不能にする。';
 const MOSS_SKILL_DESCRIPTION = '移動時30%の確率で周囲の空きマスに「苔」駒を1体召喚する。';
+const MIST_SKILL_DESCRIPTION = '移動時30%の確率で周囲の敵駒1体を相手の持ち駒に送る。';
+const PHANTOM_SKILL_DESCRIPTION =
+  '周囲に空きマスがあるとき、敵駒に取られるとき50%の確率で取られるのを回避して空きマスに移動する。';
+const BOAT_SKILL_DESCRIPTION =
+  '移動時、移動前の真後ろ1マスにいる味方駒（玉除く）を、舟と同じ移動ベクトルで引きずって移動させる。';
 const RAINBOW_SKILL_DESCRIPTION =
   'この駒の周囲8マスにいる敵駒の移動範囲は縦横1マスのみに制限される。';
 const SWAMP_SKILL_DESCRIPTION =
@@ -13,6 +18,11 @@ const POISON_SKILL_DESCRIPTION =
   'この駒が移動したとき移動前のマスは4ターン毒マスになる。毒マスを敵駒が通るとその駒は消滅する。';
 const PRISON_FENCE_SKILL_DESCRIPTION =
   '移動時、盤上の敵駒のうちランダムで1体を2ターン行動不能にする。';
+const PEAK_SKILL_DESCRIPTION = 'この駒が盤面にいる間、敵の10画以上の特殊駒は移動できない。';
+const RIDGE_SKILL_DESCRIPTION = '移動時20%の確率で周囲1マスの空きマスに「山」駒を1体出現させる。';
+const ORE_SKILL_DESCRIPTION =
+  '移動時20%の確率で味方の「歩」駒1体を「金」「銀」「銅」のいずれかに変化させる。';
+const ROCK_SKILL_DESCRIPTION = '移動時に左右1マスへ2ターン持続する岩障害物を召喚する。';
 
 export type InspectingPieceState = {
   char: string;
@@ -38,16 +48,27 @@ export function resolveInspectSkillDescription(char: string, desc: string | unde
   if (char === '氷') return ICE_SKILL_DESCRIPTION;
   if (char === '魚') return FISH_SKILL_DESCRIPTION;
   if (char === '苔') return MOSS_SKILL_DESCRIPTION;
+  if (char === '霧') return MIST_SKILL_DESCRIPTION;
+  if (char === '幻') return PHANTOM_SKILL_DESCRIPTION;
+  if (char === '舟') return BOAT_SKILL_DESCRIPTION;
   if (char === '虹') return RAINBOW_SKILL_DESCRIPTION;
   if (char === '沼') return SWAMP_SKILL_DESCRIPTION;
   if (char === '毒') return POISON_SKILL_DESCRIPTION;
   if (char === '牢' || char === '柵') return PRISON_FENCE_SKILL_DESCRIPTION;
+  if (char === '峰') return PEAK_SKILL_DESCRIPTION;
+  if (char === '嶺') return RIDGE_SKILL_DESCRIPTION;
+  if (char === '鉱') return ORE_SKILL_DESCRIPTION;
+  if (char === '岩') return ROCK_SKILL_DESCRIPTION;
+  if (char === '山') return '嶺のスキルで召喚される補助駒。';
   const normalized = (desc ?? '').trim();
   return normalized.length > 0 ? normalized : '詳細は準備中です。';
 }
 
 export function resolveInspectMoveDescription(char: string, move: string | undefined): string {
   if (char === '闇') return '全方向に1マス';
+  if (char === '月') {
+    return 'TURN数を4で割った余りが0または1のときは全方位に1マス、余りが2または3のときは全方位に2マスまで移動できる。';
+  }
   const normalized = (move ?? '').trim();
   return normalized.length > 0 ? normalized : '準備中';
 }

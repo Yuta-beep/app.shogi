@@ -34,9 +34,15 @@ export function assertMoveAllowedBySessionCatalog(input: {
   }
 
   const requestedSkillNotation =
-    move.notation === 'time_skill' || move.notation === 'time_skill_only' ? move.notation : null;
+    move.notation === 'time_skill' ||
+    move.notation === 'time_skill_only' ||
+    move.notation === 'house_skill_only'
+      ? move.notation
+      : null;
   const legalSkillNotation =
-    matched.notation === 'time_skill' || matched.notation === 'time_skill_only'
+    matched.notation === 'time_skill' ||
+    matched.notation === 'time_skill_only' ||
+    matched.notation === 'house_skill_only'
       ? matched.notation
       : null;
 

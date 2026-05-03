@@ -1,4 +1,4 @@
-import { CHAR_TO_CODE } from '@/features/stage-shogi/domain/piece-conversion';
+import { CHAR_TO_CODE, CODE_TO_CHAR } from '@/features/stage-shogi/domain/piece-conversion';
 
 /** マスタの `name` が一字 `char` より信頼できる場合（API が標準駒の char を流用していることがある） */
 function ruleCharFromNameHint(hint: string): string | null {
@@ -51,6 +51,8 @@ export function normalizeDeckBuilderPieceChar(
 
   const upper = normalized.toUpperCase();
   const codeAtom = stripPieceCodePrefix(upper);
+  const codeMappedChar = CODE_TO_CHAR[codeAtom];
+  if (codeMappedChar) return codeMappedChar;
   // マスタの display_char / canonical が `char` に入っているケース
   if (codeAtom === 'HIK' || codeAtom === 'LIGHT') return '光';
   if (codeAtom === 'HOS' || codeAtom === 'STAR') return '星';

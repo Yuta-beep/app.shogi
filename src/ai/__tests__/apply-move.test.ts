@@ -306,6 +306,172 @@ const pieceCatalog: AiPieceDefinition[] = [
     isRepeatable: true,
   },
   {
+    pieceCode: 'RIDGE',
+    canonicalCode: 'RIDGE',
+    sfenCode: 'r',
+    char: '嶺',
+    name: '嶺',
+    unlock: 'default',
+    desc: '',
+    skill: '',
+    move: '',
+    moveVectors: [{ dx: 0, dy: -1, maxStep: 1 }],
+    isRepeatable: true,
+  },
+  {
+    pieceCode: 'PEAK',
+    canonicalCode: 'PEAK',
+    sfenCode: 'p',
+    char: '峰',
+    name: '峰',
+    unlock: 'default',
+    desc: '',
+    skill: '',
+    move: '',
+    moveVectors: [{ dx: 0, dy: -1, maxStep: 1 }],
+    isRepeatable: true,
+  },
+  {
+    pieceCode: 'YAMA',
+    canonicalCode: 'YAMA',
+    sfenCode: 'y',
+    char: '山',
+    name: '山',
+    unlock: 'default',
+    desc: '',
+    skill: '',
+    move: '',
+    moveVectors: [{ dx: 0, dy: -1, maxStep: 1 }],
+    isRepeatable: true,
+  },
+  {
+    pieceCode: 'ORE',
+    canonicalCode: 'ORE',
+    sfenCode: 'o',
+    char: '鉱',
+    name: '鉱',
+    unlock: 'default',
+    desc: '',
+    skill: '',
+    move: '',
+    moveVectors: [{ dx: 0, dy: -1, maxStep: 1 }],
+    isRepeatable: true,
+  },
+  {
+    pieceCode: 'ROCK',
+    canonicalCode: 'ROCK',
+    sfenCode: 'R',
+    char: '岩',
+    name: '岩',
+    unlock: 'default',
+    desc: '',
+    skill: '',
+    move: '',
+    moveVectors: [{ dx: 0, dy: -1, maxStep: 1 }],
+    isRepeatable: true,
+  },
+  {
+    pieceCode: 'GRAVE',
+    canonicalCode: 'GRAVE',
+    sfenCode: 'g',
+    char: '墓',
+    name: '墓',
+    unlock: 'default',
+    desc: '',
+    skill: '',
+    move: '',
+    moveVectors: [{ dx: 0, dy: -1, maxStep: 1 }],
+    isRepeatable: true,
+  },
+  {
+    pieceCode: 'MIST',
+    canonicalCode: 'MIST',
+    sfenCode: 'm',
+    char: '霧',
+    name: '霧',
+    unlock: 'default',
+    desc: '',
+    skill: '',
+    move: '',
+    moveVectors: [
+      { dx: -1, dy: -1, maxStep: 1 },
+      { dx: 0, dy: -1, maxStep: 1 },
+      { dx: 1, dy: -1, maxStep: 1 },
+      { dx: -1, dy: 0, maxStep: 1 },
+      { dx: 1, dy: 0, maxStep: 1 },
+      { dx: -1, dy: 1, maxStep: 1 },
+      { dx: 0, dy: 1, maxStep: 1 },
+      { dx: 1, dy: 1, maxStep: 1 },
+    ],
+    isRepeatable: true,
+  },
+  {
+    pieceCode: 'MOON',
+    canonicalCode: 'MOON',
+    sfenCode: 'ZMO',
+    char: '月',
+    name: '月',
+    unlock: 'default',
+    desc: '',
+    skill: '',
+    move: '',
+    moveVectors: [
+      { dx: -1, dy: -1, maxStep: 1 },
+      { dx: 0, dy: -1, maxStep: 1 },
+      { dx: 1, dy: -1, maxStep: 1 },
+      { dx: -1, dy: 0, maxStep: 1 },
+      { dx: 1, dy: 0, maxStep: 1 },
+      { dx: -1, dy: 1, maxStep: 1 },
+      { dx: 0, dy: 1, maxStep: 1 },
+      { dx: 1, dy: 1, maxStep: 1 },
+    ],
+    isRepeatable: true,
+  },
+  {
+    pieceCode: 'BOAT',
+    canonicalCode: 'BOAT',
+    sfenCode: 'ZBO',
+    char: '舟',
+    name: '舟',
+    unlock: 'default',
+    desc: '',
+    skill: '',
+    move: '',
+    moveVectors: [
+      { dx: -1, dy: 0, maxStep: 9 },
+      { dx: 1, dy: 0, maxStep: 9 },
+      { dx: 0, dy: -1, maxStep: 9 },
+      { dx: 0, dy: 1, maxStep: 9 },
+    ],
+    isRepeatable: true,
+  },
+  {
+    pieceCode: 'PHANTOM',
+    canonicalCode: 'PHANTOM',
+    sfenCode: 'h',
+    char: '幻',
+    name: '幻',
+    unlock: 'default',
+    desc: '',
+    skill: '',
+    move: '',
+    moveVectors: [{ dx: 0, dy: -1, maxStep: 1 }],
+    isRepeatable: true,
+  },
+  {
+    pieceCode: 'SPIRIT',
+    canonicalCode: 'SPIRIT',
+    sfenCode: 's',
+    char: '霊',
+    name: '霊',
+    unlock: 'default',
+    desc: '',
+    skill: '',
+    move: '',
+    moveVectors: [{ dx: 0, dy: -1, maxStep: 1 }],
+    isRepeatable: true,
+  },
+  {
     pieceCode: 'A',
     canonicalCode: 'A',
     sfenCode: 'a',
@@ -1396,7 +1562,7 @@ describe('ai engine apply move', () => {
         pieces: [
           { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
           { side: 'enemy', row: 4, col: 4, pieceCode: 'FU', char: '歩', promoted: false },
-          { side: 'enemy', row: 5, col: 4, pieceCode: 'FU', char: '歩', promoted: false },
+          { side: 'enemy', row: 5, col: 4, pieceCode: 'HI', char: '飛', promoted: false },
           { side: 'player', row: 5, col: 3, pieceCode: 'WIND', char: '風', promoted: false },
           { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
         ],
@@ -2013,6 +2179,432 @@ describe('ai engine apply move', () => {
         (piece) => piece.side === 'player' && piece.pieceCode === 'HAA',
       ).length ?? 0;
     expect(leafCount).toBe(2);
+  });
+
+  it('ridge skill summons one yama piece around mover when 20% proc succeeds', () => {
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: '4k4/9/9/9/9/4R4/9/9/4K4 b - 1',
+      stateHash: 'seed',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'player', row: 5, col: 4, pieceCode: 'RIDGE', char: '嶺', promoted: false },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+      },
+      hands: { player: {}, enemy: {} },
+    };
+    const randomSpy = jest.spyOn(Math, 'random');
+    randomSpy.mockReturnValueOnce(0.05); // 20% 抽選成功
+    randomSpy.mockReturnValueOnce(0.4); // 候補セル index
+    const committed = applyMove({
+      position,
+      pieceCatalog,
+      move: {
+        fromRow: 5,
+        fromCol: 4,
+        toRow: 4,
+        toCol: 4,
+        pieceCode: 'RIDGE',
+        promote: false,
+        dropPieceCode: null,
+        capturedPieceCode: null,
+        notation: null,
+      },
+    });
+    randomSpy.mockRestore();
+
+    const yamaCount =
+      boardPieces(committed.position).filter(
+        (piece) => piece.side === 'player' && piece.char === '山',
+      ).length ?? 0;
+    expect(yamaCount).toBe(1);
+  });
+
+  it('ore skill transforms one allied pawn when 20% proc succeeds', () => {
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: '4k4/9/9/9/9/4O4/4P4/9/4K4 b - 1',
+      stateHash: 'seed',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'player', row: 5, col: 4, pieceCode: 'ORE', char: '鉱', promoted: false },
+          { side: 'player', row: 6, col: 4, pieceCode: 'FU', char: '歩', promoted: false },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+      },
+      hands: { player: {}, enemy: {} },
+    };
+    const randomSpy = jest.spyOn(Math, 'random');
+    randomSpy.mockReturnValueOnce(0.05); // 20% 抽選成功
+    randomSpy.mockReturnValueOnce(0.0); // 歩候補 index
+    randomSpy.mockReturnValueOnce(0.99); // 変化先 index -> COPPER
+    const committed = applyMove({
+      position,
+      pieceCatalog,
+      move: {
+        fromRow: 5,
+        fromCol: 4,
+        toRow: 4,
+        toCol: 4,
+        pieceCode: 'ORE',
+        promote: false,
+        dropPieceCode: null,
+        capturedPieceCode: null,
+        notation: null,
+      },
+    });
+    randomSpy.mockRestore();
+
+    const transformed = boardPieces(committed.position).find(
+      (piece) => piece.side === 'player' && piece.row === 6 && piece.col === 4,
+    );
+    expect(transformed?.pieceCode).toBe('COPPER');
+    expect(transformed?.char).toBe('銅');
+  });
+
+  it('rock skill summons left and right obstacles for 2 turns on empty cells', () => {
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: '4k4/9/9/9/9/4R4/9/9/4K4 b - 1',
+      stateHash: 'seed',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'player', row: 5, col: 4, pieceCode: 'ROCK', char: '岩', promoted: false },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+      },
+      hands: { player: {}, enemy: {} },
+    };
+    const committed = applyMove({
+      position,
+      pieceCatalog,
+      move: {
+        fromRow: 5,
+        fromCol: 4,
+        toRow: 4,
+        toCol: 4,
+        pieceCode: 'ROCK',
+        promote: false,
+        dropPieceCode: null,
+        capturedPieceCode: null,
+        notation: null,
+      },
+    });
+    const boardState = committed.position.boardState as {
+      skill_state?: { board_hazards?: Array<Record<string, unknown>> };
+    };
+    const hazards = boardState.skill_state?.board_hazards ?? [];
+    const rockObstacles = hazards.filter((h) => h.hazard_type === 'rock_obstacle');
+    expect(rockObstacles).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ row: 4, col: 3, remaining_turns: 2 }),
+        expect.objectContaining({ row: 4, col: 5, remaining_turns: 2 }),
+      ]),
+    );
+  });
+
+  it('grave skill summons one spirit around mover when 20% proc succeeds', () => {
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: '4k4/9/9/9/9/4g4/9/9/4K4 b - 1',
+      stateHash: 'seed',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'player', row: 5, col: 4, pieceCode: 'GRAVE', char: '墓', promoted: false },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+      },
+      hands: { player: {}, enemy: {} },
+    };
+    const randomSpy = jest.spyOn(Math, 'random');
+    randomSpy.mockReturnValueOnce(0.05); // 20% 抽選成功
+    randomSpy.mockReturnValueOnce(0.0); // 周囲候補 index
+    const committed = applyMove({
+      position,
+      pieceCatalog,
+      move: {
+        fromRow: 5,
+        fromCol: 4,
+        toRow: 4,
+        toCol: 4,
+        pieceCode: 'GRAVE',
+        promote: false,
+        dropPieceCode: null,
+        capturedPieceCode: null,
+        notation: null,
+      },
+    });
+    randomSpy.mockRestore();
+    const spiritCount =
+      boardPieces(committed.position).filter(
+        (piece) => piece.side === 'player' && piece.char === '霊',
+      ).length ?? 0;
+    expect(spiritCount).toBe(1);
+  });
+
+  it('mist skill sends one adjacent enemy to owner hand when 30% proc succeeds (pieceChars 霧 matches MIST)', () => {
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: '4k4/9/9/9/3p4/4M4/9/9/4K4 b - 1',
+      stateHash: 'seed',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'enemy', row: 4, col: 3, pieceCode: 'FU', char: '歩', promoted: false },
+          { side: 'player', row: 5, col: 4, pieceCode: 'MIST', char: '霧', promoted: false },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+        skill_definitions_v2: {
+          definitions: [
+            {
+              skillId: 39,
+              pieceChars: ['霧'],
+              trigger: { type: 'after_move' },
+              conditions: [{ type: 'chance_roll', params: { procChance: 0.3 } }],
+              effects: [
+                {
+                  type: 'send_to_hand',
+                  target: { group: 'adjacent', selector: 'adjacent_enemy' },
+                  params: { handOwner: 'target_owner' },
+                },
+              ],
+            },
+          ],
+        },
+      },
+      hands: { player: {}, enemy: {} },
+    };
+    const randomSpy = jest.spyOn(Math, 'random');
+    randomSpy.mockReturnValueOnce(0.1); // 30% 抽選成功
+    const committed = applyMove({
+      position,
+      pieceCatalog,
+      move: {
+        fromRow: 5,
+        fromCol: 4,
+        toRow: 4,
+        toCol: 4,
+        pieceCode: 'MIST',
+        promote: false,
+        dropPieceCode: null,
+        capturedPieceCode: null,
+        notation: null,
+      },
+    });
+    randomSpy.mockRestore();
+
+    const stillOnBoard = boardPieces(committed.position).some(
+      (p) => p.side === 'enemy' && p.row === 4 && p.col === 3,
+    );
+    expect(stillOnBoard).toBe(false);
+    expect(committed.position.hands.enemy?.FU ?? 0).toBe(1);
+  });
+
+  it('phantom evades capture to adjacent empty when 50% proc succeeds (pieceChars 幻 matches PHANTOM)', () => {
+    const phantomSkillDef = {
+      skillId: 38,
+      pieceChars: ['幻'],
+      trigger: { type: 'continuous_rule' },
+      conditions: [{ type: 'chance_roll', params: { procChance: 0.5 } }],
+      effects: [
+        {
+          type: 'defense_or_immunity',
+          target: { group: 'self', selector: 'self_piece' },
+          params: { mode: 'evade_capture' },
+        },
+      ],
+    };
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: '4k4/9/9/9/3H4/4P4/9/9/4K4 b - 1',
+      stateHash: 'seed',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'enemy', row: 4, col: 4, pieceCode: 'PHANTOM', char: '幻', promoted: false },
+          { side: 'player', row: 5, col: 4, pieceCode: 'FU', char: '歩', promoted: false },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+        skill_definitions_v2: {
+          definitions: [phantomSkillDef],
+        },
+      },
+      hands: { player: {}, enemy: {} },
+    };
+    const randomSpy = jest.spyOn(Math, 'random');
+    randomSpy.mockReturnValueOnce(0.2); // 50% 回避成功
+    randomSpy.mockReturnValueOnce(0); // 退避先 index
+    const committed = applyMove({
+      position,
+      pieceCatalog,
+      move: {
+        fromRow: 5,
+        fromCol: 4,
+        toRow: 4,
+        toCol: 4,
+        pieceCode: 'FU',
+        promote: false,
+        dropPieceCode: null,
+        capturedPieceCode: 'PHANTOM',
+        notation: null,
+      },
+    });
+    randomSpy.mockRestore();
+
+    expect(committed.position.hands.player?.PHANTOM ?? 0).toBe(0);
+    const phantom = boardPieces(committed.position).find((p) => p.char === '幻');
+    expect(phantom).toBeTruthy();
+    expect(phantom?.row === 4 && phantom?.col === 4).toBe(false);
+  });
+
+  it('phantom is captured normally when 50% evade proc fails', () => {
+    const phantomSkillDef = {
+      skillId: 38,
+      pieceChars: ['幻'],
+      trigger: { type: 'continuous_rule' },
+      conditions: [{ type: 'chance_roll', params: { procChance: 0.5 } }],
+      effects: [
+        {
+          type: 'defense_or_immunity',
+          target: { group: 'self', selector: 'self_piece' },
+          params: { mode: 'evade_capture' },
+        },
+      ],
+    };
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: '4k4/9/9/9/3H4/4P4/9/9/4K4 b - 1',
+      stateHash: 'seed',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'enemy', row: 4, col: 4, pieceCode: 'PHANTOM', char: '幻', promoted: false },
+          { side: 'player', row: 5, col: 4, pieceCode: 'FU', char: '歩', promoted: false },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+        skill_definitions_v2: {
+          definitions: [phantomSkillDef],
+        },
+      },
+      hands: { player: {}, enemy: {} },
+    };
+    const randomSpy = jest.spyOn(Math, 'random');
+    randomSpy.mockReturnValueOnce(0.99); // 50% 回避失敗
+    const committed = applyMove({
+      position,
+      pieceCatalog,
+      move: {
+        fromRow: 5,
+        fromCol: 4,
+        toRow: 4,
+        toCol: 4,
+        pieceCode: 'FU',
+        promote: false,
+        dropPieceCode: null,
+        capturedPieceCode: 'PHANTOM',
+        notation: null,
+      },
+    });
+    randomSpy.mockRestore();
+
+    expect(boardPieces(committed.position).some((p) => p.char === '幻')).toBe(false);
+    expect(committed.position.hands.player?.PHANTOM ?? 0).toBe(1);
+  });
+
+  it('boat tows ally directly behind along the same move vector', () => {
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: '4k4/9/9/9/9/4B4/9/4P4/4K4 b - 1',
+      stateHash: 'seed',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'player', row: 4, col: 4, pieceCode: 'BOAT', char: '舟', promoted: false },
+          { side: 'player', row: 5, col: 4, pieceCode: 'FU', char: '歩', promoted: false },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+      },
+      hands: { player: {}, enemy: {} },
+    };
+    const committed = applyMove({
+      position,
+      pieceCatalog,
+      move: {
+        fromRow: 4,
+        fromCol: 4,
+        toRow: 3,
+        toCol: 4,
+        pieceCode: 'BOAT',
+        promote: false,
+        dropPieceCode: null,
+        capturedPieceCode: null,
+        notation: null,
+      },
+    });
+    const towed = boardPieces(committed.position).find(
+      (p) => p.side === 'player' && p.char === '歩',
+    );
+    expect(towed?.row).toBe(4);
+    expect(towed?.col).toBe(4);
+    const boat = boardPieces(committed.position).find((p) => p.char === '舟');
+    expect(boat?.row).toBe(3);
+    expect(boat?.col).toBe(4);
+  });
+
+  it('capturing spirit does not add spirit to capturer hand', () => {
+    const position: AiBattlePosition = {
+      sideToMove: 'enemy',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: '4k4/9/9/9/9/4p4/4s4/9/4K4 w - 1',
+      stateHash: 'seed',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'enemy', row: 5, col: 4, pieceCode: 'FU', char: '歩', promoted: false },
+          { side: 'player', row: 6, col: 4, pieceCode: 'SPIRIT', char: '霊', promoted: false },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+      },
+      hands: { player: {}, enemy: {} },
+    };
+    const committed = applyMove({
+      position,
+      pieceCatalog,
+      move: {
+        fromRow: 5,
+        fromCol: 4,
+        toRow: 6,
+        toCol: 4,
+        pieceCode: 'FU',
+        promote: false,
+        dropPieceCode: null,
+        capturedPieceCode: 'SPIRIT',
+        notation: null,
+      },
+    });
+    expect(committed.position.hands.enemy.SPIRIT).toBeUndefined();
   });
 
   it('star skill returns captured star to owner hand when proc succeeds', () => {

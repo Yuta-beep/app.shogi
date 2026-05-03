@@ -297,6 +297,11 @@ const pieceImageRecords: PieceImageRecord[] = [
     source: require('../../assets/pieces/0048-piece_5a24e1332ff7.png'),
   },
   {
+    pieceCode: 'YAMA',
+    char: '山',
+    source: require('../../assets/pieces/山.png'),
+  },
+  {
     pieceId: 49,
     pieceCode: 'piece_69d6eceff4e1',
     char: '岩',
@@ -753,6 +758,13 @@ const kingSource = pieceImageByChar.get('玉');
 if (kingSource != null) {
   pieceImageByChar.set('王', kingSource);
   pieceImageByCode.set('OU', kingSource);
+}
+
+// 「山」は専用アセット未登録のため、近縁の山系駒（峰/嶺）の画像を流用する。
+const yamaSource = pieceImageByChar.get('峰') ?? pieceImageByChar.get('嶺') ?? null;
+if (yamaSource != null && !pieceImageByChar.has('山') && !pieceImageByCode.has('YAMA')) {
+  pieceImageByChar.set('山', yamaSource);
+  pieceImageByCode.set('YAMA', yamaSource);
 }
 
 export function getLocalPieceImageSource(input: {

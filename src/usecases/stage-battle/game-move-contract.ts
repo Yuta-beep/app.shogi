@@ -228,6 +228,7 @@ function parseSkillTriggered(rawSkillTriggered: unknown, rawMove: unknown): bool
   if (!move.notation) return false;
   if (move.notation === 'time_normal') return false;
   if (move.notation === 'time_skill') return true;
+  if (move.notation === 'house_skill_only') return true;
   if (/^[1-9][a-i][1-9][a-i]\+?$/i.test(move.notation)) return false;
   return true;
 }

@@ -49,6 +49,22 @@ function isMirrorPiece(piece: AiBoardPiece): boolean {
   );
 }
 
+function isMachinePiece(piece: AiBoardPiece): boolean {
+  const code = toBasePieceCode(piece.pieceCode);
+  return code === 'MACHINE' || piece.char === '機';
+}
+
+/** 機: 同一行の左隣の味方を優先し、いなければ右隣の味方の移動ベクトルを借用する */
+function pickMachineDonorAlly(pieces: AiBoardPiece[], machine: AiBoardPiece): AiBoardPiece | null {
+  const row = machine.row;
+  const col = machine.col;
+  const left = pieces.find((p) => p.side === machine.side && p.row === row && p.col === col - 1);
+  const right = pieces.find((p) => p.side === machine.side && p.row === row && p.col === col + 1);
+  if (left) return left;
+  if (right) return right;
+  return null;
+}
+
 function isKingBlockedByPoisonCell(
   skillView: SkillRuntimeView,
   piece: AiBoardPiece,
@@ -57,6 +73,10 @@ function isKingBlockedByPoisonCell(
 ): boolean {
   if (!isKingPiece(piece)) return false;
   return skillView.kingPoisonBlockedCells.has(`${piece.side}:${row}:${col}`);
+}
+
+function isBlockedByRockObstacle(skillView: SkillRuntimeView, row: number, col: number): boolean {
+  return skillView.rockObstacleCells.has(`${row}:${col}`);
 }
 
 function isATransformedPawn(skillView: SkillRuntimeView, piece: AiBoardPiece): boolean {
@@ -73,6 +93,29 @@ function occupancyKey(row: number, col: number): string {
 
 function buildOccupancyMap(pieces: AiBoardPiece[]): OccupancyMap {
   return new Map(pieces.map((piece) => [occupancyKey(piece.row, piece.col), piece]));
+}
+
+function buildRockObstacleVirtualPieces(
+  side: 'player' | 'enemy',
+  skillView: SkillRuntimeView,
+): AiBoardPiece[] {
+  const out: AiBoardPiece[] = [];
+  for (const key of skillView.rockObstacleCells) {
+    const [rowRaw, colRaw] = key.split(':');
+    const row = Number(rowRaw);
+    const col = Number(colRaw);
+    if (!Number.isInteger(row) || !Number.isInteger(col)) continue;
+    out.push({
+      side,
+      row,
+      col,
+      pieceCode: 'ROCK_OBSTACLE',
+      char: '岩障',
+      promoted: false,
+      imageSignedUrl: null,
+    });
+  }
+  return out;
 }
 
 function findPieceAtFast(occupancy: OccupancyMap, row: number, col: number): AiBoardPiece | null {
@@ -171,6 +214,55 @@ function normalizeVectorsForGold(piece: AiBoardPiece, vectors: AiPieceDefinition
   ];
 }
 
+/** 家・畑: 固定駒（移動不可） */
+function normalizeVectorsForFixedHouseField(
+  piece: AiBoardPiece,
+  vectors: AiPieceDefinition['moveVectors'],
+): AiPieceDefinition['moveVectors'] {
+  const baseCode = toBasePieceCode(piece.pieceCode);
+  if (baseCode === 'HOUSE' || baseCode === 'FIELD' || piece.char === '家' || piece.char === '畑') {
+    return [];
+  }
+  return vectors;
+}
+
+function isFieldPieceForPeopleBuff(piece: AiBoardPiece): boolean {
+  const code = toBasePieceCode(piece.pieceCode);
+  if (code === 'FIELD') return true;
+  if (piece.char === '畑') return true;
+  return CHAR_TO_CODE[piece.char] === 'FIELD';
+}
+
+function isPeoplePieceForFieldBuff(piece: AiBoardPiece): boolean {
+  const code = toBasePieceCode(piece.pieceCode);
+  if (code === 'PEOPLE') return true;
+  if (piece.char === '民') return true;
+  return CHAR_TO_CODE[piece.char] === 'PEOPLE';
+}
+
+/** 畑が味方にいるとき、民は斜め4方向にも1マス進める（ベクトル定義座標。先手後手は getLegalTargetsFromVectors の orient で反映） */
+function hasPeopleFieldBuffOnBoard(piece: AiBoardPiece, allPieces: AiBoardPiece[]): boolean {
+  if (!isPeoplePieceForFieldBuff(piece)) return false;
+  return allPieces.some((p) => p.side === piece.side && isFieldPieceForPeopleBuff(p));
+}
+
+function normalizeVectorsForPeopleWithAllyField(
+  piece: AiBoardPiece,
+  vectors: AiPieceDefinition['moveVectors'],
+  allPieces: AiBoardPiece[],
+): AiPieceDefinition['moveVectors'] {
+  if (!isPeoplePieceForFieldBuff(piece)) return vectors;
+  const hasAllyField = hasPeopleFieldBuffOnBoard(piece, allPieces);
+  if (!hasAllyField) return vectors;
+  const diagonals: AiPieceDefinition['moveVectors'] = [
+    { dx: -1, dy: -1, maxStep: 1 },
+    { dx: 1, dy: -1, maxStep: 1 },
+    { dx: -1, dy: 1, maxStep: 1 },
+    { dx: 1, dy: 1, maxStep: 1 },
+  ];
+  return [...vectors, ...diagonals];
+}
+
 function normalizeVectorsForTime(piece: AiBoardPiece, vectors: AiPieceDefinition['moveVectors']) {
   const baseCode = toBasePieceCode(piece.pieceCode);
   if (baseCode !== 'TIME' && piece.char !== '時') return vectors;
@@ -187,13 +279,79 @@ function normalizeVectorsForTime(piece: AiBoardPiece, vectors: AiPieceDefinition
   ];
 }
 
+/** 月: TURN（turnNumber）を 4 で割った余りが 0 または 1 のとき全方位 1 マス、2 または 3 のとき全方位 2 マス */
+function moonOmnidirectionalMaxStep(position: AiBattlePosition): number {
+  const t = Math.max(1, Math.floor(position.turnNumber));
+  const r = ((t % 4) + 4) % 4;
+  return r === 2 || r === 3 ? 2 : 1;
+}
+
+function normalizeVectorsForMoon(
+  piece: AiBoardPiece,
+  vectors: AiPieceDefinition['moveVectors'],
+  position: AiBattlePosition,
+): AiPieceDefinition['moveVectors'] {
+  const baseCode = toBasePieceCode(piece.pieceCode);
+  if (baseCode !== 'MOON' && piece.char !== '月') return vectors;
+  const maxStep = moonOmnidirectionalMaxStep(position);
+  return [
+    { dx: -1, dy: -1, maxStep },
+    { dx: 0, dy: -1, maxStep },
+    { dx: 1, dy: -1, maxStep },
+    { dx: -1, dy: 0, maxStep },
+    { dx: 1, dy: 0, maxStep },
+    { dx: -1, dy: 1, maxStep },
+    { dx: 0, dy: 1, maxStep },
+    { dx: 1, dy: 1, maxStep },
+  ];
+}
+
+function backRowDeltaForBoatTowLegal(side: Side): number {
+  return side === 'player' ? 1 : -1;
+}
+
+function isKingLikeForBoatTowLegal(piece: AiBoardPiece | null | undefined): boolean {
+  if (!piece) return false;
+  const base = toBasePieceCode(piece.pieceCode);
+  return base === 'OU' || piece.char === '王' || piece.char === '玉';
+}
+
+/** 舟: 真後ろの味方を連れて行けるときのみ合法（玉は連れ不可、連れ先は空または舟の出発マス） */
+function boatTowTargetCellAllowed(
+  piece: AiBoardPiece,
+  from: { row: number; col: number },
+  to: { row: number; col: number },
+  occupancy: OccupancyMap,
+): boolean {
+  const code = toBasePieceCode(piece.pieceCode);
+  if (code !== 'BOAT' && piece.char !== '舟') return true;
+  const dr = to.row - from.row;
+  const dc = to.col - from.col;
+  const allyRow = from.row + backRowDeltaForBoatTowLegal(piece.side);
+  const allyCol = from.col;
+  const ally = findPieceAtFast(occupancy, allyRow, allyCol);
+  if (!ally || ally.side !== piece.side) return true;
+  if (isKingLikeForBoatTowLegal(ally)) return false;
+  const destRow = allyRow + dr;
+  const destCol = allyCol + dc;
+  if (destRow < 0 || destRow > 8 || destCol < 0 || destCol > 8) return false;
+  const occ = findPieceAtFast(occupancy, destRow, destCol);
+  if (!occ) return true;
+  return occ.row === from.row && occ.col === from.col;
+}
+
 function resolveEffectiveVectorsForPiece(
   piece: AiBoardPiece,
   pieceDef: AiPieceDefinition,
+  position: AiBattlePosition,
+  allPieces: AiBoardPiece[],
 ): AiPieceDefinition['moveVectors'] {
   const bishopNormalized = normalizeVectorsForBishop(piece, pieceDef.moveVectors);
   const goldNormalized = normalizeVectorsForGold(piece, bishopNormalized);
-  return normalizeVectorsForTime(piece, goldNormalized);
+  const fixedHouseField = normalizeVectorsForFixedHouseField(piece, goldNormalized);
+  const timeNormalized = normalizeVectorsForTime(piece, fixedHouseField);
+  const peopleField = normalizeVectorsForPeopleWithAllyField(piece, timeNormalized, allPieces);
+  return normalizeVectorsForMoon(piece, peopleField, position);
 }
 
 function stableHash(value: string): number {
@@ -214,6 +372,22 @@ function selectMirrorTarget(
   const seed = `${position.stateHash ?? ''}:${position.turnNumber}:${position.moveCount}:${mover.row}:${mover.col}:${mover.side}`;
   const idx = stableHash(seed) % candidates.length;
   return candidates[idx] ?? null;
+}
+
+function isHousePieceForSkill(piece: AiBoardPiece): boolean {
+  const code = toBasePieceCode(piece.pieceCode);
+  if (code === 'HOUSE') return true;
+  if (piece.char === '家') return true;
+  return CHAR_TO_CODE[piece.char] === 'HOUSE';
+}
+
+function countPeoplePiecesOnBoard(pieces: AiBoardPiece[]): number {
+  return pieces.filter((p) => {
+    const c = toBasePieceCode(p.pieceCode);
+    if (c === 'PEOPLE') return true;
+    if (p.char === '民') return true;
+    return CHAR_TO_CODE[p.char] === 'PEOPLE';
+  }).length;
 }
 
 function hasAdjacentEnemyPiece(occupancy: OccupancyMap, piece: AiBoardPiece): boolean {
@@ -325,9 +499,23 @@ function generateBoardPieceMoves(input: {
   occupancy: OccupancyMap;
   skillView: SkillRuntimeView;
 }): AiBattleMove[] {
-  const pieceDef = resolvePieceDef(input.piece, input.lookups);
+  let pieceDef = resolvePieceDef(input.piece, input.lookups);
+  if (isMachinePiece(input.piece)) {
+    const donor = pickMachineDonorAlly(input.pieces, input.piece);
+    if (donor) {
+      const donorDef = resolvePieceDef(donor, input.lookups);
+      if (donorDef && donorDef.moveVectors.length > 0) {
+        pieceDef = donorDef;
+      }
+    }
+  }
   if (!pieceDef || pieceDef.moveVectors.length === 0) return [];
-  let effectiveVectors = resolveEffectiveVectorsForPiece(input.piece, pieceDef);
+  let effectiveVectors = resolveEffectiveVectorsForPiece(
+    input.piece,
+    pieceDef,
+    input.position,
+    input.pieces,
+  );
   let effectiveCanJump = pieceDef.canJump === true;
 
   if (isMirrorPiece(input.piece)) {
@@ -338,7 +526,12 @@ function generateBoardPieceMoves(input: {
     if (selected) {
       const selectedDef = resolvePieceDef(selected, input.lookups);
       if (selectedDef && selectedDef.moveVectors.length > 0) {
-        effectiveVectors = resolveEffectiveVectorsForPiece(selected, selectedDef);
+        effectiveVectors = resolveEffectiveVectorsForPiece(
+          selected,
+          selectedDef,
+          input.position,
+          input.pieces,
+        );
         effectiveCanJump = selectedDef.canJump === true;
       }
     }
@@ -346,20 +539,24 @@ function generateBoardPieceMoves(input: {
 
   const leapVectors = effectiveVectors.filter((v) => isLeapOverOneMode(v.captureMode));
   const normalVectors = effectiveVectors.filter((v) => !isLeapOverOneMode(v.captureMode));
+  const rockVirtualPieces = buildRockObstacleVirtualPieces(input.piece.side, input.skillView);
+  const pathPieces = [...input.pieces, ...rockVirtualPieces];
+  const pathOccupancy = buildOccupancyMap(pathPieces);
   const normalTargets = isCloudPiece(input.piece)
-    ? generateCloudTargetsFromVectors(input.occupancy, input.piece, normalVectors)
-    : getLegalTargetsFromVectors(input.pieces, input.piece, normalVectors, 9, {
+    ? generateCloudTargetsFromVectors(pathOccupancy, input.piece, normalVectors)
+    : getLegalTargetsFromVectors(pathPieces, input.piece, normalVectors, 9, {
         canJump: effectiveCanJump,
       });
-  const leapTargets = generateLeapOverOneTargets(input.occupancy, input.piece, leapVectors);
+  const leapTargets = generateLeapOverOneTargets(pathOccupancy, input.piece, leapVectors);
   const reflectiveTargets = isReflectivePiece(input.piece)
-    ? generateReflectiveTargets(input.occupancy, input.piece)
+    ? generateReflectiveTargets(pathOccupancy, input.piece)
     : [];
   const targets = [...normalTargets, ...leapTargets, ...reflectiveTargets];
   const movementRule =
     input.skillView.movementRulesByCell.get(
       `${input.piece.side}:${input.piece.row}:${input.piece.col}`,
     ) ?? null;
+  const peopleFieldBuff = hasPeopleFieldBuffOnBoard(input.piece, input.pieces);
   const filteredTargets =
     movementRule === 'vertical_step_only'
       ? targets.filter(
@@ -367,10 +564,14 @@ function generateBoardPieceMoves(input: {
             target.col === input.piece.col && Math.abs(target.row - input.piece.row) === 1,
         )
       : movementRule === 'orthogonal_step_only'
-        ? targets.filter(
-            (target) =>
-              Math.abs(target.row - input.piece.row) + Math.abs(target.col - input.piece.col) === 1,
-          )
+        ? targets.filter((target) => {
+            const adr = Math.abs(target.row - input.piece.row);
+            const adc = Math.abs(target.col - input.piece.col);
+            if (adr + adc === 1) return true;
+            // 畑バフの斜め1マスは orthogonal 制限から除外（合法手・ハイライトと一致させる）
+            if (peopleFieldBuff && adr === 1 && adc === 1) return true;
+            return false;
+          })
         : targets;
   const captureFilteredTargets = filteredTargets.filter((target) => {
     const captured = findPieceAtFast(input.occupancy, target.row, target.col);
@@ -384,16 +585,21 @@ function generateBoardPieceMoves(input: {
   });
 
   const hazardFilteredTargets = captureFilteredTargets.filter(
-    (target) => !isKingBlockedByPoisonCell(input.skillView, input.piece, target.row, target.col),
+    (target) =>
+      !isKingBlockedByPoisonCell(input.skillView, input.piece, target.row, target.col) &&
+      !isBlockedByRockObstacle(input.skillView, target.row, target.col),
   );
 
   const from = { row: input.piece.row, col: input.piece.col };
+  const boatFilteredTargets = hazardFilteredTargets.filter((target) =>
+    boatTowTargetCellAllowed(input.piece, from, target, input.occupancy),
+  );
   const pieceCode =
     toBasePieceCode(input.piece.pieceCode) ??
     toBasePieceCode(CHAR_TO_CODE[input.piece.char]) ??
     'FU';
 
-  return hazardFilteredTargets.flatMap((target) => {
+  return boatFilteredTargets.flatMap((target) => {
     const captured = findPieceAtFast(input.occupancy, target.row, target.col);
     const capturedPieceCode = toBasePieceCode(captured?.pieceCode ?? null);
     const transformedByA = isATransformedPawn(input.skillView, input.piece);
@@ -415,6 +621,7 @@ function generateBoardPieceMoves(input: {
 function generateDropMoves(input: {
   pieces: AiBoardPiece[];
   position: AiBattlePosition;
+  skillView: SkillRuntimeView;
 }): AiBattleMove[] {
   const bag = input.position.hands[input.position.sideToMove] ?? {};
   const moves: AiBattleMove[] = [];
@@ -425,6 +632,9 @@ function generateDropMoves(input: {
 
     for (let row = 0; row < 9; row += 1) {
       for (let col = 0; col < 9; col += 1) {
+        if (input.skillView.rockObstacleCells.has(`${row}:${col}`)) {
+          continue;
+        }
         if (
           !canDropPiece(
             input.pieces,
@@ -493,12 +703,27 @@ export function generateLegalMoves(input: {
         notation: 'time_skill_only',
       }),
     );
-  const dropMoves = generateDropMoves({ pieces, position });
+  const peopleCount = countPeoplePiecesOnBoard(pieces);
+  const houseSkillOnlyMoves =
+    peopleCount < 5
+      ? activePieces
+          .filter((piece) => isHousePieceForSkill(piece))
+          .map((piece) =>
+            createMove({
+              from: { row: piece.row, col: piece.col },
+              to: { row: piece.row, col: piece.col },
+              pieceCode: toBasePieceCode(piece.pieceCode) ?? 'HOUSE',
+              promote: false,
+              notation: 'house_skill_only',
+            }),
+          )
+      : [];
+  const dropMoves = generateDropMoves({ pieces, position, skillView });
 
   return {
     sideToMove: position.sideToMove,
     moveNo: position.moveCount + 1,
     stateHash: position.stateHash,
-    legalMoves: [...boardMoves, ...timeSkillOnlyMoves, ...dropMoves],
+    legalMoves: [...boardMoves, ...timeSkillOnlyMoves, ...houseSkillOnlyMoves, ...dropMoves],
   };
 }

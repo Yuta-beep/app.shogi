@@ -31,4 +31,7 @@ export type PieceCatalogItem = {
   canJump?: boolean;
   moveConstraints?: Record<string, unknown> | null;
   moveRules?: MoveRule[];
+  /** BFF が駒マスタに載せる structured skill（任意） */
+  skillDefinitionsV2?: unknown;
+  skill_definitions_v2?: unknown;
 };

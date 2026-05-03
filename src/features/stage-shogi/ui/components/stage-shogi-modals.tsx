@@ -82,6 +82,53 @@ export function StageShogiPromotionModal({
   );
 }
 
+export function StageShogiHouseSkillModal({
+  pending,
+  onUseSkill,
+  onCancel,
+}: {
+  pending: { row: number; col: number } | null;
+  onUseSkill: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <Modal
+      visible={pending != null}
+      transparent
+      animationType="fade"
+      onRequestClose={onCancel}
+      statusBarTranslucent
+    >
+      <View className="flex-1 items-center justify-center bg-black/35 p-6">
+        <View className="w-full max-w-sm rounded-xl border border-[#8b5e34] bg-[#fffaf0] p-4">
+          <Text className="text-base font-black text-ink">「家」駒のスキル</Text>
+          <Text className="mt-2 text-xs text-[#6b4532]">
+            自陣4行の空マスに「民」を1体召喚します。盤上の「民」が合計5体いるときは使用できません。
+          </Text>
+          <View className="mt-4 flex-row gap-3">
+            <Pressable
+              className="flex-1 rounded-md bg-[#166534] px-3 py-2"
+              onPress={() => {
+                onUseSkill();
+              }}
+            >
+              <Text className="text-center font-bold text-white">スキル使用</Text>
+            </Pressable>
+            <Pressable
+              className="flex-1 rounded-md bg-[#6b7280] px-3 py-2"
+              onPress={() => {
+                onCancel();
+              }}
+            >
+              <Text className="text-center font-bold text-white">キャンセル</Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 export function StageShogiTimeActionModal({
   pending,
   onConfirm,

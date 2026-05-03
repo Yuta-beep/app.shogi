@@ -1,4 +1,5 @@
 import type { Side } from '@/features/stage-shogi/domain/game-rules';
+import { CHAR_TO_CODE } from '@/features/stage-shogi/domain/piece-conversion';
 import type { AiBattleMove, AiBattlePosition, AiBoardPiece } from '@/ai/model';
 import { piecesFromBoardState, toBasePieceCode } from '@/ai/model';
 
@@ -15,6 +16,7 @@ export type SkillRuntimeView = {
   immobilizedCells: Set<string>;
   darkBlindCells: Set<string>;
   kingPoisonBlockedCells: Set<string>;
+  rockObstacleCells: Set<string>;
   aTransformCells: Set<string>;
 };
 
@@ -42,6 +44,12 @@ const WOOD_PIECE_CODES = new Set(['WOOD', 'MOK', '木']);
 const LEAF_PIECE_CODES = new Set(['LEAF', 'HAA', '葉']);
 const DEMON_PIECE_CODES = new Set(['DEMON', 'MAK', '魔']);
 const DARK_PIECE_CODES = new Set(['DARK', 'YAM', '闇']);
+const PEAK_PIECE_CODES = new Set(['PEAK', 'MINE', '峰', '5A24E1332FF7']);
+const RIDGE_PIECE_CODES = new Set(['RIDGE', 'REI', '嶺', '555D2E24EFB0']);
+const ROCK_PIECE_CODES = new Set(['ROCK', '岩', '69D6ECEFF4E1']);
+const ORE_PIECE_CODES = new Set(['ORE', '鉱', '1BC740C95315']);
+const GRAVE_PIECE_CODES = new Set(['GRAVE', '墓', 'BC8AB84E787B']);
+const STANDARD_CORE_PIECE_CODES = new Set(['FU', 'KY', 'KE', 'GI', 'KI', 'KA', 'HI', 'OU']);
 /** 牢・柵（不透明 piece ID のサフィックスでも判定） */
 const PRISON_FENCE_PIECE_CODES = new Set([
   'PRISON',
@@ -70,6 +78,120 @@ function normalizeSkillPieceCode(raw: string | null | undefined): string {
   if (upper.startsWith('PIECE_SHOGI_')) return upper.slice('PIECE_SHOGI_'.length);
   if (upper.startsWith('PIECE_')) return upper.slice('PIECE_'.length);
   return upper;
+}
+
+/** skill_definitions_v2 の pieceChars が漢字のみ（例: 霧）でも pieceCode（例: MIST）と突合できるようにする */
+function catalogPieceTokenMatchesMoved(
+  catalogToken: string,
+  movedCode: string,
+  movedPiece: AiBoardPiece | null,
+): boolean {
+  const t = catalogToken.trim();
+  if (!t) return false;
+  if (movedPiece?.char && t === movedPiece.char) return true;
+  if (normalizeSkillPieceCode(t) === movedCode) return true;
+  const codeFromKanji = (CHAR_TO_CODE as Readonly<Record<string, string>>)[t];
+  if (codeFromKanji != null && normalizeSkillPieceCode(codeFromKanji) === movedCode) return true;
+  return false;
+}
+
+/** 捕獲される側の駒と skill_definitions_v2 の pieceChars（漢字など）を突合 */
+export function catalogPieceTokenMatchesPiece(catalogToken: string, piece: AiBoardPiece): boolean {
+  const movedCode = normalizeSkillPieceCode(toBasePieceCode(piece.pieceCode) ?? '');
+  return catalogPieceTokenMatchesMoved(catalogToken, movedCode, piece);
+}
+
+/**
+ * 被捕獲時に「空きマスへ逃げる」系（evade_capture）の発動確率を返す。該当定義が無ければ null。
+ */
+export function resolveEvadeCaptureProcChanceForPiece(
+  boardState: Record<string, unknown> | null | undefined,
+  piece: AiBoardPiece,
+): number | null {
+  const root = asRecord(boardState ?? {}) ?? {};
+  const defsRoot = asRecord(root.skill_definitions_v2 ?? root.skillDefinitionsV2) ?? {};
+  const definitions = asArray(defsRoot.definitions);
+  for (const raw of definitions) {
+    const def = asRecord(raw);
+    if (!def) continue;
+    const trigger = asRecord(def.trigger);
+    if (asString(trigger?.type) !== 'continuous_rule') continue;
+    const pieceChars = asArray(def.pieceChars);
+    if (!pieceChars.some((p) => catalogPieceTokenMatchesPiece(asString(p) ?? '', piece))) continue;
+    const effects = asArray(def.effects);
+    const hasEvade = effects.some((e) => {
+      const er = asRecord(e);
+      if (asString(er?.type) !== 'defense_or_immunity') return false;
+      const t = asRecord(er?.target);
+      if (asString(t?.selector) !== 'self_piece') return false;
+      return asString(asRecord(er?.params)?.mode) === 'evade_capture';
+    });
+    if (!hasEvade) continue;
+    const conditions = asArray(def.conditions);
+    for (const rawC of conditions) {
+      const c = asRecord(rawC);
+      if (asString(c?.type) !== 'chance_roll') continue;
+      const pr = asRecord(c?.params);
+      const pc = asNumber(pr?.procChance) ?? asNumber(pr?.chance);
+      if (pc != null && pc > 0 && pc < 1) return pc;
+    }
+    return 0.5;
+  }
+  return null;
+}
+
+function strokeCountForChar(char: string): number | null {
+  const map: Record<string, number> = {
+    忍: 7,
+    影: 15,
+    砲: 10,
+    竜: 10,
+    鳳: 14,
+    炎: 8,
+    火: 4,
+    水: 4,
+    波: 8,
+    木: 4,
+    葉: 12,
+    光: 6,
+    星: 9,
+    闇: 13,
+    魔: 21,
+    銅: 14,
+    鉄: 21,
+    錫: 16,
+    鉛: 13,
+    宝: 20,
+    電: 13,
+    雷: 13,
+    時: 10,
+    氷: 5,
+    雪: 11,
+    砂: 9,
+    風: 9,
+    苔: 8,
+    魚: 11,
+    雲: 12,
+    虹: 9,
+    毒: 8,
+    沼: 8,
+    あ: 3,
+    牢: 7,
+    柵: 9,
+    嶺: 17,
+    峰: 10,
+    山: 3,
+  };
+  return map[char] ?? null;
+}
+
+function isSpecialTenPlusPiece(piece: AiBoardPiece): boolean {
+  const base = toBasePieceCode(piece.pieceCode);
+  if (base && STANDARD_CORE_PIECE_CODES.has(base)) return false;
+  if (piece.char === '王' || piece.char === '玉') return false;
+  const strokes = strokeCountForChar(piece.char);
+  if (strokes == null) return false;
+  return strokes >= 10;
 }
 
 function isAPieceInstance(piece: AiBoardPiece): boolean {
@@ -258,6 +380,95 @@ function moveAdjacentAllySandWithLeader(input: {
   return moved;
 }
 
+function isGearPieceForFollow(piece: AiBoardPiece): boolean {
+  const code = normalizeSkillPieceCode(toBasePieceCode(piece.pieceCode) ?? piece.char);
+  return code === 'GEAR' || piece.char === '歯';
+}
+
+/** 歯: 着手した味方駒の出発マスに8近傍していた歯を、同じ移動ベクトルで空きマスへ連動（砂と同様・先頭マスのみ） */
+function moveAdjacentAllyGearFollowLeader(input: {
+  pieces: AiBoardPiece[];
+  actorSide: Side;
+  fromRow: number;
+  fromCol: number;
+  toRow: number;
+  toCol: number;
+}): number {
+  const deltaRow = input.toRow - input.fromRow;
+  const deltaCol = input.toCol - input.fromCol;
+  if (deltaRow === 0 && deltaCol === 0) return 0;
+  const candidates = input.pieces
+    .map((piece, idx) => ({ piece, idx }))
+    .filter(({ piece }) => {
+      if (piece.side !== input.actorSide) return false;
+      if (!isGearPieceForFollow(piece)) return false;
+      if (piece.row === input.fromRow && piece.col === input.fromCol) return false;
+      return (
+        Math.abs(piece.row - input.fromRow) <= 1 &&
+        Math.abs(piece.col - input.fromCol) <= 1 &&
+        !(piece.row === input.fromRow && piece.col === input.fromCol)
+      );
+    });
+  let moved = 0;
+  for (const { piece, idx } of candidates) {
+    const destRow = piece.row + deltaRow;
+    const destCol = piece.col + deltaCol;
+    if (destRow < 0 || destRow > 8 || destCol < 0 || destCol > 8) continue;
+    if (destRow === input.toRow && destCol === input.toCol) continue;
+    if (!isCellEmpty(input.pieces, destRow, destCol)) continue;
+    input.pieces[idx] = {
+      ...piece,
+      row: destRow,
+      col: destCol,
+    };
+    moved += 1;
+  }
+  return moved;
+}
+
+/** 味方の陣営における「後ろ」は盤面 row の増減で表す（player: +row, enemy: -row） */
+function backRowDeltaForBoatTow(side: Side): number {
+  return side === 'player' ? 1 : -1;
+}
+
+function isKingLikePieceForBoatTow(piece: AiBoardPiece): boolean {
+  const base = toBasePieceCode(piece.pieceCode);
+  return base === 'OU' || piece.char === '王' || piece.char === '玉';
+}
+
+/** 舟: 移動前の「真後ろ1マス」の味方駒を、舟と同じベクトルで引きずる（玉は対象外） */
+function moveAllyBehindBoatOneStep(input: {
+  pieces: AiBoardPiece[];
+  actorSide: Side;
+  fromRow: number;
+  fromCol: number;
+  toRow: number;
+  toCol: number;
+}): void {
+  const dR = input.toRow - input.fromRow;
+  const dC = input.toCol - input.fromCol;
+  if (dR === 0 && dC === 0) return;
+  const allyRow = input.fromRow + backRowDeltaForBoatTow(input.actorSide);
+  const allyCol = input.fromCol;
+  if (allyRow < 0 || allyRow > 8 || allyCol < 0 || allyCol > 8) return;
+  const destRow = allyRow + dR;
+  const destCol = allyCol + dC;
+  if (destRow < 0 || destRow > 8 || destCol < 0 || destCol > 8) return;
+  const idx = input.pieces.findIndex((p) => p.row === allyRow && p.col === allyCol);
+  if (idx < 0) return;
+  const ally = input.pieces[idx]!;
+  if (ally.side !== input.actorSide) return;
+  if (isKingLikePieceForBoatTow(ally)) return;
+  const blocked = input.pieces.some(
+    (p) =>
+      p.row === destRow &&
+      p.col === destCol &&
+      !(p.row === input.fromRow && p.col === input.fromCol),
+  );
+  if (blocked) return;
+  input.pieces[idx] = { ...ally, row: destRow, col: destCol };
+}
+
 function summonRandomAdjacentEmptyPiece(input: {
   pieces: AiBoardPiece[];
   center: AiBoardPiece;
@@ -292,6 +503,35 @@ function summonRandomAdjacentEmptyPiece(input: {
   return { summoned: true, row: selected.row, col: selected.col };
 }
 
+/** 家スキル: 自陣4行の空マスに民を1体召喚（row 0 が盤の奥＝画面上端、player は手前 row 5–8 が自陣） */
+const HOUSE_SUMMON_HOME_DEPTH = 4;
+
+function summonPeopleInHomeRandomEmpty(input: { pieces: AiBoardPiece[]; actorSide: Side }): void {
+  const d = HOUSE_SUMMON_HOME_DEPTH;
+  const homeRows =
+    input.actorSide === 'player'
+      ? Array.from({ length: d }, (_, i) => 9 - d + i)
+      : Array.from({ length: d }, (_, i) => i);
+  const candidates: { row: number; col: number }[] = [];
+  for (const row of homeRows) {
+    for (let col = 0; col < 9; col += 1) {
+      if (input.pieces.some((p) => p.row === row && p.col === col)) continue;
+      candidates.push({ row, col });
+    }
+  }
+  if (candidates.length === 0) return;
+  const selected = candidates[Math.floor(Math.random() * candidates.length)]!;
+  input.pieces.push({
+    side: input.actorSide,
+    row: selected.row,
+    col: selected.col,
+    pieceCode: 'PEOPLE',
+    char: '民',
+    promoted: false,
+    imageSignedUrl: null,
+  });
+}
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== 'object') return null;
   return value as Record<string, unknown>;
@@ -307,6 +547,18 @@ function asString(value: unknown): string | null {
 
 function asNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+/** JSON 経由で string になる数値（例: "0.3", "39"）も受け取る */
+function asFiniteNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const t = value.trim();
+    if (!t) return null;
+    const n = Number(t);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
 }
 
 function sideOpposite(side: Side): Side {
@@ -451,6 +703,7 @@ export function createSkillRuntimeView(position: AiBattlePosition): SkillRuntime
   const immobilizedCells = new Set<string>();
   const darkBlindCells = new Set<string>();
   const kingPoisonBlockedCells = new Set<string>();
+  const rockObstacleCells = new Set<string>();
   const aTransformCells = new Set<string>();
 
   for (const entry of state.movement_modifiers) {
@@ -478,7 +731,8 @@ export function createSkillRuntimeView(position: AiBattlePosition): SkillRuntime
       statusType === 'stun' ||
       statusType === 'time_stop' ||
       statusType === 'dark_blind' ||
-      statusType === 'prison_fence_stun'
+      statusType === 'prison_fence_stun' ||
+      statusType === 'peak_lock'
     ) {
       immobilizedCells.add(key);
     }
@@ -503,6 +757,15 @@ export function createSkillRuntimeView(position: AiBattlePosition): SkillRuntime
     if (row == null || col == null || remaining <= 0) continue;
     kingPoisonBlockedCells.add(cellKey(affectsSide, row, col));
   }
+  for (const entry of state.board_hazards) {
+    const type = asString(entry.hazard_type ?? entry.hazardType);
+    const row = asNumber(entry.row);
+    const col = asNumber(entry.col);
+    const remaining = asNumber(entry.remaining_turns ?? entry.remainingTurns) ?? 0;
+    if (type !== 'rock_obstacle') continue;
+    if (row == null || col == null || remaining <= 0) continue;
+    rockObstacleCells.add(`${row}:${col}`);
+  }
 
   return {
     state,
@@ -510,6 +773,7 @@ export function createSkillRuntimeView(position: AiBattlePosition): SkillRuntime
     immobilizedCells,
     darkBlindCells,
     kingPoisonBlockedCells,
+    rockObstacleCells,
     aTransformCells,
   };
 }
@@ -663,6 +927,7 @@ export function applyMoveSkillEffects(input: {
     SNOW_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '雪';
   const isSandMover =
     SAND_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '砂';
+  const isBoatMover = movedCode === 'BOAT' || movedPiece?.char === '舟';
   const isWindMover =
     WIND_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '風';
   const isFishMover =
@@ -687,6 +952,22 @@ export function applyMoveSkillEffects(input: {
     DEMON_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '魔';
   const isDarkMover =
     DARK_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '闇';
+  const isRidgeMover =
+    RIDGE_PIECE_CODES.has(movedCode) ||
+    normalizeSkillPieceCode(input.move.pieceCode) === '嶺' ||
+    (movedPiece ? movedPiece.char === '嶺' : false);
+  const isRockMover =
+    ROCK_PIECE_CODES.has(movedCode) ||
+    normalizeSkillPieceCode(input.move.pieceCode) === '岩' ||
+    (movedPiece ? movedPiece.char === '岩' : false);
+  const isOreMover =
+    ORE_PIECE_CODES.has(movedCode) ||
+    normalizeSkillPieceCode(input.move.pieceCode) === '鉱' ||
+    (movedPiece ? movedPiece.char === '鉱' : false);
+  const isGraveMover =
+    GRAVE_PIECE_CODES.has(movedCode) ||
+    normalizeSkillPieceCode(input.move.pieceCode) === '墓' ||
+    (movedPiece ? movedPiece.char === '墓' : false);
   const isPrisonFenceMover =
     PRISON_FENCE_PIECE_CODES.has(movedCode) ||
     normalizeSkillPieceCode(input.move.pieceCode) === '牢' ||
@@ -784,6 +1065,34 @@ export function applyMoveSkillEffects(input: {
       actorSide: input.actorSide,
       deltaRow,
       deltaCol,
+    });
+  }
+  // 舟: 移動時、真後ろ1マスにいる味方駒（玉除く）を同じベクトルで引きずる。
+  if (isBoatMover && input.move.fromRow != null && input.move.fromCol != null && input.movedPiece) {
+    moveAllyBehindBoatOneStep({
+      pieces: input.pieces,
+      actorSide: input.actorSide,
+      fromRow: input.move.fromRow,
+      fromCol: input.move.fromCol,
+      toRow: input.move.toRow,
+      toCol: input.move.toCol,
+    });
+  }
+  // 歯: 隣接していた味方が盤上を動いたとき、同じベクトルで空きマスへ連動。
+  if (
+    input.move.fromRow != null &&
+    input.move.fromCol != null &&
+    input.move.notation !== 'time_skill_only' &&
+    input.move.notation !== 'house_skill_only' &&
+    !input.move.dropPieceCode
+  ) {
+    moveAdjacentAllyGearFollowLeader({
+      pieces: input.pieces,
+      actorSide: input.actorSide,
+      fromRow: input.move.fromRow,
+      fromCol: input.move.fromCol,
+      toRow: input.move.toRow,
+      toCol: input.move.toCol,
     });
   }
   // 風: 前後左右1マスの敵駒を、その方向の行けるところまで押し流す。
@@ -1135,6 +1444,20 @@ export function applyMoveSkillEffects(input: {
       }
     }
   }
+  // 家: house_skill_only で自陣4行の空マスに民を1体召喚（合法手で5体上限）。
+  if (input.move.notation === 'house_skill_only') {
+    const people = input.pieces.filter((p) => {
+      const c = toBasePieceCode(p.pieceCode);
+      if (c === 'PEOPLE' || p.char === '民') return true;
+      return CHAR_TO_CODE[p.char] === 'PEOPLE';
+    });
+    if (people.length < 5) {
+      summonPeopleInHomeRandomEmpty({
+        pieces: input.pieces,
+        actorSide: input.actorSide,
+      });
+    }
+  }
   // 木: 移動時10%で周囲8マスのランダム1マスに木を召喚。
   if (isWoodMover && input.move.fromRow != null && input.move.fromCol != null && input.movedPiece) {
     const procChance = 0.1;
@@ -1202,14 +1525,20 @@ export function applyMoveSkillEffects(input: {
     }
   }
   // 牢・柵: 移動時、盤上の敵駒からランダムで1体（玉除く）を2ターン行動不能（鎖表示用 status）。
-  if (isPrisonFenceMover && input.move.fromRow != null && input.move.fromCol != null && movedPiece) {
+  if (
+    isPrisonFenceMover &&
+    input.move.fromRow != null &&
+    input.move.fromCol != null &&
+    movedPiece
+  ) {
     const candidates = input.pieces.filter((piece) => {
       if (piece.side === input.actorSide) return false;
       const base = toBasePieceCode(piece.pieceCode);
       if (base === 'OU' || piece.char === '王' || piece.char === '玉') return false;
       return true;
     });
-    const moverChar = movedPiece.char === '牢' || movedPiece.char === '柵' ? movedPiece.char : '牢/柵';
+    const moverChar =
+      movedPiece.char === '牢' || movedPiece.char === '柵' ? movedPiece.char : '牢/柵';
     if (candidates.length === 0) {
       if (typeof __DEV__ !== 'undefined' && __DEV__) {
         console.info('[prison-fence-skill-debug]', {
@@ -1229,7 +1558,11 @@ export function applyMoveSkillEffects(input: {
         const statusType = asString(entry.status_type ?? entry.statusType) ?? '';
         if (statusType !== 'prison_fence_stun') return true;
         const side = (asString(entry.side) ?? 'player') === 'enemy' ? 'enemy' : 'player';
-        return !(side === target.side && asNumber(entry.row) === target.row && asNumber(entry.col) === target.col);
+        return !(
+          side === target.side &&
+          asNumber(entry.row) === target.row &&
+          asNumber(entry.col) === target.col
+        );
       });
       state.piece_statuses.push({
         row: target.row,
@@ -1254,6 +1587,186 @@ export function applyMoveSkillEffects(input: {
       }
     }
   }
+  // 峰: 盤上に存在する間、敵の「10画以上の特殊駒」を行動不能にする（常時再計算）。
+  {
+    state.piece_statuses = state.piece_statuses.filter((entry) => {
+      const statusType = asString(entry.status_type ?? entry.statusType) ?? '';
+      return statusType !== 'peak_lock';
+    });
+    const peakSides = new Set<Side>();
+    for (const piece of input.pieces) {
+      const normalized = normalizeSkillPieceCode(piece.pieceCode);
+      const base = toBasePieceCode(piece.pieceCode);
+      const isPeak =
+        piece.char === '峰' ||
+        (base != null && PEAK_PIECE_CODES.has(base)) ||
+        PEAK_PIECE_CODES.has(normalized);
+      if (isPeak) {
+        peakSides.add(piece.side);
+      }
+    }
+    if (peakSides.size > 0) {
+      for (const piece of input.pieces) {
+        if (!isSpecialTenPlusPiece(piece)) continue;
+        const enemyHasPeak = peakSides.has(sideOpposite(piece.side));
+        if (!enemyHasPeak) continue;
+        state.piece_statuses.push({
+          row: piece.row,
+          col: piece.col,
+          side: piece.side,
+          status_type: 'peak_lock',
+          remaining_turns: 1,
+        });
+      }
+    }
+  }
+  // 嶺: 移動時20%で周囲1マスの空きマスに「山」駒を1体召喚。
+  if (isRidgeMover && input.move.fromRow != null && input.move.fromCol != null && movedPiece) {
+    const procChance = 0.2;
+    const roll = Math.random();
+    const triggered = roll <= procChance;
+    let summoned = false;
+    let summonRow: number | null = null;
+    let summonCol: number | null = null;
+    if (triggered) {
+      const around: Array<{ row: number; col: number }> = [];
+      for (let dr = -1; dr <= 1; dr += 1) {
+        for (let dc = -1; dc <= 1; dc += 1) {
+          if (dr === 0 && dc === 0) continue;
+          const row = movedPiece.row + dr;
+          const col = movedPiece.col + dc;
+          if (row < 0 || row > 8 || col < 0 || col > 8) continue;
+          if (!isCellEmpty(input.pieces, row, col)) continue;
+          around.push({ row, col });
+        }
+      }
+      if (around.length > 0) {
+        const picked = around[Math.floor(Math.random() * around.length)]!;
+        const onBoardYama = input.pieces.find((piece) => piece.char === '山');
+        input.pieces.push({
+          side: input.actorSide,
+          row: picked.row,
+          col: picked.col,
+          pieceCode: onBoardYama?.pieceCode ?? 'YAMA',
+          char: '山',
+          promoted: false,
+        });
+        summoned = true;
+        summonRow = picked.row;
+        summonCol = picked.col;
+      }
+    }
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      console.info('[ridge-skill-debug]', {
+        moveCount: input.position.moveCount,
+        turnNumber: input.position.turnNumber,
+        procChance,
+        roll,
+        triggered,
+        summoned,
+        summonRow,
+        summonCol,
+      });
+    }
+  }
+  // 鉱: 移動時20%で味方の歩1体を金/銀/銅のいずれかへ変化。
+  if (isOreMover && input.move.fromRow != null && input.move.fromCol != null && movedPiece) {
+    const procChance = 0.2;
+    const roll = Math.random();
+    const triggered = roll <= procChance;
+    let transformed = false;
+    let targetRow: number | null = null;
+    let targetCol: number | null = null;
+    let transformedTo: string | null = null;
+    if (triggered) {
+      const alliesFu = input.pieces.filter((piece) => {
+        if (piece.side !== input.actorSide) return false;
+        const base = toBasePieceCode(piece.pieceCode);
+        return base === 'FU' || piece.char === '歩';
+      });
+      if (alliesFu.length > 0) {
+        const target = alliesFu[Math.floor(Math.random() * alliesFu.length)]!;
+        const options = ['KI', 'GI', 'COPPER'] as const;
+        const picked = options[Math.floor(Math.random() * options.length)]!;
+        target.pieceCode = picked;
+        target.char = picked === 'KI' ? '金' : picked === 'GI' ? '銀' : '銅';
+        target.promoted = false;
+        transformed = true;
+        targetRow = target.row;
+        targetCol = target.col;
+        transformedTo = picked;
+      }
+    }
+  }
+  // 墓: 移動時20%で周囲8マスの空きマス1つに霊を召喚。
+  if (isGraveMover && input.move.fromRow != null && input.move.fromCol != null && movedPiece) {
+    const procChance = 0.2;
+    const roll = Math.random();
+    const triggered = roll <= procChance;
+    let summoned = false;
+    let summonRow: number | null = null;
+    let summonCol: number | null = null;
+    if (triggered) {
+      const around: Array<{ row: number; col: number }> = [];
+      for (let dr = -1; dr <= 1; dr += 1) {
+        for (let dc = -1; dc <= 1; dc += 1) {
+          if (dr === 0 && dc === 0) continue;
+          const row = movedPiece.row + dr;
+          const col = movedPiece.col + dc;
+          if (row < 0 || row > 8 || col < 0 || col > 8) continue;
+          if (!isCellEmpty(input.pieces, row, col)) continue;
+          around.push({ row, col });
+        }
+      }
+      if (around.length > 0) {
+        const picked = around[Math.floor(Math.random() * around.length)]!;
+        input.pieces.push({
+          side: input.actorSide,
+          row: picked.row,
+          col: picked.col,
+          pieceCode: 'SPIRIT',
+          char: '霊',
+          promoted: false,
+          imageSignedUrl: null,
+        });
+        summoned = true;
+        summonRow = picked.row;
+        summonCol = picked.col;
+      }
+    }
+  }
+  // 岩: 移動時、左右1マスに2ターン持続する岩障害物を召喚。
+  if (isRockMover && input.move.fromRow != null && input.move.fromCol != null && movedPiece) {
+    const summoned: Array<{ row: number; col: number }> = [];
+    for (const dc of [-1, 1] as const) {
+      const row = movedPiece.row;
+      const col = movedPiece.col + dc;
+      if (col < 0 || col > 8) continue;
+      if (!isCellEmpty(input.pieces, row, col)) continue;
+      state.board_hazards = state.board_hazards.filter((entry) => {
+        const type = asString(entry.hazard_type ?? entry.hazardType) ?? '';
+        const hRow = asNumber(entry.row);
+        const hCol = asNumber(entry.col);
+        return !(type === 'rock_obstacle' && hRow === row && hCol === col);
+      });
+      state.board_hazards.push({
+        row,
+        col,
+        hazard_type: 'rock_obstacle',
+        affects_side: 'both',
+        remaining_turns: 2,
+      });
+      summoned.push({ row, col });
+    }
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      console.info('[rock-skill-debug]', {
+        moveCount: input.position.moveCount,
+        turnNumber: input.position.turnNumber,
+        summonedCount: summoned.length,
+        summoned,
+      });
+    }
+  }
   const skipGenericAdjacentSummon = isWoodMover || isLeafMover;
   const skipGenericAdjacentRemove = isDemonMover;
   if (defs.length === 0) {
@@ -1265,7 +1778,9 @@ export function applyMoveSkillEffects(input: {
     const d = asRecord(raw);
     if (!d) return false;
     const pieces = asArray(d.pieceChars);
-    return pieces.some((p) => normalizeSkillPieceCode(asString(p)) === movedCode);
+    return pieces.some((p) =>
+      catalogPieceTokenMatchesMoved(asString(p) ?? '', movedCode, movedPiece),
+    );
   });
   for (const rawDef of matchedDefs) {
     const def = asRecord(rawDef);
@@ -1287,7 +1802,11 @@ export function applyMoveSkillEffects(input: {
       const conditionType = asString(condition.type) ?? '';
       const conditionParams = asRecord(condition.params) ?? {};
       if (conditionType === 'chance_roll') {
-        const procChance = asNumber(conditionParams.procChance) ?? asNumber(conditionParams.chance);
+        let procChance =
+          asFiniteNumber(conditionParams.procChance) ?? asFiniteNumber(conditionParams.chance);
+        if (procChance != null && procChance > 1 && procChance <= 100) {
+          procChance = procChance / 100;
+        }
         if (procChance != null && procChance > 0 && procChance < 1) {
           const roll = Math.random();
           const triggered = roll <= procChance;
@@ -1771,23 +2290,28 @@ export function applyMoveSkillEffects(input: {
 
       if (effectType === 'send_to_hand' && selector === 'adjacent_enemy') {
         if (!input.movedPiece) continue;
-        const idx = input.pieces.findIndex((p) => {
-          if (p.side === input.actorSide) return false;
-          if (p.char === '王' || p.char === '玉' || toBasePieceCode(p.pieceCode) === 'OU')
-            return false;
-          return (
-            Math.abs(p.row - input.movedPiece!.row) <= 1 &&
-            Math.abs(p.col - input.movedPiece!.col) <= 1
-          );
-        });
-        if (idx >= 0) {
-          const target = input.pieces[idx]!;
-          const code = toBasePieceCode(target.pieceCode);
-          input.pieces.splice(idx, 1);
-          if (code) {
-            // 仕様準拠: 送られた側の手駒へ戻す。
-            incrementHand(input.position, target.side, code, 1);
-          }
+        const candidates = input.pieces
+          .map((p, idx) => ({ p, idx }))
+          .filter(({ p }) => {
+            if (p.side === input.actorSide) return false;
+            if (p.char === '王' || p.char === '玉' || toBasePieceCode(p.pieceCode) === 'OU')
+              return false;
+            return (
+              Math.abs(p.row - input.movedPiece!.row) <= 1 &&
+              Math.abs(p.col - input.movedPiece!.col) <= 1
+            );
+          });
+        if (candidates.length === 0) {
+          continue;
+        }
+        const selected = candidates[Math.floor(Math.random() * candidates.length)]!;
+        const target = selected.p;
+        const idx = selected.idx;
+        const code = toBasePieceCode(target.pieceCode);
+        input.pieces.splice(idx, 1);
+        if (code) {
+          // 仕様準拠: 対象駒の持ち主（相手）の手駒へ送る。
+          incrementHand(input.position, target.side, code, 1);
         }
         continue;
       }

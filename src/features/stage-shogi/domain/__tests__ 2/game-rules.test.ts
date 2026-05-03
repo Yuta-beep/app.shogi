@@ -4,6 +4,7 @@ import {
   BoardPiece,
   canDropPiece,
   canPromoteByMove,
+  capturedToHandPieceCode,
   createEmptyHandsState,
   getLegalTargetsFromVectors,
   hasKing,
@@ -117,5 +118,24 @@ describe('stage shogi game rules', () => {
         'enemy',
       ),
     ).toBe(false);
+  });
+
+  it('maps captured rock/ore by char when pieceCode is null', () => {
+    const capturedRock: BoardPiece = {
+      side: 'enemy',
+      row: 4,
+      col: 4,
+      pieceCode: null,
+      char: '岩',
+    };
+    const capturedOre: BoardPiece = {
+      side: 'enemy',
+      row: 4,
+      col: 5,
+      pieceCode: null,
+      char: '鉱',
+    };
+    expect(capturedToHandPieceCode(capturedRock)).toBe('ROCK');
+    expect(capturedToHandPieceCode(capturedOre)).toBe('ORE');
   });
 });

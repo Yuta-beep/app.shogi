@@ -20,9 +20,11 @@ import { assertMoveAllowedBySessionCatalog } from '@/ai/engine/guardrails';
 import { createPosition, findPieceAt, notationForMove, pieceChar } from '@/ai/engine/shared';
 import { generateLegalMoves } from '@/ai/engine/legal-moves';
 import {
+  createSkillRuntimeView,
   applyBoardHazardsOnLanding,
   applyMoveSkillEffects,
   tickSkillStateDurations,
+  resolveEvadeCaptureProcChanceForPiece,
 } from '@/ai/engine/skill-runtime';
 
 function createGameStatus(winnerSide: Side | null): BattleGameStatus {
@@ -33,6 +35,33 @@ function createGameStatus(winnerSide: Side | null): BattleGameStatus {
     return { status: 'finished', result: 'enemy_win', winnerSide: 'enemy' };
   }
   return { status: 'in_progress', result: null, winnerSide: null };
+}
+
+function isSpiritPiece(piece: { pieceCode: string | null; char: string }): boolean {
+  if (piece.char === '霊') return true;
+  const base = toBasePieceCode(piece.pieceCode);
+  if (base === 'SPIRIT') return true;
+  const raw = (piece.pieceCode ?? '').toUpperCase();
+  return raw.includes('9D7397390E77');
+}
+
+function collectAdjacentEmptyCells(
+  pieces: Array<{ row: number; col: number }>,
+  row: number,
+  col: number,
+): Array<{ row: number; col: number }> {
+  const out: Array<{ row: number; col: number }> = [];
+  for (let dr = -1; dr <= 1; dr += 1) {
+    for (let dc = -1; dc <= 1; dc += 1) {
+      if (dr === 0 && dc === 0) continue;
+      const r = row + dr;
+      const c = col + dc;
+      if (r < 0 || r > 8 || c < 0 || c > 8) continue;
+      if (pieces.some((p) => p.row === r && p.col === c)) continue;
+      out.push({ row: r, col: c });
+    }
+  }
+  return out;
 }
 
 export function applyMove(input: {
@@ -48,6 +77,7 @@ export function applyMove(input: {
     enemy: sanitizeHandsBag(current.hands.enemy),
   });
   const actorSide = current.sideToMove;
+  const preMoveSkillView = createSkillRuntimeView(current);
   assertMoveAllowedBySessionCatalog({
     position: current,
     pieceCatalog: input.pieceCatalog,
@@ -60,8 +90,8 @@ export function applyMove(input: {
   let didCapture = false;
   let starReturnProcTriggered = false;
 
-  if (move.notation === 'time_skill_only') {
-    // no-op on board
+  if (move.notation === 'time_skill_only' || move.notation === 'house_skill_only') {
+    // no-op on board（スキルのみ）
   } else if (move.dropPieceCode) {
     const dropCode = toBasePieceCode(move.dropPieceCode);
     if (!dropCode) {
@@ -79,6 +109,9 @@ export function applyMove(input: {
     });
     movedPieceAfterApply = nextPieces[nextPieces.length - 1] ?? null;
   } else {
+    if (preMoveSkillView.rockObstacleCells.has(`${move.toRow}:${move.toCol}`)) {
+      throw new Error('cannot move onto rock obstacle');
+    }
     const movingIndex = nextPieces.findIndex(
       (piece) =>
         piece.side === actorSide && piece.row === move.fromRow && piece.col === move.fromCol,
@@ -105,36 +138,72 @@ export function applyMove(input: {
           throw new Error('CLOUD cannot capture allied king');
         }
       }
-      didCapture = true;
-      nextPieces = nextPieces.filter(
-        (piece) => !(piece.row === move.toRow && piece.col === move.toCol),
-      );
-      if (captureOwnPiece) {
-        // 雲の味方捕獲は自分の手駒に加える。
-        const capturedCode = toBasePieceCode(capturedToHandPieceCode(captured));
-        if (capturedCode) {
-          hands = addHandPiece(hands, actorSide, capturedCode, 1);
+
+      let phantomEvaded = false;
+      let adjacentEmpty: Array<{ row: number; col: number }> = [];
+      if (!captureOwnPiece) {
+        const evadeChance = resolveEvadeCaptureProcChanceForPiece(
+          current.boardState as Record<string, unknown> | undefined,
+          captured,
+        );
+        adjacentEmpty = collectAdjacentEmptyCells(nextPieces, move.toRow, move.toCol);
+        if (evadeChance != null) {
+          if (adjacentEmpty.length > 0) {
+            const roll = Math.random();
+            phantomEvaded = roll <= evadeChance;
+          }
+        }
+      }
+
+      if (phantomEvaded) {
+        didCapture = false;
+        const pick = adjacentEmpty[Math.floor(Math.random() * adjacentEmpty.length)]!;
+        const phIdx = nextPieces.findIndex(
+          (p) => p.row === move.toRow && p.col === move.toCol && p.side === captured.side,
+        );
+        if (phIdx >= 0) {
+          const ph = nextPieces[phIdx]!;
+          nextPieces[phIdx] = { ...ph, row: pick.row, col: pick.col };
         }
       } else {
-        const capturedBaseCode = toBasePieceCode(captured.pieceCode);
-        const isStarCaptured = capturedBaseCode === 'HOS' || captured.char === '星';
-        if (isStarCaptured) {
-          const procChance = 0.4;
-          const roll = Math.random();
-          const triggered = roll <= procChance;
-          if (triggered) {
-            starReturnProcTriggered = true;
-            hands = addHandPiece(hands, captured.side, 'HOS', 1);
+        didCapture = true;
+        nextPieces = nextPieces.filter(
+          (piece) => !(piece.row === move.toRow && piece.col === move.toCol),
+        );
+        const fallbackCapturedCode = toBasePieceCode(move.capturedPieceCode);
+        if (captureOwnPiece) {
+          // 雲の味方捕獲は自分の手駒に加える。
+          const capturedCode =
+            toBasePieceCode(capturedToHandPieceCode(captured)) ?? fallbackCapturedCode;
+          if (capturedCode) {
+            hands = addHandPiece(hands, actorSide, capturedCode, 1);
+          }
+        } else {
+          const isSpiritCaptured = isSpiritPiece(captured);
+          const capturedBaseCode = toBasePieceCode(captured.pieceCode);
+          const isStarCaptured = capturedBaseCode === 'HOS' || captured.char === '星';
+          if (isSpiritCaptured) {
+            // 霊: 相手に取られても手駒に加わらず消滅する。
+          } else if (isStarCaptured) {
+            const procChance = 0.4;
+            const roll = Math.random();
+            const triggered = roll <= procChance;
+            if (triggered) {
+              starReturnProcTriggered = true;
+              hands = addHandPiece(hands, captured.side, 'HOS', 1);
+            } else {
+              const capturedCode =
+                toBasePieceCode(capturedToHandPieceCode(captured)) ?? fallbackCapturedCode;
+              if (capturedCode) {
+                hands = addHandPiece(hands, actorSide, capturedCode, 1);
+              }
+            }
           } else {
-            const capturedCode = toBasePieceCode(capturedToHandPieceCode(captured));
+            const capturedCode =
+              toBasePieceCode(capturedToHandPieceCode(captured)) ?? fallbackCapturedCode;
             if (capturedCode) {
               hands = addHandPiece(hands, actorSide, capturedCode, 1);
             }
-          }
-        } else {
-          const capturedCode = toBasePieceCode(capturedToHandPieceCode(captured));
-          if (capturedCode) {
-            hands = addHandPiece(hands, actorSide, capturedCode, 1);
           }
         }
       }
@@ -198,18 +267,19 @@ export function applyMove(input: {
     didCapture,
   });
   // 毒マスへ侵入した駒は消滅。
-  if (move.notation !== 'time_skill_only') {
+  if (move.notation !== 'time_skill_only' && move.notation !== 'house_skill_only') {
     applyBoardHazardsOnLanding({
       position: nextPosition,
       actorSide,
       movedTo: { row: move.toRow, col: move.toCol },
       pieces: nextPieces,
     });
-    nextPosition.boardState = {
-      ...(nextPosition.boardState ?? {}),
-      pieces: nextPieces.map((piece) => ({ ...piece })),
-    };
   }
+  // スキルで駒数が変わる（家の召喚など）ため、常に nextPieces を board_state.pieces に反映する。
+  nextPosition.boardState = {
+    ...(nextPosition.boardState ?? {}),
+    pieces: nextPieces.map((piece) => ({ ...piece })),
+  };
 
   // スキルで盤上座標が変わる（例: 水の押し流し）ため、
   // boardState だけでなく SFEN も同じターン内で再構築して二重表示を防ぐ。
@@ -250,6 +320,7 @@ export function applyMove(input: {
       starReturnProcTriggered ||
       move.notation === 'time_skill' ||
       move.notation === 'time_skill_only' ||
+      move.notation === 'house_skill_only' ||
       Boolean(move.notation && move.notation !== 'time_normal' && !/^\d/.test(move.notation)),
     position: nextPosition,
     game,
