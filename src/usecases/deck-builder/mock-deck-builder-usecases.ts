@@ -27,11 +27,25 @@ export class MockLoadDeckBuilderUseCase implements LoadDeckBuilderUseCase {
           move: '前後左右2マス',
         },
         {
+          char: '泉',
+          name: '泉',
+          desc: '竜を覚醒させる。',
+          skill: '味方の「竜」駒を覚醒させる。',
+          move: '上下左右1マス',
+        },
+        {
           char: '竜',
           name: '小竜',
           desc: '覚醒前の竜駒。',
-          skill: '「泉」で覚醒して辰になる',
+          skill: '味方に泉が盤にいる間、辰として行動する。',
           move: '前後左右2マス',
+        },
+        {
+          char: '辰',
+          name: '辰神',
+          desc: '泉により覚醒した竜。',
+          skill: '移動時10％の確率で周囲8マスの敵駒を1つ消滅させる。',
+          move: '前後左右3マス',
         },
         {
           char: '鳳',

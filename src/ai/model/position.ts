@@ -92,6 +92,19 @@ export function piecesFromBoardState(position: AiBattlePosition): AiBoardPiece[]
     const promoted = Boolean(obj.promoted ?? rawPiece?.promoted ?? false);
     const char = String(obj.char ?? rawPiece?.char ?? '?') || (pieceCode ? pieceCode : '?');
 
+    const livesRaw = obj.kbossLivesRemaining ?? obj.kboss_lives_remaining;
+    const kbossLivesRemaining =
+      typeof livesRaw === 'number' && Number.isFinite(livesRaw)
+        ? Math.max(1, Math.min(2, Math.floor(livesRaw)))
+        : undefined;
+
+    const mrpc = obj.mutantRevertPieceCode ?? obj.mutant_revert_piece_code;
+    const mrch = obj.mutantRevertChar ?? obj.mutant_revert_char;
+    const mrpr = obj.mutantRevertPromoted ?? obj.mutant_revert_promoted;
+    const mrimg = obj.mutantRevertImageSignedUrl ?? obj.mutant_revert_image_signed_url;
+    const hasMutantRevert =
+      (typeof mrpc === 'string' && mrpc.length > 0) || (typeof mrch === 'string' && mrch.length > 0);
+
     pieces.push({
       side,
       row,
@@ -99,6 +112,15 @@ export function piecesFromBoardState(position: AiBattlePosition): AiBoardPiece[]
       pieceCode: toBasePieceCode(pieceCode),
       char,
       promoted,
+      ...(kbossLivesRemaining != null ? { kbossLivesRemaining } : {}),
+      ...(hasMutantRevert
+        ? {
+            mutantRevertPieceCode: typeof mrpc === 'string' ? mrpc : null,
+            mutantRevertChar: typeof mrch === 'string' ? mrch : undefined,
+            mutantRevertPromoted: Boolean(mrpr),
+            mutantRevertImageSignedUrl: typeof mrimg === 'string' ? mrimg : null,
+          }
+        : {}),
       imageSignedUrl:
         typeof obj.imageSignedUrl === 'string'
           ? obj.imageSignedUrl

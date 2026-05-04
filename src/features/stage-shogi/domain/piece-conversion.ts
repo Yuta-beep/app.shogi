@@ -87,6 +87,12 @@ const RUST_ENGINE_ONE_CHAR_SFEN: Readonly<Record<string, string>> = {
   HOUSE: 'ZIE',
   PEOPLE: 'ZMN',
   FIELD: 'ZTA',
+  SPRING: 'ZQN',
+  TATSU: 'ZTS',
+  /** ステージ30（K研究所）— 玉の `K` と衝突しないよう Z 接頭 */
+  EXPERIMENT: 'ZJI',
+  MUTANT: 'ZIH',
+  KBOSS: 'ZKD',
 };
 
 /** カタログに行が無い／sfen が未同期でも、エンジン SFEN 1 文字 → pieceCode を復元する */
@@ -116,6 +122,11 @@ const CODES_WITH_ENGINE_SFEN_FALLBACK: ReadonlySet<string> = new Set([
   'HOUSE',
   'PEOPLE',
   'FIELD',
+  'SPRING',
+  'TATSU',
+  'EXPERIMENT',
+  'MUTANT',
+  'KBOSS',
 ]);
 
 /** `sfenCharToDisplayChar` 用（`a`→`A` と `!` の両方で引けるよう atom をキーにする） */
@@ -148,7 +159,7 @@ const ENGINE_SFEN_ATOM_TO_FALLBACK_CODE: Readonly<Record<string, string>> = (() 
 })();
 
 /**
- * 漢字駒（幻・霧・月・舟など）の canonical pieceCode と CHAR_TO_CODE を同期すること。
+ * 表示駒字（幻・霧・月・舟・実・異・英字 K など）の canonical pieceCode と CHAR_TO_CODE を同期すること。
  * opaque な `pieceId` 行だけがカタログにあるとき、SFEN 逆引きが opaque のままだと
  * `toSfenBoardPure` で atom 解決に失敗して駒が消えるため、ZMO 等のトークンを canonical へ寄せる。
  */
@@ -162,6 +173,10 @@ const KANJI_CHAR_ALIAS_TO_CANONICAL_PIECE_CODE: Readonly<Record<string, string>>
   家: 'HOUSE',
   民: 'PEOPLE',
   畑: 'FIELD',
+  実: 'EXPERIMENT',
+  異: 'MUTANT',
+  /** K博士（ステージ30）。玉 SFEN の `K` と二重定義しないよう canonical は ZKD。 */
+  K: 'KBOSS',
 };
 
 function aliasSfenTokensToCanonicalPieceCodesForOpaqueRows(
@@ -358,6 +373,7 @@ export const CODE_TO_CHAR: Readonly<Record<string, string>> = {
   NIN: '忍',
   KAG: '影',
   HOU: '砲',
+  /** 小竜。飛の成り表示は `PROMOTED_CODE_TO_CHAR` の HI→「龍」 */
   RYU: '竜',
   HOO: '鳳',
   ENN: '炎',
@@ -406,6 +422,11 @@ export const CODE_TO_CHAR: Readonly<Record<string, string>> = {
   HOUSE: '家',
   PEOPLE: '民',
   FIELD: '畑',
+  SPRING: '泉',
+  TATSU: '辰',
+  EXPERIMENT: '実',
+  MUTANT: '異',
+  KBOSS: 'K',
 };
 
 export const PROMOTED_CODE_TO_CHAR: Readonly<Record<string, string>> = {
@@ -417,6 +438,7 @@ export const PROMOTED_CODE_TO_CHAR: Readonly<Record<string, string>> = {
   HI: '龍',
 };
 
+/** 未成り漢字 → canonical。`竜` は小竜駒（飛の成りの「龍」「竜王」と別物）。 */
 export const CHAR_TO_CODE: Readonly<Record<string, string>> = {
   歩: 'FU',
   香: 'KY',
@@ -430,6 +452,7 @@ export const CHAR_TO_CODE: Readonly<Record<string, string>> = {
   忍: 'NIN',
   影: 'KAG',
   砲: 'HOU',
+  /** 小竜（`PROMOTED_CODE_TO_CHAR.HI` の「龍」＝竜王とは別駒） */
   竜: 'RYU',
   鳳: 'HOO',
   炎: 'ENN',
@@ -478,6 +501,11 @@ export const CHAR_TO_CODE: Readonly<Record<string, string>> = {
   家: 'HOUSE',
   民: 'PEOPLE',
   畑: 'FIELD',
+  泉: 'SPRING',
+  辰: 'TATSU',
+  実: 'EXPERIMENT',
+  異: 'MUTANT',
+  K: 'KBOSS',
 };
 
 // ── toSfenBoardPure ───────────────────────────────────────────────────────────

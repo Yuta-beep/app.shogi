@@ -6,6 +6,7 @@ function ruleCharFromNameHint(hint: string): string | null {
   if (hint.includes('闇神')) return '闇';
   if (hint.includes('星神')) return '星';
   if (hint.includes('魔神')) return '魔';
+  if (hint.includes('辰神')) return '辰';
   return null;
 }
 

@@ -45,6 +45,27 @@ function isSpiritPiece(piece: { pieceCode: string | null; char: string }): boole
   return raw.includes('9D7397390E77');
 }
 
+function isKbossPiece(piece: { pieceCode: string | null; char: string }): boolean {
+  const base = toBasePieceCode(piece.pieceCode);
+  if (base === 'KBOSS') return true;
+  if (piece.char === 'K') return true;
+  return false;
+}
+
+/** K・実・異: 取っても手駒にならず消滅（霊と同系）。 */
+function isVanishOnCapturePiece(piece: { pieceCode: string | null; char: string }): boolean {
+  if (piece.char === 'K' || piece.char === '実' || piece.char === '異') return true;
+  const base = toBasePieceCode(piece.pieceCode);
+  if (base === 'KBOSS' || base === 'EXPERIMENT' || base === 'MUTANT') return true;
+  return false;
+}
+
+function kbossEffectiveLives(piece: { kbossLivesRemaining?: number }): number {
+  const v = piece.kbossLivesRemaining;
+  if (v === 1 || v === 2) return v;
+  return 2;
+}
+
 function collectAdjacentEmptyCells(
   pieces: Array<{ row: number; col: number }>,
   row: number,
@@ -124,6 +145,7 @@ export function applyMove(input: {
     const isCloudMover = movingCode === 'CLOUD' || movingPiece?.char === '雲';
 
     const captured = findPieceAt(nextPieces, move.toRow, move.toCol);
+    let rebuffKboss = false;
     if (captured) {
       const captureOwnPiece = captured.side === actorSide;
       if (captureOwnPiece && !isCloudMover) {
@@ -165,6 +187,23 @@ export function applyMove(input: {
           const ph = nextPieces[phIdx]!;
           nextPieces[phIdx] = { ...ph, row: pick.row, col: pick.col };
         }
+      } else if (
+        !captureOwnPiece &&
+        isKbossPiece(captured) &&
+        kbossEffectiveLives(captured) > 1
+      ) {
+        rebuffKboss = true;
+        didCapture = false;
+        const kIdx = nextPieces.findIndex(
+          (p) => p.row === move.toRow && p.col === move.toCol && p.side === captured.side,
+        );
+        if (kIdx >= 0) {
+          const cur = nextPieces[kIdx]!;
+          nextPieces[kIdx] = {
+            ...cur,
+            kbossLivesRemaining: kbossEffectiveLives(cur) - 1,
+          };
+        }
       } else {
         didCapture = true;
         nextPieces = nextPieces.filter(
@@ -184,6 +223,8 @@ export function applyMove(input: {
           const isStarCaptured = capturedBaseCode === 'HOS' || captured.char === '星';
           if (isSpiritCaptured) {
             // 霊: 相手に取られても手駒に加わらず消滅する。
+          } else if (isVanishOnCapturePiece(captured)) {
+            // K 博士・実・異: 手駒に加えない。
           } else if (isStarCaptured) {
             const procChance = 0.4;
             const roll = Math.random();
@@ -216,23 +257,27 @@ export function applyMove(input: {
     if (movingIndexAfterCapture < 0) {
       throw new Error('moving piece not found after capture resolution');
     }
-    const moving = nextPieces[movingIndexAfterCapture];
-    const nextPromoted = move.promote || moving.promoted === true;
-    const resolvedChar = pieceChar(moving.pieceCode, nextPromoted);
-    const nextChar =
-      resolvedChar === '?' ||
-      (toBasePieceCode(moving.pieceCode) != null &&
-        resolvedChar === toBasePieceCode(moving.pieceCode))
-        ? moving.char
-        : resolvedChar;
-    nextPieces[movingIndexAfterCapture] = {
-      ...moving,
-      row: move.toRow,
-      col: move.toCol,
-      promoted: nextPromoted,
-      char: nextChar,
-    };
-    movedPieceAfterApply = nextPieces[movingIndexAfterCapture] ?? null;
+    if (!rebuffKboss) {
+      const moving = nextPieces[movingIndexAfterCapture];
+      const nextPromoted = move.promote || moving.promoted === true;
+      const resolvedChar = pieceChar(moving.pieceCode, nextPromoted);
+      const nextChar =
+        resolvedChar === '?' ||
+        (toBasePieceCode(moving.pieceCode) != null &&
+          resolvedChar === toBasePieceCode(moving.pieceCode))
+          ? moving.char
+          : resolvedChar;
+      nextPieces[movingIndexAfterCapture] = {
+        ...moving,
+        row: move.toRow,
+        col: move.toCol,
+        promoted: nextPromoted,
+        char: nextChar,
+      };
+      movedPieceAfterApply = nextPieces[movingIndexAfterCapture] ?? null;
+    } else {
+      movedPieceAfterApply = nextPieces[movingIndexAfterCapture] ?? null;
+    }
   }
 
   let winnerSide: Side | null = null;

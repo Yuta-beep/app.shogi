@@ -96,6 +96,7 @@ const SPECIAL_PIECE_ALLOWED_POSITIONS = new Map<string, ReadonlySet<string>>([
   ['民', new Set(rowCols(6, [2, 6]))],
   ['畑', new Set(rowCols(7, [1]))],
   ['泉', new Set(rowCols(7, [7]))],
+  ['辰', new Set(rowCols(7, [1]))],
   ['安', new Set(rowCols(7, [1, 7]))],
   ['宋', new Set(rowCols(7, [7]))],
   ['爆', new Set(rowCols(8, [3, 5]))],
@@ -258,6 +259,17 @@ function isDeckAreaRow(row: number): boolean {
   return row >= DECK_ROW_OFFSET && row < BOARD_ROWS;
 }
 
+/** ステージ30系（K・実・異）はマイデッキ下段に配置不可 */
+export function isPieceBannedFromMyDeck(piece: OwnedPiece): boolean {
+  return piece.char === 'K' || piece.char === '実' || piece.char === '異';
+}
+
+function filterBannedPiecesOutOfDeckArea(placements: BoardPlacement[]): BoardPlacement[] {
+  return placements.filter(
+    (p) => !(isDeckAreaRow(p.row) && isPieceBannedFromMyDeck(p.piece)),
+  );
+}
+
 function isAllowedDeckPlacementByHtmlRules(piece: OwnedPiece, row: number, col: number): boolean {
   const ruleChar = normalizeDeckBuilderPieceChar(piece.char, piece.name);
   const allowed = SPECIAL_PIECE_ALLOWED_POSITIONS.get(ruleChar);
@@ -272,6 +284,7 @@ function canPlacePieceAtByRules(
   placements: BoardPlacement[],
 ): boolean {
   if (!isDeckAreaRow(row)) return false;
+  if (isPieceBannedFromMyDeck(piece)) return false;
 
   const ruleChar = normalizeDeckBuilderPieceChar(piece.char, piece.name);
 
@@ -451,7 +464,9 @@ export function useDeckBuilderScreen() {
             normalizedOwnedPieces,
           );
           setBoardPlacements(
-            initial.length > 0 ? initial : createDefaultBoardPlacements(normalizedOwnedPieces),
+            filterBannedPiecesOutOfDeckArea(
+              initial.length > 0 ? initial : createDefaultBoardPlacements(normalizedOwnedPieces),
+            ),
           );
         }
       })
@@ -469,6 +484,7 @@ export function useDeckBuilderScreen() {
 
     const apiPlacements = boardPlacements
       .filter((placement) => isDeckAreaRow(placement.row))
+      .filter((placement) => !isPieceBannedFromMyDeck(placement.piece))
       .filter((placement) => typeof placement.piece.pieceId === 'number')
       .map((placement) => ({
         rowNo: toApiRow(placement.row),
@@ -503,6 +519,7 @@ export function useDeckBuilderScreen() {
 
     const apiPlacements = boardPlacements
       .filter((placement) => isDeckAreaRow(placement.row))
+      .filter((placement) => !isPieceBannedFromMyDeck(placement.piece))
       .filter((placement) => typeof placement.piece.pieceId === 'number')
       .map((placement) => ({
         rowNo: toApiRow(placement.row),
@@ -582,17 +599,24 @@ export function useDeckBuilderScreen() {
     [boardPlacements, selectedPieceForPlacement],
   );
 
-  return {
-    ownedPieces,
-    selectedPieceForPlacement,
-    savedDecks,
-    boardPlacements,
-    isLoading,
-    selectedPiece,
-    selectPieceForPlacement: (piece: OwnedPiece) => setSelectedPieceForPlacement(piece),
-    getRemainingCount,
-    isValidPlacementAt,
-    placeSelectedPieceAt: (row: number, col: number) => {
+  const selectPieceForPlacement = useCallback((piece: OwnedPiece) => {
+    if (isPieceBannedFromMyDeck(piece)) {
+      setSelectedPieceForPlacement(null);
+      return;
+    }
+    setSelectedPieceForPlacement(piece);
+  }, []);
+
+  const openPieceDetail = useCallback((piece: OwnedPiece) => {
+    setSelectedPiece(piece);
+  }, []);
+
+  const closePieceDetail = useCallback(() => {
+    setSelectedPiece(null);
+  }, []);
+
+  const placeSelectedPieceAt = useCallback(
+    (row: number, col: number) => {
       if (!selectedPieceForPlacement) {
         setBoardPlacements((prev) =>
           prev.filter((placement) => !(placement.row === row && placement.col === col)),
@@ -611,8 +635,22 @@ export function useDeckBuilderScreen() {
         return simulatePlacement(prev, selectedPieceForPlacement, row, col);
       });
     },
-    openPieceDetail: (piece: OwnedPiece) => setSelectedPiece(piece),
-    closePieceDetail: () => setSelectedPiece(null),
+    [selectedPieceForPlacement],
+  );
+
+  return {
+    ownedPieces,
+    selectedPieceForPlacement,
+    savedDecks,
+    boardPlacements,
+    isLoading,
+    selectedPiece,
+    selectPieceForPlacement,
+    getRemainingCount,
+    isValidPlacementAt,
+    placeSelectedPieceAt,
+    openPieceDetail,
+    closePieceDetail,
     saveModalOpen,
     openSaveModal: () => setSaveModalOpen(true),
     closeSaveModal: () => {
@@ -632,7 +670,9 @@ export function useDeckBuilderScreen() {
     loadDeck: (deckId: string) => {
       const deck = savedDecks.find((d) => d.id === deckId);
       if (!deck) return;
-      setBoardPlacements(boardPlacementsFromSavedDeck(deck, ownedPieces));
+      setBoardPlacements(
+        filterBannedPiecesOutOfDeckArea(boardPlacementsFromSavedDeck(deck, ownedPieces)),
+      );
       setLoadModalOpen(false);
       setSelectedPieceForPlacement(null);
     },
@@ -641,7 +681,7 @@ export function useDeckBuilderScreen() {
     openDefaultModal: () => setDefaultModalOpen(true),
     closeDefaultModal: () => setDefaultModalOpen(false),
     loadDefault: () => {
-      setBoardPlacements(createDefaultBoardPlacements(ownedPieces));
+      setBoardPlacements(filterBannedPiecesOutOfDeckArea(createDefaultBoardPlacements(ownedPieces)));
       setDefaultModalOpen(false);
       setSelectedPieceForPlacement(null);
     },

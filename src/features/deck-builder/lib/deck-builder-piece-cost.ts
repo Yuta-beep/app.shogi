@@ -72,6 +72,7 @@ const PIECE_COST_OVERRIDES: Partial<Record<string, number>> = {
   民: 3,
   畑: 7,
   泉: 7,
+  辰: 7,
   刀: 3,
   鎧: 3,
   銃: 8,

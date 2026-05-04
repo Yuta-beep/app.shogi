@@ -461,4 +461,80 @@ describe('piece conversion via DB-derived mapping', () => {
     const pieces: TestPiece[] = [{ side: 'enemy', row: 0, col: 4, pieceCode: 'BOAT', char: '舟' }];
     expect(toSfenBoardPure(pieces, boatMapping)).toBe('4zbo4/9/9/9/9/9/9/9/9');
   });
+
+  it('ステージ30の実・異・K は char のみでも SFEN に載り、玉の K と舟の ZBO と衝突しない', () => {
+    const mapping = createPieceSfenMapping([
+      {
+        pieceCode: 'OU',
+        sfenCode: 'K',
+        isPromoted: false,
+        char: '王',
+        name: '',
+        unlock: '',
+        desc: '',
+        skill: '',
+        move: '',
+        moveVectors: [],
+        isRepeatable: false,
+      },
+    ]);
+    const pieces: TestPiece[] = [
+      { side: 'enemy', row: 0, col: 0, pieceCode: null, char: '実' },
+      { side: 'enemy', row: 0, col: 1, pieceCode: null, char: '異' },
+      { side: 'enemy', row: 0, col: 2, pieceCode: null, char: 'K' },
+    ];
+    expect(toSfenBoardPure(pieces, mapping)).toBe('zjizihzkd6/9/9/9/9/9/9/9/9');
+    expect(mapping.sfenToCode.unpromoted.K).toBe('OU');
+    expect(mapping.sfenToCode.unpromoted.ZJI).toBe('EXPERIMENT');
+    expect(mapping.sfenToCode.unpromoted.ZIH).toBe('MUTANT');
+    expect(mapping.sfenToCode.unpromoted.ZKD).toBe('KBOSS');
+  });
+
+  it('K 博士の opaque 行が誤 sfen K でも舟に寄せず ZKD に正規化される', () => {
+    const mapping = createPieceSfenMapping([
+      {
+        pieceCode: 'OU',
+        sfenCode: 'K',
+        isPromoted: false,
+        char: '王',
+        name: '',
+        unlock: '',
+        desc: '',
+        skill: '',
+        move: '',
+        moveVectors: [],
+        isRepeatable: false,
+      },
+      {
+        pieceCode: 'PIECE_9C0038EF7D22',
+        sfenCode: 'K',
+        isPromoted: false,
+        char: 'K',
+        name: '',
+        unlock: '',
+        desc: '',
+        skill: '',
+        move: '',
+        moveVectors: [],
+        isRepeatable: false,
+      },
+      {
+        pieceCode: 'PIECE_31EA6722B2B4',
+        sfenCode: 'K',
+        isPromoted: false,
+        char: '舟',
+        name: '',
+        unlock: '',
+        desc: '',
+        skill: '',
+        move: '',
+        moveVectors: [],
+        isRepeatable: false,
+      },
+    ]);
+    expect(mapping.sfenToCode.unpromoted.K).toBe('OU');
+    expect(mapping.sfenToCode.unpromoted.ZBO).toBe('BOAT');
+    expect(mapping.sfenToCode.unpromoted.ZKD).toBe('KBOSS');
+    expect(mapping.codeToSfen.KBOSS).toBe('ZKD');
+  });
 });

@@ -34,7 +34,8 @@ export function toBasePieceCode(pieceCode: string | null | undefined): string | 
   if (code === 'NK') return 'KE';
   if (code === 'NG') return 'GI';
   if (code === 'UM') return 'KA';
-  if (code === 'RY' || code === 'RYU') return 'HI';
+  // `RY` は飛の成り（+R）。`RYU` は本ゲームで小竜の canonical のため HI に落とさない。
+  if (code === 'RY') return 'HI';
   return code;
 }
 

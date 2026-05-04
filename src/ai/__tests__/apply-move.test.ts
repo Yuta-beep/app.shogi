@@ -562,6 +562,63 @@ const pieceCatalog: AiPieceDefinition[] = [
     moveVectors: [{ dx: 0, dy: -1, maxStep: 1 }],
     isRepeatable: true,
   },
+  {
+    pieceCode: 'KBOSS',
+    canonicalCode: 'KBOSS',
+    sfenCode: 'ZKD',
+    char: 'K',
+    name: 'K',
+    unlock: 'default',
+    desc: '',
+    skill: '',
+    move: '',
+    moveVectors: [
+      { dx: -1, dy: -1, maxStep: 1 },
+      { dx: 0, dy: -1, maxStep: 1 },
+      { dx: 1, dy: -1, maxStep: 1 },
+      { dx: -1, dy: 0, maxStep: 1 },
+      { dx: 1, dy: 0, maxStep: 1 },
+      { dx: -1, dy: 1, maxStep: 1 },
+      { dx: 0, dy: 1, maxStep: 1 },
+      { dx: 1, dy: 1, maxStep: 1 },
+    ],
+    isRepeatable: true,
+  },
+  {
+    pieceCode: 'EXPERIMENT',
+    canonicalCode: 'EXPERIMENT',
+    sfenCode: 'ZJI',
+    char: '実',
+    name: '実',
+    unlock: 'default',
+    desc: '',
+    skill: '',
+    move: '',
+    moveVectors: [
+      { dx: -1, dy: -1, maxStep: 1 },
+      { dx: 0, dy: -1, maxStep: 1 },
+      { dx: 1, dy: -1, maxStep: 1 },
+      { dx: -1, dy: 0, maxStep: 1 },
+      { dx: 1, dy: 0, maxStep: 1 },
+      { dx: -1, dy: 1, maxStep: 1 },
+      { dx: 0, dy: 1, maxStep: 1 },
+      { dx: 1, dy: 1, maxStep: 1 },
+    ],
+    isRepeatable: true,
+  },
+  {
+    pieceCode: 'MUTANT',
+    canonicalCode: 'MUTANT',
+    sfenCode: 'ZIH',
+    char: '異',
+    name: '異',
+    unlock: 'default',
+    desc: '',
+    skill: '',
+    move: '',
+    moveVectors: [{ dx: 0, dy: -1, maxStep: 1 }],
+    isRepeatable: true,
+  },
 ];
 
 describe('ai engine apply move', () => {
@@ -2818,5 +2875,96 @@ describe('ai engine apply move', () => {
     }[];
     const moved = pieces.find((piece) => piece.row === 4 && piece.col === 4);
     expect(moved?.char).toBe('歩');
+  });
+
+  it('K 博士は初回取られで盤上に残り歩は元位置のまま手番が交代する', () => {
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: 'seed',
+      stateHash: 'seed',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'enemy', row: 5, col: 4, pieceCode: 'KBOSS', char: 'K', promoted: false },
+          { side: 'player', row: 6, col: 4, pieceCode: 'FU', char: '歩', promoted: false },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+      },
+      hands: { player: {}, enemy: {} },
+    };
+
+    const committed = applyMove({
+      position,
+      pieceCatalog,
+      move: {
+        fromRow: 6,
+        fromCol: 4,
+        toRow: 5,
+        toCol: 4,
+        pieceCode: 'FU',
+        promote: false,
+        dropPieceCode: null,
+        capturedPieceCode: 'KBOSS',
+        notation: null,
+      },
+    });
+
+    expect(committed.position.sideToMove).toBe('enemy');
+    const after = boardPieces(committed.position);
+    const k = after.find((p) => p.row === 5 && p.col === 4 && p.char === 'K');
+    expect(k).toBeTruthy();
+    expect((k as { kbossLivesRemaining?: number }).kbossLivesRemaining).toBe(1);
+    const fu = after.find((p) => p.pieceCode === 'FU' && p.side === 'player');
+    expect(fu?.row).toBe(6);
+    expect(fu?.col).toBe(4);
+    expect(handTotal(committed.position.hands.player)).toBe(0);
+  });
+
+  it('K 博士は kbossLivesRemaining が 1 のとき通常どおり取られて盤から消える', () => {
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: 'seed',
+      stateHash: 'seed',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          {
+            side: 'enemy',
+            row: 5,
+            col: 4,
+            pieceCode: 'KBOSS',
+            char: 'K',
+            promoted: false,
+            kbossLivesRemaining: 1,
+          },
+          { side: 'player', row: 6, col: 4, pieceCode: 'FU', char: '歩', promoted: false },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+      },
+      hands: { player: {}, enemy: {} },
+    };
+
+    const committed = applyMove({
+      position,
+      pieceCatalog,
+      move: {
+        fromRow: 6,
+        fromCol: 4,
+        toRow: 5,
+        toCol: 4,
+        pieceCode: 'FU',
+        promote: false,
+        dropPieceCode: null,
+        capturedPieceCode: 'KBOSS',
+        notation: null,
+      },
+    });
+
+    expect(boardPieces(committed.position).some((p) => p.char === 'K')).toBe(false);
+    expect(handTotal(committed.position.hands.player)).toBe(0);
   });
 });

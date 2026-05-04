@@ -1,14 +1,17 @@
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import { useCallback, useMemo, useRef, useState } from 'react';
-import { Modal, Pressable, Text, TextInput, View, ScrollView, PanResponder } from 'react-native';
+import { useCallback, useMemo, useState } from 'react';
+import { Alert, Modal, Pressable, Text, TextInput, View, ScrollView } from 'react-native';
 import Svg, { Line, Rect } from 'react-native-svg';
 
 import { AppLoadingScreen } from '@/components/organism/app-loading-screen';
 import { BackButton } from '@/components/atom/back-button';
 import { homeAssets } from '@/constants/home-assets';
 import { UiScreenShell } from '@/components/organism/ui-screen-shell';
-import { useDeckBuilderScreen } from '@/features/deck-builder/ui/use-deck-builder-screen';
+import {
+  isPieceBannedFromMyDeck,
+  useDeckBuilderScreen,
+} from '@/features/deck-builder/ui/use-deck-builder-screen';
 import { useAssetPreload } from '@/hooks/common/use-asset-preload';
 import { useScreenBgm } from '@/hooks/common/use-screen-bgm';
 import { playSe } from '@/lib/audio/audio-manager';
@@ -31,12 +34,10 @@ const PLACED_PIECE_OFFSET_Y = -2;
 export function DeckBuilderScreen() {
   const router = useRouter();
   const vm = useDeckBuilderScreen();
+  const { placeSelectedPieceAt, isValidPlacementAt, selectedPieceForPlacement, openPieceDetail } =
+    vm;
   const [activeCell, setActiveCell] = useState<{ row: number; col: number } | null>(null);
-  const [boardTouchArea, setBoardTouchArea] = useState({ width: 0, height: 0 });
-  const dragLastCellKeyRef = useRef<string | null>(null);
-  const longPressTriggeredRef = useRef(false);
-  const startTouchRef = useRef({ x: 0, y: 0 });
-  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [applyBattleBusy, setApplyBattleBusy] = useState(false);
   const remotePieceUrls = useMemo(
     () =>
       vm.ownedPieces
@@ -61,96 +62,12 @@ export function DeckBuilderScreen() {
   );
   const formattedDeckTotalCost = Number.isFinite(vm.deckTotalCost) ? `${vm.deckTotalCost}` : '0';
 
-  const getCellFromTouch = useCallback(
-    (x: number, y: number): { row: number; col: number } | null => {
-      if (boardTouchArea.width <= 0 || boardTouchArea.height <= 0) return null;
-      if (x < 0 || y < 0 || x >= boardTouchArea.width || y >= boardTouchArea.height) return null;
-      const col = Math.floor((x / boardTouchArea.width) * BOARD_SIZE);
-      const row = Math.floor((y / boardTouchArea.height) * BOARD_SIZE);
-      if (row < 0 || row >= BOARD_SIZE || col < 0 || col >= BOARD_SIZE) return null;
-      return { row, col };
-    },
-    [boardTouchArea.height, boardTouchArea.width],
-  );
-
-  const getPlacementAt = useCallback(
-    (row: number, col: number) =>
-      vm.boardPlacements.find((placement) => placement.row === row && placement.col === col) ??
-      null,
-    [vm.boardPlacements],
-  );
-
   const applyCellAction = useCallback(
     (row: number, col: number) => {
       setActiveCell({ row, col });
-      vm.placeSelectedPieceAt(row, col);
+      placeSelectedPieceAt(row, col);
     },
-    [vm],
-  );
-
-  const clearLongPressTimer = useCallback(() => {
-    if (longPressTimerRef.current) {
-      clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-    }
-  }, []);
-
-  const beginLongPressDetection = useCallback(
-    (row: number, col: number) => {
-      const placement = getPlacementAt(row, col);
-      if (!placement) return;
-      clearLongPressTimer();
-      longPressTimerRef.current = setTimeout(() => {
-        longPressTriggeredRef.current = true;
-        vm.openPieceDetail(placement.piece);
-      }, 420);
-    },
-    [clearLongPressTimer, getPlacementAt, vm],
-  );
-
-  const boardPanResponder = useMemo(
-    () =>
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => true,
-        onStartShouldSetPanResponderCapture: () => true,
-        onMoveShouldSetPanResponder: () => true,
-        onMoveShouldSetPanResponderCapture: () => true,
-        onPanResponderGrant: (event) => {
-          longPressTriggeredRef.current = false;
-          const { locationX, locationY } = event.nativeEvent;
-          startTouchRef.current = { x: locationX, y: locationY };
-          const cell = getCellFromTouch(locationX, locationY);
-          dragLastCellKeyRef.current = cell ? `${cell.row}-${cell.col}` : null;
-          if (cell) beginLongPressDetection(cell.row, cell.col);
-        },
-        onPanResponderMove: (event) => {
-          const { locationX, locationY } = event.nativeEvent;
-          const dx = locationX - startTouchRef.current.x;
-          const dy = locationY - startTouchRef.current.y;
-          if (Math.hypot(dx, dy) > 6) {
-            clearLongPressTimer();
-          }
-          const cell = getCellFromTouch(locationX, locationY);
-          if (!cell) return;
-          const key = `${cell.row}-${cell.col}`;
-          if (dragLastCellKeyRef.current === key) return;
-          dragLastCellKeyRef.current = key;
-          applyCellAction(cell.row, cell.col);
-        },
-        onPanResponderRelease: (event) => {
-          clearLongPressTimer();
-          const { locationX, locationY } = event.nativeEvent;
-          const cell = getCellFromTouch(locationX, locationY);
-          if (!cell) return;
-          if (!longPressTriggeredRef.current) {
-            applyCellAction(cell.row, cell.col);
-          }
-        },
-        onPanResponderTerminate: () => {
-          clearLongPressTimer();
-        },
-      }),
-    [applyCellAction, beginLongPressDetection, clearLongPressTimer, getCellFromTouch],
+    [placeSelectedPieceAt],
   );
 
   if (vm.isLoading || !areAssetsReady) {
@@ -222,11 +139,6 @@ export function DeckBuilderScreen() {
               width: `${(BOARD_INNER / BOARD_VIEWBOX) * 100}%`,
               height: `${(BOARD_INNER / BOARD_VIEWBOX) * 100}%`,
             }}
-            onLayout={(event) => {
-              const { width, height } = event.nativeEvent.layout;
-              setBoardTouchArea({ width, height });
-            }}
-            {...boardPanResponder.panHandlers}
           >
             <Svg
               width="100%"
@@ -235,6 +147,23 @@ export function DeckBuilderScreen() {
               style={{ position: 'absolute', top: 0, left: 0 }}
               pointerEvents="none"
             >
+              {selectedPieceForPlacement
+                ? Array.from({ length: BOARD_SIZE }, (_, row) =>
+                    Array.from({ length: BOARD_SIZE }, (_, col) => {
+                      if (!isValidPlacementAt(row, col)) return null;
+                      return (
+                        <Rect
+                          key={`place-hl-${row}-${col}`}
+                          x={col * BOARD_CELL}
+                          y={row * BOARD_CELL}
+                          width={BOARD_CELL}
+                          height={BOARD_CELL}
+                          fill="rgba(34, 197, 94, 0.32)"
+                        />
+                      );
+                    }),
+                  ).flat()
+                : null}
               {activeCell ? (
                 <Rect
                   x={activeCell.col * BOARD_CELL}
@@ -261,6 +190,14 @@ export function DeckBuilderScreen() {
                       width: `${BOARD_CELL_INNER_RATIO * 100}%`,
                       height: `${BOARD_CELL_INNER_RATIO * 100}%`,
                     }}
+                    delayLongPress={420}
+                    onPress={() => {
+                      void playSe('tap');
+                      applyCellAction(row, col);
+                    }}
+                    onLongPress={
+                      placement ? () => openPieceDetail(placement.piece) : undefined
+                    }
                   >
                     {placement ? (
                       resolveDeckPieceImageSource(placement.piece) ? (
@@ -299,17 +236,24 @@ export function DeckBuilderScreen() {
       {/* 所持駒パレット */}
       <View className="mt-4 rounded-xl border border-[#8b0000]/30 bg-white p-3">
         <Text className="text-sm font-black text-[#2f1b14]">
-          所持駒（駒を選択して盤面マスをタップで配置・未選択ならマスの駒を削除）
+          所持駒（駒を選択して盤面マスをタップで配置・未選択ならマスの駒を削除）。K・実・異はマイデッキに入れません。
         </Text>
         <View className="mt-2 flex-row flex-wrap gap-2">
           {vm.ownedPieces.map((piece) => {
             const remaining = vm.getRemainingCount(piece);
             const outOfStock = remaining <= 0;
+            const bannedFromDeck = isPieceBannedFromMyDeck(piece);
             const cost = getDeckBuilderPieceCost(piece.char, piece.name);
+            const paletteKey =
+              typeof piece.pieceId === 'number'
+                ? `id-${piece.pieceId}`
+                : `c-${piece.char}-n-${(piece.name ?? '').slice(0, 24)}`;
             return (
               <Pressable
-                key={piece.char}
+                key={paletteKey}
+                disabled={bannedFromDeck}
                 onPress={() => {
+                  if (bannedFromDeck) return;
                   void playSe('tap');
                   vm.selectPieceForPlacement(piece);
                 }}
@@ -320,7 +264,7 @@ export function DeckBuilderScreen() {
                   vm.selectedPieceForPlacement?.pieceId === piece.pieceId
                     ? 'rounded-md border border-[#8b0000]/50 bg-[#fff7e6]'
                     : ''
-                } ${outOfStock ? 'opacity-45' : ''}`}
+                } ${outOfStock ? 'opacity-45' : ''} ${bannedFromDeck ? 'opacity-40' : ''}`}
               >
                 {resolveDeckPieceImageSource(piece) ? (
                   <Image
@@ -368,6 +312,48 @@ export function DeckBuilderScreen() {
           <Text className="text-center text-base font-black text-[#ffe6a5]">保存</Text>
         </Pressable>
       </View>
+
+      <Pressable
+        disabled={vm.isDeckCostOverLimit || applyBattleBusy}
+        onPress={() => {
+          if (vm.isDeckCostOverLimit) {
+            void playSe('cancel');
+            Alert.alert(
+              '反映できません',
+              `合計コストが上限（${vm.deckCostLimit}）を超えています。配置を調整してください。`,
+            );
+            return;
+          }
+          void playSe('confirm');
+          setApplyBattleBusy(true);
+          void vm
+            .applyAsBattleDeck()
+            .then((ok) => {
+              if (ok) {
+                Alert.alert('反映されました');
+              } else {
+                Alert.alert('反映に失敗しました', '通信または保存処理を確認してください。');
+              }
+            })
+            .finally(() => {
+              setApplyBattleBusy(false);
+            });
+        }}
+        className={`mt-2 h-14 items-center justify-center rounded-xl px-3 active:scale-95 ${
+          vm.isDeckCostOverLimit || applyBattleBusy ? 'bg-neutral-400' : 'bg-[#166534]'
+        }`}
+      >
+        {applyBattleBusy ? (
+          <Text className="text-center text-base font-black text-white">反映中…</Text>
+        ) : (
+          <View>
+            <Text className="text-center text-base font-black text-white">反映</Text>
+            <Text className="mt-0.5 text-center text-[11px] font-bold text-white/90">
+              現在の盤面をマイデッキとして対戦に使用
+            </Text>
+          </View>
+        )}
+      </Pressable>
 
       {/* 駒詳細モーダル */}
       <Modal

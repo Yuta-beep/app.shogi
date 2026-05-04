@@ -21,6 +21,7 @@ import {
 } from '@/ai/model';
 import { CHAR_TO_CODE } from '@/features/stage-shogi/domain/piece-conversion';
 import { createMove, resolvePieceDef } from '@/ai/engine/shared';
+import { effectivePieceForRulesAfterSpring } from '@/ai/engine/spring-ryu-awakening';
 import { createSkillRuntimeView, type SkillRuntimeView } from '@/ai/engine/skill-runtime';
 
 function isKingPiece(piece: AiBoardPiece): boolean {
@@ -499,7 +500,8 @@ function generateBoardPieceMoves(input: {
   occupancy: OccupancyMap;
   skillView: SkillRuntimeView;
 }): AiBattleMove[] {
-  let pieceDef = resolvePieceDef(input.piece, input.lookups);
+  const pieceForDef = effectivePieceForRulesAfterSpring(input.piece, input.pieces, input.lookups);
+  let pieceDef = resolvePieceDef(pieceForDef, input.lookups);
   if (isMachinePiece(input.piece)) {
     const donor = pickMachineDonorAlly(input.pieces, input.piece);
     if (donor) {

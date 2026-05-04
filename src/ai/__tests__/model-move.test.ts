@@ -9,7 +9,7 @@ describe('ai model move', () => {
   it('maps promoted codes to base piece codes', () => {
     expect(toBasePieceCode('to')).toBe('FU');
     expect(toBasePieceCode('ry')).toBe('HI');
-    expect(toBasePieceCode('ryu')).toBe('HI');
+    expect(toBasePieceCode('ryu')).toBe('RYU');
   });
 
   it('strips PIECE_SHOGI_ / PIECE_ prefixes for base piece code', () => {

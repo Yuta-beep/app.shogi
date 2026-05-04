@@ -1,5 +1,6 @@
 import { ImageSourcePropType } from 'react-native';
 
+import { mapPiecesForSpringDragonAwakeningDisplay } from '@/ai/engine/spring-ryu-awakening';
 import { assembleSkillDefinitionsV2ForSession } from '@/ai/engine/session-skill-definitions-v2';
 import { ApiClientError } from '@/infra/http/api-client';
 import { resolvePieceImageSource } from '@/lib/piece-image';
@@ -53,6 +54,7 @@ const LOCAL_PROMOTED_PIECE_IMAGE_BY_CODE: Partial<Record<string, number>> = {
   RYU: require('../../../../assets/pieces/promoted/ryuo.png'),
   KA: require('../../../../assets/pieces/promoted/ryuma.png'),
 };
+/** 飛車の成りの表示（龍・竜王・龍王 …）。単独の「竜」は小竜駒でここには含めない（成り駒と誤認しない）。 */
 const PROMOTED_DISPLAY_CHARS = new Set([
   'と',
   'と金',
@@ -64,7 +66,6 @@ const PROMOTED_DISPLAY_CHARS = new Set([
   '成銀',
   '馬',
   '龍',
-  '竜',
   '龍王',
   '竜王',
   '龍馬',
@@ -80,11 +81,11 @@ const PROMOTED_CHAR_TO_BASE_CODE: Record<string, string> = {
   成銀: 'GI',
   馬: 'KA',
   龍: 'HI',
-  竜: 'HI',
   龍王: 'HI',
   竜王: 'HI',
   龍馬: 'KA',
 };
+/** 成り駒コード → 不成の土台。`RYU` は小竜の canonical のため含めない（`toBasePieceCode('RYU')` が飛になるのを防ぐ）。飛の成りは `RY`（+R 系）と `HI`。 */
 const PROMOTED_PIECE_CODE_TO_BASE_CODE: Record<string, string> = {
   TO: 'FU',
   NY: 'KY',
@@ -92,9 +93,8 @@ const PROMOTED_PIECE_CODE_TO_BASE_CODE: Record<string, string> = {
   NG: 'GI',
   UM: 'KA',
   RY: 'HI',
-  RYU: 'HI',
 };
-const VISUAL_PROMOTED_PIECE_CODES = new Set(['TO', 'NY', 'NK', 'NG', 'UM', 'RY', 'RYU']);
+const VISUAL_PROMOTED_PIECE_CODES = new Set(['TO', 'NY', 'NK', 'NG', 'UM', 'RY']);
 const PERSISTENT_HAZARD_CHARS = new Set(['毒', '沼']);
 export const PERSISTENT_SYNC_GUARD_CHARS = new Set([
   '毒',
@@ -271,6 +271,7 @@ export function pieceCodeFromPlacement(
   if (catalogItem && isOpaquePieceInstanceId(catalogItem.pieceCode)) {
     const fromKanji = CHAR_TO_CODE[char];
     if (fromKanji) return toBasePieceCode(fromKanji) ?? fromKanji;
+    return catalogItem.pieceCode;
   }
   if (PROMOTED_CHAR_TO_BASE_CODE[char]) {
     return PROMOTED_CHAR_TO_BASE_CODE[char];
@@ -278,6 +279,7 @@ export function pieceCodeFromPlacement(
   const fromKanji = CHAR_TO_CODE[char];
   if (fromKanji) return toBasePieceCode(fromKanji) ?? fromKanji;
   if (pieceCode && !isOpaquePieceInstanceId(pieceCode)) return toBasePieceCode(pieceCode);
+  if (pieceCode && isOpaquePieceInstanceId(pieceCode)) return pieceCode;
   return null;
 }
 
@@ -1269,7 +1271,8 @@ export function localPromotedModuleFromBaseCodeCandidates(
     const mapped = (toBasePieceCode(u) ?? u).toUpperCase();
     const img = LOCAL_PROMOTED_PIECE_IMAGE_BY_CODE[mapped];
     if (img != null) return img;
-    if (mapped === 'RYU' || mapped === 'RY') {
+    // RYU は小竜の canonical のため竜王画像へは寄せない。飛成りは RY（+R 系）や HI。
+    if (mapped === 'RY') {
       const alt = LOCAL_PROMOTED_PIECE_IMAGE_BY_CODE.HI ?? LOCAL_PROMOTED_PIECE_IMAGE_BY_CODE.RYU;
       if (alt != null) return alt;
     }
@@ -1298,10 +1301,12 @@ export function resolvePromotedImageSource(piece: BoardPiece) {
   const codeFromChar = PROMOTED_CHAR_TO_BASE_CODE[piece.char] ?? null;
 
   let key = codeFromPiece ?? codeFromChar;
-  if (!key && (piece.char === '龍' || piece.char === '竜')) {
+  // 飛成りは「龍」「竜王」等。単独「竜」は小竜駒（pieceCode RYU）のため HI（竜王画像）に寄せない。
+  if (!key && (piece.char === '龍' || piece.char === '竜王' || piece.char === '龍王')) {
     key = 'HI';
   }
-  if (!key && (pc === 'HI' || pc === 'RYU')) {
+  // RYU は本ゲームでは小竜の canonical。飛の成りは HI / RY のみここで竜王画像へ寄せる。
+  if (!key && (pc === 'HI' || pc === 'RY')) {
     key = 'HI';
   }
   if (!key && piece.promoted && piece.char === '飛') {
@@ -1842,12 +1847,19 @@ export function syncCanonicalState(params: {
   );
   const reconciledHands = reconcileExtendedPieceHandsAgainstBoard(nextHands, withPromotionOverlay);
   const stabilizedPieces = enforcePersistentHazardCells(withPrisonChain, persistentHazards);
-  const nextPersistentHazards = stabilizedPieces.filter((p) =>
+  const pieceDefsByChar = Object.fromEntries(
+    pieceCatalog.filter((it) => it.char).map((item) => [item.char, item]),
+  ) as Partial<Record<string, PieceCatalogItem>>;
+  const withSpringDragonAwakening = mapPiecesForSpringDragonAwakeningDisplay(
+    stabilizedPieces,
+    pieceDefsByChar,
+  );
+  const nextPersistentHazards = withSpringDragonAwakening.filter((p) =>
     PERSISTENT_SYNC_GUARD_CHARS.has(p.char),
   );
 
   return {
-    pieces: stabilizedPieces,
+    pieces: withSpringDragonAwakening,
     persistentHazards: nextPersistentHazards,
     poisonHazardCells,
     rockObstacleCells,

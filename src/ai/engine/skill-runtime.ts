@@ -869,6 +869,52 @@ export function applyBoardHazardsOnLanding(input: {
   }
 }
 
+/** 「実」で異化した駒: 周囲 8 マスに敵の「実」がいなくなったら元の駒に戻す。 */
+function applyExperimentMutantReverts(pieces: AiBoardPiece[]): void {
+  for (const piece of pieces) {
+    const hasRevert =
+      piece.mutantRevertChar != null || piece.mutantRevertPieceCode != null;
+    if (!hasRevert) continue;
+
+    const isMutantSurface =
+      piece.char === '異' || toBasePieceCode(piece.pieceCode) === 'MUTANT';
+    if (!isMutantSurface) {
+      delete piece.mutantRevertPieceCode;
+      delete piece.mutantRevertChar;
+      delete piece.mutantRevertPromoted;
+      delete piece.mutantRevertImageSignedUrl;
+      continue;
+    }
+
+    const enemySide = sideOpposite(piece.side);
+    let adjacentEnemyExperiment = false;
+    for (const other of pieces) {
+      if (other.side !== enemySide) continue;
+      const isExperiment =
+        other.char === '実' || toBasePieceCode(other.pieceCode) === 'EXPERIMENT';
+      if (!isExperiment) continue;
+      const dr = Math.abs(other.row - piece.row);
+      const dc = Math.abs(other.col - piece.col);
+      if (dr <= 1 && dc <= 1 && (dr !== 0 || dc !== 0)) {
+        adjacentEnemyExperiment = true;
+        break;
+      }
+    }
+    if (adjacentEnemyExperiment) continue;
+
+    const rc = piece.mutantRevertPieceCode;
+    const rch = piece.mutantRevertChar;
+    piece.pieceCode = rc ?? null;
+    piece.char = rch ?? '?';
+    piece.promoted = Boolean(piece.mutantRevertPromoted);
+    piece.imageSignedUrl = piece.mutantRevertImageSignedUrl ?? null;
+    delete piece.mutantRevertPieceCode;
+    delete piece.mutantRevertChar;
+    delete piece.mutantRevertPromoted;
+    delete piece.mutantRevertImageSignedUrl;
+  }
+}
+
 export function applyMoveSkillEffects(input: {
   position: AiBattlePosition;
   move: AiBattleMove;
@@ -973,6 +1019,20 @@ export function applyMoveSkillEffects(input: {
     normalizeSkillPieceCode(input.move.pieceCode) === '牢' ||
     normalizeSkillPieceCode(input.move.pieceCode) === '柵' ||
     (movedPiece ? movedPiece.char === '牢' || movedPiece.char === '柵' : false);
+  const normalizedMovePieceCode = normalizeSkillPieceCode(input.move.pieceCode);
+  const isTatsuGodMover =
+    movedCode === 'TATSU' ||
+    normalizedMovePieceCode === 'TATSU' ||
+    (movedPiece ? movedPiece.char === '辰' : false) ||
+    (normalizedMovePieceCode.length > 0 && normalizedMovePieceCode.includes('707ED609'));
+  const isExperimentMover =
+    movedCode === 'EXPERIMENT' ||
+    normalizedMovePieceCode === 'EXPERIMENT' ||
+    (movedPiece ? movedPiece.char === '実' : false);
+  const isKbossMover =
+    movedCode === 'KBOSS' ||
+    normalizedMovePieceCode === 'KBOSS' ||
+    (movedPiece ? movedPiece.char === 'K' : false);
 
   // ai.shogi の explicit override 相当: 定義読み込み失敗時でも炎スキルは発動可能にする。
   if (
@@ -1292,6 +1352,38 @@ export function applyMoveSkillEffects(input: {
       }
     }
   }
+  // 実: 移動後、周囲 8 マスの敵駒を「異」に変える（王・玉除く・既に異は対象外）。
+  if (isExperimentMover && movedPiece) {
+    for (let dr = -1; dr <= 1; dr += 1) {
+      for (let dc = -1; dc <= 1; dc += 1) {
+        if (dr === 0 && dc === 0) continue;
+        const row = movedPiece.row + dr;
+        const col = movedPiece.col + dc;
+        if (row < 0 || row > 8 || col < 0 || col > 8) continue;
+        const target = input.pieces.find((piece) => piece.row === row && piece.col === col);
+        if (!target || target.side === input.actorSide) continue;
+        if (
+          target.char === '王' ||
+          target.char === '玉' ||
+          toBasePieceCode(target.pieceCode) === 'OU'
+        ) {
+          continue;
+        }
+        if (target.char === '異' || toBasePieceCode(target.pieceCode) === 'MUTANT') continue;
+        const revertPieceCode = target.pieceCode;
+        const revertChar = target.char;
+        const revertPromoted = Boolean(target.promoted);
+        const revertImage = target.imageSignedUrl ?? null;
+        target.pieceCode = 'MUTANT';
+        target.char = '異';
+        target.promoted = false;
+        target.mutantRevertPieceCode = revertPieceCode;
+        target.mutantRevertChar = revertChar;
+        target.mutantRevertPromoted = revertPromoted;
+        target.mutantRevertImageSignedUrl = revertImage;
+      }
+    }
+  }
   // 錫: 移動時10%で周囲8マスの敵駒（玉除く）を2ターン行動不能（stun）。
   if (isTinMover && input.move.fromRow != null && input.move.fromCol != null && input.movedPiece) {
     const procChance = 0.1;
@@ -1504,6 +1596,24 @@ export function applyMoveSkillEffects(input: {
       });
     }
   }
+  // 辰神（辰）: 移動時10%で周囲8マスの敵駒を1体消滅（玉除く）。
+  if (
+    isTatsuGodMover &&
+    input.move.fromRow != null &&
+    input.move.fromCol != null &&
+    input.movedPiece
+  ) {
+    const procChance = 0.1;
+    const roll = Math.random();
+    if (roll <= procChance) {
+      removeUpToRandomAdjacentEnemyPieces({
+        pieces: input.pieces,
+        center: input.movedPiece,
+        actorSide: input.actorSide,
+        maxRemove: 1,
+      });
+    }
+  }
   // 闇: 周囲8マスの敵を闇で覆う（移動不能・捕獲不可）。
   if (isDarkMover && input.move.fromRow != null && input.move.fromCol != null && input.movedPiece) {
     for (let dr = -1; dr <= 1; dr += 1) {
@@ -1669,6 +1779,27 @@ export function applyMoveSkillEffects(input: {
       });
     }
   }
+  // K 博士: 移動・打ち後 40% で周囲 8 マスの空き 1 マスに「実」を召喚（味方として出現）。
+  if (isKbossMover && movedPiece) {
+    const procChance = 0.4;
+    const roll = Math.random();
+    if (roll <= procChance) {
+      const template = input.pieces.find((p) => p.char === '実' && p.pieceCode) ?? null;
+      const summonCode =
+        (template?.pieceCode ? toBasePieceCode(template.pieceCode) : null) ?? 'EXPERIMENT';
+      const sum = summonRandomAdjacentEmptyPiece({
+        pieces: input.pieces,
+        center: movedPiece,
+        actorSide: input.actorSide,
+        summonCode,
+        summonChar: '実',
+      });
+      if (sum.summoned && sum.row != null && sum.col != null && template?.imageSignedUrl) {
+        const placed = input.pieces.find((p) => p.row === sum.row && p.col === sum.col);
+        if (placed) placed.imageSignedUrl = template.imageSignedUrl;
+      }
+    }
+  }
   // 鉱: 移動時20%で味方の歩1体を金/銀/銅のいずれかへ変化。
   if (isOreMover && input.move.fromRow != null && input.move.fromCol != null && movedPiece) {
     const procChance = 0.2;
@@ -1768,7 +1899,7 @@ export function applyMoveSkillEffects(input: {
     }
   }
   const skipGenericAdjacentSummon = isWoodMover || isLeafMover;
-  const skipGenericAdjacentRemove = isDemonMover;
+  const skipGenericAdjacentRemove = isDemonMover || isTatsuGodMover;
   if (defs.length === 0) {
     writeSkillState(input.position, state);
     return;
@@ -2608,5 +2739,6 @@ export function applyMoveSkillEffects(input: {
     }
   }
 
+  applyExperimentMutantReverts(input.pieces);
   writeSkillState(input.position, state);
 }

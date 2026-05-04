@@ -23,6 +23,12 @@ const RIDGE_SKILL_DESCRIPTION = '移動時20%の確率で周囲1マスの空き�
 const ORE_SKILL_DESCRIPTION =
   '移動時20%の確率で味方の「歩」駒1体を「金」「銀」「銅」のいずれかに変化させる。';
 const ROCK_SKILL_DESCRIPTION = '移動時に左右1マスへ2ターン持続する岩障害物を召喚する。';
+const EXPERIMENT_SKILL_DESCRIPTION =
+  '移動後、周囲8マスにいる敵駒（王・玉を除く）を「異」駒に変化させる。';
+const MUTANT_SKILL_DESCRIPTION =
+  '「実」で異化した駒は、周囲8マスに敵の「実」がいなくなると元の駒に戻る。生来の「異」はこの扱いに含まれない。';
+const KBOSS_SKILL_DESCRIPTION =
+  '移動・打ちの後40%の確率で周囲8マスの空きマス1つに味方の「実」駒を1体召喚する。2回取られないと消えず、1回目に取られたときは取られる直前の配置に戻り手番が交代する。';
 
 export type InspectingPieceState = {
   char: string;
@@ -59,6 +65,9 @@ export function resolveInspectSkillDescription(char: string, desc: string | unde
   if (char === '嶺') return RIDGE_SKILL_DESCRIPTION;
   if (char === '鉱') return ORE_SKILL_DESCRIPTION;
   if (char === '岩') return ROCK_SKILL_DESCRIPTION;
+  if (char === '実') return EXPERIMENT_SKILL_DESCRIPTION;
+  if (char === '異') return MUTANT_SKILL_DESCRIPTION;
+  if (char === 'K') return KBOSS_SKILL_DESCRIPTION;
   if (char === '山') return '嶺のスキルで召喚される補助駒。';
   const normalized = (desc ?? '').trim();
   return normalized.length > 0 ? normalized : '詳細は準備中です。';
@@ -69,6 +78,7 @@ export function resolveInspectMoveDescription(char: string, move: string | undef
   if (char === '月') {
     return 'TURN数を4で割った余りが0または1のときは全方位に1マス、余りが2または3のときは全方位に2マスまで移動できる。';
   }
+  if (char === '異') return '移動しない。';
   const normalized = (move ?? '').trim();
   return normalized.length > 0 ? normalized : '準備中';
 }

@@ -132,6 +132,19 @@ export function buildBoardState(
       char: piece.char,
       promoted: Boolean(piece.promoted),
       imageSignedUrl: piece.imageSignedUrl ?? null,
+      ...(typeof piece.kbossLivesRemaining === 'number' &&
+      Number.isFinite(piece.kbossLivesRemaining) &&
+      piece.kbossLivesRemaining < 2
+        ? { kbossLivesRemaining: piece.kbossLivesRemaining }
+        : {}),
+      ...(piece.mutantRevertChar != null || piece.mutantRevertPieceCode != null
+        ? {
+            mutantRevertPieceCode: piece.mutantRevertPieceCode ?? null,
+            mutantRevertChar: piece.mutantRevertChar,
+            mutantRevertPromoted: Boolean(piece.mutantRevertPromoted),
+            mutantRevertImageSignedUrl: piece.mutantRevertImageSignedUrl ?? null,
+          }
+        : {}),
     })),
     custom_move_vectors: Object.fromEntries(
       Object.entries(pieceDefsByCode)
