@@ -4,7 +4,14 @@ import {
   hasKing,
   normalizeHandsStateKeys,
 } from '@/features/stage-shogi/domain/game-rules';
-import type { AiBattleMove, AiBattlePosition, AiPieceDefinition, Side } from '@/ai/model';
+import type {
+  AiBattleMove,
+  AiBattlePosition,
+  AiBoardPiece,
+  AiPieceDefinition,
+  Side,
+} from '@/ai/model';
+import type { BattleMove } from '@/usecases/stage-battle/game-move-contract';
 import type {
   BattleCommittedMove,
   BattleGameStatus,
@@ -66,6 +73,256 @@ function kbossEffectiveLives(piece: { kbossLivesRemaining?: number }): number {
   return 2;
 }
 
+function normKanjiForEngineRules(ch: string): string {
+  try {
+    return ch.normalize('NFKC');
+  } catch {
+    return ch;
+  }
+}
+
+function isGunPieceForApply(piece: { pieceCode: string | null; char: string }): boolean {
+  if (normKanjiForEngineRules(piece.char) === '銃') return true;
+  const b = toBasePieceCode(piece.pieceCode);
+  return b === 'GUN';
+}
+
+function gunApplyDebugLog(payload: Record<string, unknown>): void {
+  if (typeof __DEV__ === 'undefined' || !__DEV__) return;
+  console.log('[銃-debug] apply-move', payload);
+}
+
+function isKatanaPieceForApply(piece: { pieceCode: string | null; char: string }): boolean {
+  if (normKanjiForEngineRules(piece.char) === '刀') return true;
+  const b = toBasePieceCode(piece.pieceCode);
+  return b === 'SWORD' || b === 'KATANA';
+}
+
+/** 着地点から見た「前方」1マスの dRow（game-rules の orient と整合）。 */
+function katanaForwardOneDeltaRow(actorSide: Side): number {
+  const orient = actorSide === 'player' ? 1 : -1;
+  return -1 * orient;
+}
+
+/** 前方ちょうど1マスへ進む着手（名刀の唯一の移動）か。打ちは対象外。 */
+function isKatanaForwardCaptureMove(
+  actorSide: Side,
+  move: Pick<
+    BattleMove,
+    'fromRow' | 'fromCol' | 'toRow' | 'toCol' | 'dropPieceCode'
+  >,
+): boolean {
+  if (move.dropPieceCode) return false;
+  if (move.fromRow == null || move.fromCol == null) return false;
+  const dForward = katanaForwardOneDeltaRow(actorSide);
+  return (
+    move.fromCol === move.toCol && move.toRow === move.fromRow + dForward
+  );
+}
+
+/** skill_definitions_v2 に依存せず、名刀「刀」は前方1マスで敵を取ったとき、着地点の左右1マスにいる敵駒をまとめて処理する（鎧は斬撃で取れない）。 */
+function applyIntrinsicKatanaSideCaptures(input: {
+  boardState: Record<string, unknown> | undefined;
+  nextPieces: AiBoardPiece[];
+  hands: HandsBag;
+  actorSide: Side;
+  didCapture: boolean;
+  movedPiece: AiBoardPiece | null;
+  move: Pick<
+    BattleMove,
+    'fromRow' | 'fromCol' | 'toRow' | 'toCol' | 'dropPieceCode'
+  >;
+}): {
+  nextPieces: AiBoardPiece[];
+  hands: HandsBag;
+  starReturnProcTriggered: boolean;
+  didSideSweep: boolean;
+} {
+  let { nextPieces, hands } = input;
+  let starReturnProcTriggered = false;
+  if (!input.movedPiece || !isKatanaPieceForApply(input.movedPiece)) {
+    return { nextPieces, hands, starReturnProcTriggered, didSideSweep: false };
+  }
+  if (!input.didCapture) {
+    return { nextPieces, hands, starReturnProcTriggered, didSideSweep: false };
+  }
+  if (!isKatanaForwardCaptureMove(input.actorSide, input.move)) {
+    return { nextPieces, hands, starReturnProcTriggered, didSideSweep: false };
+  }
+  let didSideSweep = false;
+  const r0 = input.movedPiece.row;
+  const c0 = input.movedPiece.col;
+  const extraTargets: [number, number][] = [
+    [r0, c0 - 1],
+    [r0, c0 + 1],
+  ];
+  for (const [row, col] of extraTargets) {
+    if (row < 0 || row > 8 || col < 0 || col > 8) continue;
+    const sweepTarget = findPieceAt(nextPieces, row, col);
+    if (!sweepTarget || sweepTarget.side === input.actorSide) continue;
+    if (isArmorPieceForApply(sweepTarget)) continue;
+    const res = applyHostileCaptureAtCell({
+      boardState: input.boardState,
+      nextPieces,
+      hands,
+      actorSide: input.actorSide,
+      row,
+      col,
+      fallbackCapturedCode: null,
+    });
+    nextPieces = res.nextPieces;
+    hands = res.hands;
+    if (res.didCapture) didSideSweep = true;
+    if (res.starReturnProcTriggered) starReturnProcTriggered = true;
+  }
+  return { nextPieces, hands, starReturnProcTriggered, didSideSweep };
+}
+
+function isArmorPieceForApply(piece: { pieceCode: string | null; char: string }): boolean {
+  const b = toBasePieceCode(piece.pieceCode);
+  return piece.char === '鎧' || b === 'ARMOR';
+}
+
+function isKingPieceForApply(piece: { pieceCode: string | null; char: string }): boolean {
+  const b = toBasePieceCode(piece.pieceCode);
+  return b === 'OU' || piece.char === '王' || piece.char === '玉';
+}
+
+/** 合法手生成の isGunFullyBlockingAllyOnMid と同じ。王・鎧・K博士以外の味方は貫通で除去する。 */
+function isGunFullyBlockingAllyOnMidForApply(mid: AiBoardPiece, actorSide: Side): boolean {
+  if (mid.side !== actorSide) return false;
+  return isKingPieceForApply(mid) || isArmorPieceForApply(mid) || isKbossPiece(mid);
+}
+
+/** 銃: 前方2マス直進、または斜め後ろ2マス。いずれも中間マスに敵がいる貫通取りの中点。 */
+function computeGunPenetrationMidpoint(
+  side: Side,
+  fromRow: number,
+  fromCol: number,
+  toRow: number,
+  toCol: number,
+): { midRow: number; midCol: number } | null {
+  const dr = toRow - fromRow;
+  const dc = toCol - fromCol;
+  // 前方ちょうど2マス（同一筋）
+  if (fromCol === toCol) {
+    const d = side === 'player' ? -1 : 1;
+    if (dr === 2 * d) {
+      return { midRow: fromRow + d, midCol: fromCol };
+    }
+  }
+  // 斜め後ろちょうど2マス（プレイヤーは下方向の斜め、敵は上方向の斜め）
+  if (Math.abs(dr) === 2 && Math.abs(dc) === 2 && Math.abs(dr) === Math.abs(dc)) {
+    const sr = dr / 2;
+    const sc = dc / 2;
+    if (side === 'player' && sr === 1 && Math.abs(sc) === 1) {
+      return { midRow: fromRow + sr, midCol: fromCol + sc };
+    }
+    if (side === 'enemy' && sr === -1 && Math.abs(sc) === 1) {
+      return { midRow: fromRow + sr, midCol: fromCol + sc };
+    }
+  }
+  return null;
+}
+
+type HandsBag = ReturnType<typeof normalizeHandsStateKeys>;
+
+function applyHostileCaptureAtCell(input: {
+  boardState: Record<string, unknown> | undefined;
+  nextPieces: AiBoardPiece[];
+  hands: HandsBag;
+  actorSide: Side;
+  row: number;
+  col: number;
+  fallbackCapturedCode: string | null;
+}): {
+  nextPieces: AiBoardPiece[];
+  hands: HandsBag;
+  didCapture: boolean;
+  starReturnProcTriggered: boolean;
+  rebuffKboss: boolean;
+} {
+  let { nextPieces, hands } = input;
+  let starReturnProcTriggered = false;
+  let rebuffKboss = false;
+  const captured = findPieceAt(nextPieces, input.row, input.col);
+  if (!captured || captured.side === input.actorSide) {
+    return { nextPieces, hands, didCapture: false, starReturnProcTriggered, rebuffKboss };
+  }
+  if (isArmorPieceForApply(captured)) {
+    throw new Error('cannot capture armor');
+  }
+
+  let phantomEvaded = false;
+  let adjacentEmpty: Array<{ row: number; col: number }> = [];
+  const evadeChance = resolveEvadeCaptureProcChanceForPiece(input.boardState, captured);
+  adjacentEmpty = collectAdjacentEmptyCells(nextPieces, input.row, input.col);
+  if (evadeChance != null && adjacentEmpty.length > 0) {
+    const roll = Math.random();
+    phantomEvaded = roll <= evadeChance;
+  }
+
+  if (phantomEvaded) {
+    const pick = adjacentEmpty[Math.floor(Math.random() * adjacentEmpty.length)]!;
+    const phIdx = nextPieces.findIndex(
+      (p) => p.row === input.row && p.col === input.col && p.side === captured.side,
+    );
+    if (phIdx >= 0) {
+      const ph = nextPieces[phIdx]!;
+      nextPieces = [...nextPieces];
+      nextPieces[phIdx] = { ...ph, row: pick.row, col: pick.col };
+    }
+    return { nextPieces, hands, didCapture: false, starReturnProcTriggered, rebuffKboss };
+  }
+
+  if (isKbossPiece(captured) && kbossEffectiveLives(captured) > 1) {
+    rebuffKboss = true;
+    const kIdx = nextPieces.findIndex(
+      (p) => p.row === input.row && p.col === input.col && p.side === captured.side,
+    );
+    if (kIdx >= 0) {
+      const cur = nextPieces[kIdx]!;
+      nextPieces = [...nextPieces];
+      nextPieces[kIdx] = {
+        ...cur,
+        kbossLivesRemaining: kbossEffectiveLives(cur) - 1,
+      };
+    }
+    return { nextPieces, hands, didCapture: false, starReturnProcTriggered, rebuffKboss };
+  }
+
+  nextPieces = nextPieces.filter((piece) => !(piece.row === input.row && piece.col === input.col));
+  const isSpiritCaptured = isSpiritPiece(captured);
+  const capturedBaseCode = toBasePieceCode(captured.pieceCode);
+  const isStarCaptured = capturedBaseCode === 'HOS' || captured.char === '星';
+  if (isSpiritCaptured) {
+    // 手駒化しない
+  } else if (isVanishOnCapturePiece(captured)) {
+    // K・実・異
+  } else if (isStarCaptured) {
+    const procChance = 0.4;
+    const roll = Math.random();
+    if (roll <= procChance) {
+      starReturnProcTriggered = true;
+      hands = addHandPiece(hands, captured.side, 'HOS', 1);
+    } else {
+      const capturedCode =
+        toBasePieceCode(capturedToHandPieceCode(captured)) ?? input.fallbackCapturedCode;
+      if (capturedCode) {
+        hands = addHandPiece(hands, input.actorSide, capturedCode, 1);
+      }
+    }
+  } else {
+    const capturedCode =
+      toBasePieceCode(capturedToHandPieceCode(captured)) ?? input.fallbackCapturedCode;
+    if (capturedCode) {
+      hands = addHandPiece(hands, input.actorSide, capturedCode, 1);
+    }
+  }
+
+  return { nextPieces, hands, didCapture: true, starReturnProcTriggered, rebuffKboss };
+}
+
 function collectAdjacentEmptyCells(
   pieces: Array<{ row: number; col: number }>,
   row: number,
@@ -110,6 +367,8 @@ export function applyMove(input: {
   let movedPieceAfterApply: (typeof nextPieces)[number] | null = null;
   let didCapture = false;
   let starReturnProcTriggered = false;
+  /** 刀の隣取り・銃の貫通取りなど、エンジン内在スキル（skill_definitions_v2 の 52/54 非依存）。 */
+  let intrinsicCombatSkillTriggered = false;
 
   if (move.notation === 'time_skill_only' || move.notation === 'house_skill_only') {
     // no-op on board（スキルのみ）
@@ -144,10 +403,82 @@ export function applyMove(input: {
     const movingCode = toBasePieceCode(movingPiece?.pieceCode);
     const isCloudMover = movingCode === 'CLOUD' || movingPiece?.char === '雲';
 
+    // 銃: 前方ちょうど2マスへ進む手では、まず1マス目の敵を取ってから2マス目へ入る（両方敵なら同一手で連続取り）。斜め後ろ2マス貫通も同様。
+    const gunPen =
+      isGunPieceForApply(movingPiece) &&
+      move.fromRow != null &&
+      move.fromCol != null
+        ? computeGunPenetrationMidpoint(actorSide, move.fromRow, move.fromCol, move.toRow, move.toCol)
+        : null;
+    const midForGun =
+      gunPen != null ? findPieceAt(nextPieces, gunPen.midRow, gunPen.midCol) : null;
+
+    if (isGunPieceForApply(movingPiece)) {
+      gunApplyDebugLog({
+        phase: 'pre-capture',
+        from: [move.fromRow, move.fromCol],
+        to: [move.toRow, move.toCol],
+        actorSide,
+        gunPen,
+        mid: midForGun
+          ? {
+              row: midForGun.row,
+              col: midForGun.col,
+              side: midForGun.side,
+              char: midForGun.char,
+            }
+          : null,
+      });
+    }
+
+    if (gunPen && midForGun) {
+      if (midForGun.side === actorSide) {
+        if (isGunFullyBlockingAllyOnMidForApply(midForGun, actorSide)) {
+          throw new Error('gun path blocked by ally');
+        }
+        nextPieces = nextPieces.filter(
+          (p) => !(p.row === gunPen.midRow && p.col === gunPen.midCol),
+        );
+        didCapture = true;
+      } else {
+        if (isArmorPieceForApply(movingPiece)) {
+          throw new Error('armor cannot capture');
+        }
+        if (isArmorPieceForApply(midForGun)) {
+          throw new Error('cannot capture armor piece');
+        }
+        const midRes = applyHostileCaptureAtCell({
+          boardState: current.boardState as Record<string, unknown> | undefined,
+          nextPieces,
+          hands,
+          actorSide,
+          row: gunPen.midRow,
+          col: gunPen.midCol,
+          fallbackCapturedCode: null,
+        });
+        if (midRes.rebuffKboss) {
+          throw new Error('invalid gun move: kboss midpoint');
+        }
+        nextPieces = midRes.nextPieces;
+        hands = midRes.hands;
+        if (midRes.didCapture) {
+          didCapture = true;
+          intrinsicCombatSkillTriggered = true;
+        }
+        if (midRes.starReturnProcTriggered) starReturnProcTriggered = true;
+      }
+    }
+
     const captured = findPieceAt(nextPieces, move.toRow, move.toCol);
     let rebuffKboss = false;
     if (captured) {
       const captureOwnPiece = captured.side === actorSide;
+      if (!captureOwnPiece && !isCloudMover && isArmorPieceForApply(captured)) {
+        throw new Error('cannot capture armor');
+      }
+      if (!captureOwnPiece && isArmorPieceForApply(movingPiece)) {
+        throw new Error('armor cannot capture enemy');
+      }
       if (captureOwnPiece && !isCloudMover) {
         throw new Error('friendly capture is only allowed for CLOUD');
       }
@@ -261,12 +592,15 @@ export function applyMove(input: {
       const moving = nextPieces[movingIndexAfterCapture];
       const nextPromoted = move.promote || moving.promoted === true;
       const resolvedChar = pieceChar(moving.pieceCode, nextPromoted);
+      // pieceCode が剣と共有（SWORD 等）のとき pieceChar が「剣」になり、刀の intrinsic が死ぬのを防ぐ。銃も同様。
       const nextChar =
-        resolvedChar === '?' ||
-        (toBasePieceCode(moving.pieceCode) != null &&
-          resolvedChar === toBasePieceCode(moving.pieceCode))
+        isKatanaPieceForApply(moving) || isGunPieceForApply(moving)
           ? moving.char
-          : resolvedChar;
+          : resolvedChar === '?' ||
+              (toBasePieceCode(moving.pieceCode) != null &&
+                resolvedChar === toBasePieceCode(moving.pieceCode))
+            ? moving.char
+            : resolvedChar;
       nextPieces[movingIndexAfterCapture] = {
         ...moving,
         row: move.toRow,
@@ -277,6 +611,25 @@ export function applyMove(input: {
       movedPieceAfterApply = nextPieces[movingIndexAfterCapture] ?? null;
     } else {
       movedPieceAfterApply = nextPieces[movingIndexAfterCapture] ?? null;
+    }
+
+    // 銃の貫通手で敵を取った（中点のみ／先のみ／両方）ときスキル発動扱いにする。
+    if (gunPen != null && isGunPieceForApply(movingPiece) && didCapture) {
+      intrinsicCombatSkillTriggered = true;
+    }
+
+    if (isGunPieceForApply(movingPiece)) {
+      gunApplyDebugLog({
+        phase: 'post-board-update',
+        didCapture,
+        rebuffKboss,
+        hadGunPenetration: gunPen != null,
+        intrinsicCombatSkillFlag:
+          gunPen != null && isGunPieceForApply(movingPiece) && didCapture,
+        landing: movedPieceAfterApply
+          ? { row: movedPieceAfterApply.row, col: movedPieceAfterApply.col }
+          : null,
+      });
     }
   }
 
@@ -311,6 +664,35 @@ export function applyMove(input: {
     pieces: nextPieces,
     didCapture,
   });
+  hands = nextPosition.hands;
+
+  let movedPieceForIntrinsic = movedPieceAfterApply;
+  if (move.fromRow != null && move.fromCol != null && !move.dropPieceCode) {
+    const refreshed = nextPieces.find(
+      (p) => p.side === actorSide && p.row === move.toRow && p.col === move.toCol,
+    );
+    if (refreshed) movedPieceForIntrinsic = refreshed;
+  }
+
+  const intrinsicKatana = applyIntrinsicKatanaSideCaptures({
+    boardState: current.boardState as Record<string, unknown> | undefined,
+    nextPieces,
+    hands,
+    actorSide,
+    didCapture,
+    movedPiece: movedPieceForIntrinsic,
+    move,
+  });
+  nextPieces = intrinsicKatana.nextPieces;
+  hands = intrinsicKatana.hands;
+  if (intrinsicKatana.starReturnProcTriggered) starReturnProcTriggered = true;
+  if (intrinsicKatana.didSideSweep) {
+    intrinsicCombatSkillTriggered = true;
+  }
+
+  // 銃の「前方2マスへ進むと1マス目・2マス目の敵を同時に取る」は本関数前半の gun penetration（中点＋着地）で処理する。
+  nextPosition.hands = hands;
+
   // 毒マスへ侵入した駒は消滅。
   if (move.notation !== 'time_skill_only' && move.notation !== 'house_skill_only') {
     applyBoardHazardsOnLanding({
@@ -362,6 +744,7 @@ export function applyMove(input: {
     actorSide,
     move: { ...move, notation: notationForMove(move) },
     skillTriggered:
+      intrinsicCombatSkillTriggered ||
       starReturnProcTriggered ||
       move.notation === 'time_skill' ||
       move.notation === 'time_skill_only' ||

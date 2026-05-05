@@ -506,6 +506,7 @@ export const CHAR_TO_CODE: Readonly<Record<string, string>> = {
   実: 'EXPERIMENT',
   異: 'MUTANT',
   K: 'KBOSS',
+  /** 刀／剣／銃／鎧／盾は `CHAR_TO_CODE` に載せない（`piecesFromBoardState` が canonical に寄せて `resolvePieceDef` が壊れる）。手駒は `game-rules` の CAPTURE_CHAR_TO_HAND_CODE。 */
 };
 
 // ── toSfenBoardPure ───────────────────────────────────────────────────────────

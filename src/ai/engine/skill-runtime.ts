@@ -1,4 +1,5 @@
 import type { Side } from '@/features/stage-shogi/domain/game-rules';
+import { capturedToHandPieceCode } from '@/features/stage-shogi/domain/game-rules';
 import { CHAR_TO_CODE } from '@/features/stage-shogi/domain/piece-conversion';
 import type { AiBattleMove, AiBattlePosition, AiBoardPiece } from '@/ai/model';
 import { piecesFromBoardState, toBasePieceCode } from '@/ai/model';
@@ -1918,10 +1919,14 @@ export function applyMoveSkillEffects(input: {
     if (!def) continue;
     const trigger = asRecord(def.trigger);
     const triggerType = asString(trigger?.type) ?? '';
+    const skillIdNum = Number(def.skillId ?? def.skill_id);
+    const allowGunContinuousRule =
+      triggerType === 'continuous_rule' && Number.isFinite(skillIdNum) && skillIdNum === 54;
     if (
       triggerType !== 'after_move' &&
       triggerType !== 'continuous_aura' &&
-      !(triggerType === 'after_capture' && input.didCapture)
+      !(triggerType === 'after_capture' && input.didCapture) &&
+      !allowGunContinuousRule
     ) {
       continue;
     }
@@ -2375,6 +2380,74 @@ export function applyMoveSkillEffects(input: {
 
       if (effectType === 'multi_capture' && selector === 'adjacent_enemy') {
         if (!input.movedPiece) continue;
+        const captureMode = asString(params.captureMode) ?? '';
+        let katanaChar = input.movedPiece.char;
+        try {
+          katanaChar = katanaChar.normalize('NFKC');
+        } catch {
+          /* ignore */
+        }
+        if (
+          (captureMode === 'adjacent_after_capture' ||
+            captureMode === 'capture_square_left_right') &&
+          katanaChar === '刀'
+        ) {
+          // 名刀「刀」の左右斬撃は apply-move の intrinsic のみ（前方1マスで取ったとき限定）で処理する。
+          continue;
+        }
+        if (
+          captureMode === 'adjacent_after_capture' ||
+          captureMode === 'capture_square_left_right'
+        ) {
+          for (const dc of [-1, 1] as const) {
+            const row = input.movedPiece.row;
+            const col = input.movedPiece.col + dc;
+            if (col < 0 || col > 8) continue;
+            const idx = input.pieces.findIndex((p) => p.row === row && p.col === col);
+            if (idx < 0) continue;
+            const target = input.pieces[idx]!;
+            if (target.side === input.actorSide) continue;
+            if (
+              target.char === '王' ||
+              target.char === '玉' ||
+              toBasePieceCode(target.pieceCode) === 'OU'
+            ) {
+              continue;
+            }
+            const armor =
+              target.char === '鎧' || toBasePieceCode(target.pieceCode) === 'ARMOR';
+            if (armor) continue;
+            const spirit =
+              target.char === '霊' ||
+              toBasePieceCode(target.pieceCode) === 'SPIRIT' ||
+              (target.pieceCode ?? '').toUpperCase().includes('9D7397390E77');
+            const vanish =
+              target.char === 'K' ||
+              target.char === '実' ||
+              target.char === '異' ||
+              toBasePieceCode(target.pieceCode) === 'KBOSS' ||
+              toBasePieceCode(target.pieceCode) === 'EXPERIMENT' ||
+              toBasePieceCode(target.pieceCode) === 'MUTANT';
+            const star = toBasePieceCode(target.pieceCode) === 'HOS' || target.char === '星';
+            input.pieces.splice(idx, 1);
+            if (spirit || vanish) {
+              continue;
+            }
+            if (star) {
+              const roll = Math.random();
+              if (roll <= 0.4) {
+                incrementHand(input.position, target.side, 'HOS', 1);
+              } else {
+                const code = toBasePieceCode(capturedToHandPieceCode(target));
+                if (code) incrementHand(input.position, input.actorSide, code, 1);
+              }
+              continue;
+            }
+            const code = toBasePieceCode(capturedToHandPieceCode(target));
+            if (code) incrementHand(input.position, input.actorSide, code, 1);
+          }
+          continue;
+        }
         for (let dr = -1; dr <= 1; dr += 1) {
           for (let dc = -1; dc <= 1; dc += 1) {
             if (dr === 0 && dc === 0) continue;
@@ -2400,22 +2473,62 @@ export function applyMoveSkillEffects(input: {
 
       if (effectType === 'multi_capture' && selector === 'front_enemy') {
         if (!input.movedPiece) continue;
-        const forward = input.actorSide === 'player' ? -1 : 1;
-        const row = input.movedPiece.row + forward;
-        const col = input.movedPiece.col;
-        if (row < 0 || row > 8) continue;
-        const idx = input.pieces.findIndex((p) => p.row === row && p.col === col);
-        if (idx < 0) continue;
-        const target = input.pieces[idx]!;
-        if (target.side === input.actorSide) continue;
+        const captureMode = asString(params.captureMode) ?? '';
+        // 銃の前方2マス貫通（1マス目＋2マス目の同時取り）は apply-move の gun penetration で済ませる。
+        // ここで forward_chain を走らせると「移動後の位置」基準になり誤取りになる。
         if (
-          target.char === '王' ||
-          target.char === '玉' ||
-          toBasePieceCode(target.pieceCode) === 'OU'
+          captureMode === 'forward_chain' &&
+          (input.movedPiece.char === '銃' || toBasePieceCode(input.movedPiece.pieceCode) === 'GUN')
         ) {
           continue;
         }
-        input.pieces.splice(idx, 1);
+        const forward = input.actorSide === 'player' ? -1 : 1;
+        const steps = captureMode === 'forward_chain' ? [1, 2] : [1];
+        for (const step of steps) {
+          const row = input.movedPiece.row + forward * step;
+          const col = input.movedPiece.col;
+          if (row < 0 || row > 8 || col < 0 || col > 8) continue;
+          const idx = input.pieces.findIndex((p) => p.row === row && p.col === col);
+          if (idx < 0) continue;
+          const target = input.pieces[idx]!;
+          if (target.side === input.actorSide) continue;
+          if (
+            target.char === '王' ||
+            target.char === '玉' ||
+            toBasePieceCode(target.pieceCode) === 'OU'
+          ) {
+            continue;
+          }
+          const armor =
+            target.char === '鎧' || toBasePieceCode(target.pieceCode) === 'ARMOR';
+          if (armor) continue;
+          const spirit =
+            target.char === '霊' ||
+            toBasePieceCode(target.pieceCode) === 'SPIRIT' ||
+            (target.pieceCode ?? '').toUpperCase().includes('9D7397390E77');
+          const vanish =
+            target.char === 'K' ||
+            target.char === '実' ||
+            target.char === '異' ||
+            toBasePieceCode(target.pieceCode) === 'KBOSS' ||
+            toBasePieceCode(target.pieceCode) === 'EXPERIMENT' ||
+            toBasePieceCode(target.pieceCode) === 'MUTANT';
+          const star = toBasePieceCode(target.pieceCode) === 'HOS' || target.char === '星';
+          input.pieces.splice(idx, 1);
+          if (spirit || vanish) continue;
+          if (star) {
+            const roll = Math.random();
+            if (roll <= 0.4) {
+              incrementHand(input.position, target.side, 'HOS', 1);
+            } else {
+              const code = toBasePieceCode(capturedToHandPieceCode(target));
+              if (code) incrementHand(input.position, input.actorSide, code, 1);
+            }
+            continue;
+          }
+          const code = toBasePieceCode(capturedToHandPieceCode(target));
+          if (code) incrementHand(input.position, input.actorSide, code, 1);
+        }
         continue;
       }
 

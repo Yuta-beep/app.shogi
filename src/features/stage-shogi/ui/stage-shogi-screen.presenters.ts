@@ -48,7 +48,15 @@ export function normalizeSkillName(skill: string | undefined): string | null {
   return normalized;
 }
 
+const KATANA_SKILL_INSPECT =
+  '前方ちょうど1マスに進んで敵駒を取ったとき、着地点の左右1マスにいる敵駒も同時に取ることができる。';
+
+const GUN_SKILL_INSPECT =
+  '前方ちょうど2マス、または斜め後ろ2マスへの移動で、進路上の敵駒を貫いて取る（中間の味方はルールに従い除去される場合がある）。';
+
 export function resolveInspectSkillDescription(char: string, desc: string | undefined): string {
+  if (char === '刀') return KATANA_SKILL_INSPECT;
+  if (char === '銃') return GUN_SKILL_INSPECT;
   if (char === '葉') return LEAF_SKILL_DESCRIPTION;
   if (char === '電') return ELECTRIC_SKILL_DESCRIPTION;
   if (char === '氷') return ICE_SKILL_DESCRIPTION;
@@ -74,6 +82,8 @@ export function resolveInspectSkillDescription(char: string, desc: string | unde
 }
 
 export function resolveInspectMoveDescription(char: string, move: string | undefined): string {
+  if (char === '刀') return '前方1マス。';
+  if (char === '銃') return '前1～2マス、または斜め後ろ2マス。';
   if (char === '闇') return '全方向に1マス';
   if (char === '月') {
     return 'TURN数を4で割った余りが0または1のときは全方位に1マス、余りが2または3のときは全方位に2マスまで移動できる。';

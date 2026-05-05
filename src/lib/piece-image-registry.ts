@@ -767,6 +767,22 @@ if (yamaSource != null && !pieceImageByChar.has('山') && !pieceImageByCode.has(
   pieceImageByCode.set('YAMA', yamaSource);
 }
 
+// 刀/銃/鎧/盾は一部経路で canonical code（SWORD/GUN/ARMOR/SHIELD）になるため、
+// CHAR_TO_CODE 非登録でも画像解決できるようコード別名を明示する。
+const aliasCodeToChar: Readonly<Record<string, string>> = {
+  SWORD: '刀',
+  KATANA: '刀',
+  GUN: '銃',
+  ARMOR: '鎧',
+  SHIELD: '盾',
+};
+for (const [code, char] of Object.entries(aliasCodeToChar)) {
+  const source = pieceImageByChar.get(char);
+  if (source != null && !pieceImageByCode.has(code)) {
+    pieceImageByCode.set(code, source);
+  }
+}
+
 export function getLocalPieceImageSource(input: {
   pieceId?: number;
   pieceCode?: string | null;

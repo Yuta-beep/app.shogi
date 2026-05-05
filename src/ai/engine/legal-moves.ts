@@ -3,6 +3,7 @@ import {
   canPromoteByMove,
   getLegalTargetsFromVectors,
   mustPromoteByMove,
+  type Side,
 } from '@/features/stage-shogi/domain/game-rules';
 import type {
   AiBattleMove,
@@ -23,6 +24,18 @@ import { CHAR_TO_CODE } from '@/features/stage-shogi/domain/piece-conversion';
 import { createMove, resolvePieceDef } from '@/ai/engine/shared';
 import { effectivePieceForRulesAfterSpring } from '@/ai/engine/spring-ryu-awakening';
 import { createSkillRuntimeView, type SkillRuntimeView } from '@/ai/engine/skill-runtime';
+
+/** カタログ欠損時でも銃・刀の合法手を生成するためのプレースホルダー */
+const MINIMAL_SPECIAL_PIECE_DEF: AiPieceDefinition = {
+  char: '',
+  name: '',
+  unlock: '',
+  desc: '',
+  skill: '',
+  move: '',
+  moveVectors: [],
+  isRepeatable: false,
+};
 
 function isKingPiece(piece: AiBoardPiece): boolean {
   const code = toBasePieceCode(piece.pieceCode);
@@ -53,6 +66,286 @@ function isMirrorPiece(piece: AiBoardPiece): boolean {
 function isMachinePiece(piece: AiBoardPiece): boolean {
   const code = toBasePieceCode(piece.pieceCode);
   return code === 'MACHINE' || piece.char === '機';
+}
+
+function normKanjiForEngineRules(ch: string): string {
+  try {
+    return ch.normalize('NFKC');
+  } catch {
+    return ch;
+  }
+}
+
+function isOpaquePieceInstanceId(value: string | null | undefined): boolean {
+  if (!value) return false;
+  return /^piece_[a-z0-9]+$/i.test(value.trim());
+}
+
+/** 「刀」名刀のみ。聖剣「剣」は従来の sword パターンのまま。 */
+function isKatanaPiece(piece: AiBoardPiece): boolean {
+  if (normKanjiForEngineRules(piece.char) === '刀') return true;
+  const code = toBasePieceCode(piece.pieceCode);
+  return code === 'SWORD' || code === 'KATANA';
+}
+
+function isGunPiece(piece: AiBoardPiece): boolean {
+  if (normKanjiForEngineRules(piece.char) === '銃') return true;
+  const code = toBasePieceCode(piece.pieceCode);
+  if (code === 'GUN') return true;
+  return false;
+}
+
+function gunPieceDebugLog(label: string, payload: Record<string, unknown>): void {
+  if (typeof __DEV__ === 'undefined' || !__DEV__) return;
+  console.log(`[銃-debug] ${label}`, payload);
+}
+
+/** `CHAR_TO_CODE` に無い幻駒は、カタログの漢字→pieceCode で着手の pieceCode を決める（刀が歩になる不具合の防止）。 */
+function resolvePieceCodeForLegalMove(piece: AiBoardPiece, lookups: AiPieceLookups): string {
+  const direct = toBasePieceCode(piece.pieceCode);
+  if (direct && !isOpaquePieceInstanceId(direct)) return direct;
+  const ch = normKanjiForEngineRules(piece.char);
+  const def = lookups.pieceDefsByChar[piece.char] ?? lookups.pieceDefsByChar[ch];
+  const fromCatalog = toBasePieceCode(def?.pieceCode ?? null);
+  if (fromCatalog && !isOpaquePieceInstanceId(fromCatalog)) return fromCatalog;
+  if (ch === '刀') return 'SWORD';
+  if (ch === '銃') return 'GUN';
+  const legacy = toBasePieceCode(CHAR_TO_CODE[piece.char]);
+  if (legacy) return legacy;
+  return 'FU';
+}
+
+function isArmorPiece(piece: AiBoardPiece): boolean {
+  const code = toBasePieceCode(piece.pieceCode);
+  return piece.char === '鎧' || code === 'ARMOR';
+}
+
+/** 銃: 前方のマス（1マス目）の行。player は盤上で row が小さい方が前。 */
+function gunForwardRowDelta(side: 'player' | 'enemy'): number {
+  return side === 'player' ? -1 : 1;
+}
+
+function kbossEffectiveLivesForGunFilter(piece: AiBoardPiece): number {
+  const v = piece.kbossLivesRemaining;
+  if (v === 1 || v === 2) return v;
+  return 2;
+}
+
+function isKbossPieceForGun(piece: AiBoardPiece): boolean {
+  if (piece.char === 'K') return true;
+  return toBasePieceCode(piece.pieceCode) === 'KBOSS';
+}
+
+/** 中間マスの味方が銃の直進・貫通を完全に塞ぐか（王・鎧・K博士）。それ以外の味方は盤データの side 重複でも貫通可能。 */
+function isGunFullyBlockingAllyOnMid(p: AiBoardPiece, gun: AiBoardPiece): boolean {
+  if (p.side !== gun.side) return false;
+  return isKingPiece(p) || isArmorPiece(p) || isKbossPieceForGun(p);
+}
+
+/** 銃の「前方ちょうど2マス」への直線移動（貫通取り用）。同一列で2マス先のみ。 */
+function gunForwardTwoLandingCoords(
+  piece: AiBoardPiece,
+  fromRow: number,
+  fromCol: number,
+  toRow: number,
+  toCol: number,
+): { midRow: number; midCol: number } | null {
+  if (!isGunPiece(piece)) return null;
+  if (fromCol !== toCol) return null;
+  const d = gunForwardRowDelta(piece.side);
+  if (toRow - fromRow !== 2 * d) return null;
+  return { midRow: fromRow + d, midCol: fromCol };
+}
+
+function generateGunForwardTargets(occupancy: OccupancyMap, piece: AiBoardPiece): { row: number; col: number }[] {
+  const out: { row: number; col: number }[] = [];
+  const seen = new Set<string>();
+  const d = gunForwardRowDelta(piece.side);
+  const fromRow = piece.row;
+  const fromCol = piece.col;
+  const r1 = fromRow + d;
+  const c1 = fromCol;
+  const r2 = fromRow + 2 * d;
+  const c2 = fromCol;
+  const r1Valid = r1 >= 0 && r1 <= 8;
+  const r2Valid = r2 >= 0 && r2 <= 8;
+  let p1: AiBoardPiece | null = null;
+  let p2: AiBoardPiece | null = null;
+  const snap = (p: AiBoardPiece | null) =>
+    p
+      ? {
+          side: p.side,
+          char: p.char,
+          code: p.pieceCode,
+          rock: isRockObstacleVirtualPiece(p),
+        }
+      : null;
+  const logBlock = (reason: string, extra: Record<string, unknown> = {}) => {
+    if (!isGunPiece(piece)) return;
+    gunPieceDebugLog(`前方2マス: ${reason}`, {
+      from: [fromRow, fromCol],
+      side: piece.side,
+      dRow: d,
+      r1,
+      r2,
+      c: fromCol,
+      p1: snap(p1),
+      p2: snap(p2),
+      ...extra,
+    });
+  };
+
+  if (!r1Valid) {
+    logBlock('r1 が盤外', { p1: null, p2: null });
+    return out;
+  }
+
+  p1 = findPieceAtFast(occupancy, r1, c1);
+  p2 = r2Valid ? findPieceAtFast(occupancy, r2, c2) : null;
+
+  if (p1 && isRockObstacleVirtualPiece(p1)) {
+    logBlock('1マス目が岩');
+    return out;
+  }
+  if (r2Valid && p2 && isRockObstacleVirtualPiece(p2)) {
+    logBlock('2マス目が岩');
+    return out;
+  }
+
+  if (p1 && isGunFullyBlockingAllyOnMid(p1, piece)) {
+    logBlock('1マス目が味方（王・鎧・K でブロック）');
+    return out;
+  }
+  if (r2Valid && p2 && p2.side === piece.side) {
+    logBlock('2マス目が味方');
+    return out;
+  }
+  if (p1 && (p1.char === '王' || p1.char === '玉' || toBasePieceCode(p1.pieceCode) === 'OU')) {
+    logBlock('1マス目が王/玉');
+    return out;
+  }
+  if (r2Valid && p2 && (p2.char === '王' || p2.char === '玉' || toBasePieceCode(p2.pieceCode) === 'OU')) {
+    logBlock('2マス目が王/玉');
+    return out;
+  }
+  if (p1 && isArmorPiece(p1)) {
+    logBlock('1マス目が鎧');
+    return out;
+  }
+  if (r2Valid && p2 && isArmorPiece(p2)) {
+    logBlock('2マス目が鎧');
+    return out;
+  }
+  if (p1 && isKbossPieceForGun(p1) && kbossEffectiveLivesForGunFilter(p1) > 1) {
+    logBlock('1マス目がK博士耐久2');
+    return out;
+  }
+
+  const push = (row: number, col: number) => {
+    const key = `${row}:${col}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push({ row, col });
+  };
+
+  const finishForward = (): { row: number; col: number }[] => {
+    if (isGunPiece(piece)) {
+      gunPieceDebugLog('前方2マス: 結果', {
+        from: [fromRow, fromCol],
+        side: piece.side,
+        targets: out,
+        p1: snap(p1),
+        p2: snap(p2),
+        r1,
+        r2,
+      });
+    }
+    return out;
+  };
+
+  if (!p1 && (!r2Valid || !p2)) {
+    push(r1, c1);
+    if (r2Valid) push(r2, c2);
+    return finishForward();
+  }
+  if (!p1 && r2Valid && p2 && p2.side !== piece.side) {
+    push(r2, c2);
+    return finishForward();
+  }
+  if (p1 && (!r2Valid || !p2)) {
+    if (r2Valid) push(r2, c2);
+    return finishForward();
+  }
+  if (p1 && r2Valid && p2 && p2.side !== piece.side) {
+    push(r2, c2);
+    return finishForward();
+  }
+  return finishForward();
+}
+
+/** 銃: 斜め後ろ最大2マス（中間に味方・王・鎧・K耐久2はブロック）。前方2マス貫通と同じルールで2マス目着地を生成。 */
+function generateGunBackDiagonalTargets(occupancy: OccupancyMap, piece: AiBoardPiece): { row: number; col: number }[] {
+  const out: { row: number; col: number }[] = [];
+  const seen = new Set<string>();
+  const push = (row: number, col: number) => {
+    const key = `${row}:${col}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push({ row, col });
+  };
+
+  const dirs =
+    piece.side === 'player'
+      ? ([
+          [1, -1],
+          [1, 1],
+        ] as const)
+      : ([
+          [-1, -1],
+          [-1, 1],
+        ] as const);
+
+  for (const [ud, vd] of dirs) {
+    const r1 = piece.row + ud;
+    const c1 = piece.col + vd;
+    const r2 = piece.row + 2 * ud;
+    const c2 = piece.col + 2 * vd;
+    const r1Valid = r1 >= 0 && r1 <= 8 && c1 >= 0 && c1 <= 8;
+    const r2Valid = r2 >= 0 && r2 <= 8 && c2 >= 0 && c2 <= 8;
+    if (!r1Valid) continue;
+
+    const p1 = findPieceAtFast(occupancy, r1, c1);
+    const p2 = r2Valid ? findPieceAtFast(occupancy, r2, c2) : null;
+
+    if (p1 && isRockObstacleVirtualPiece(p1)) continue;
+    if (r2Valid && p2 && isRockObstacleVirtualPiece(p2)) continue;
+
+    if (p1 && isGunFullyBlockingAllyOnMid(p1, piece)) continue;
+    if (r2Valid && p2 && p2.side === piece.side) continue;
+    if (p1 && isKingPiece(p1)) continue;
+    if (r2Valid && p2 && isKingPiece(p2)) continue;
+    if (p1 && isArmorPiece(p1)) continue;
+    if (r2Valid && p2 && isArmorPiece(p2)) continue;
+    if (p1 && isKbossPieceForGun(p1) && kbossEffectiveLivesForGunFilter(p1) > 1) continue;
+
+    if (!p1 && (!r2Valid || !p2)) {
+      push(r1, c1);
+      if (r2Valid) push(r2, c2);
+      continue;
+    }
+    if (!p1 && r2Valid && p2 && p2.side !== piece.side) {
+      push(r2, c2);
+      continue;
+    }
+    if (p1 && (!r2Valid || !p2)) {
+      if (r2Valid) push(r2, c2);
+      continue;
+    }
+    if (p1 && r2Valid && p2 && p2.side !== piece.side) {
+      push(r2, c2);
+    }
+  }
+  return out;
 }
 
 /** 機: 同一行の左隣の味方を優先し、いなければ右隣の味方の移動ベクトルを借用する */
@@ -96,18 +389,26 @@ function buildOccupancyMap(pieces: AiBoardPiece[]): OccupancyMap {
   return new Map(pieces.map((piece) => [occupancyKey(piece.row, piece.col), piece]));
 }
 
-function buildRockObstacleVirtualPieces(
-  side: 'player' | 'enemy',
+function isRockObstacleVirtualPiece(piece: AiBoardPiece): boolean {
+  return piece.pieceCode === 'ROCK_OBSTACLE' || piece.char === '岩障';
+}
+
+/** 岩仮想駒は実駒のいないマスのみ。従来は配列末尾に岩を足して Map が後勝ちし、同座標の敵を「味方の岩」に潰していた。 */
+function buildPathPiecesWithRockObstaclesOnEmptyCells(
+  pieces: AiBoardPiece[],
   skillView: SkillRuntimeView,
+  rockSide: Side,
 ): AiBoardPiece[] {
-  const out: AiBoardPiece[] = [];
+  const baseOcc = buildOccupancyMap(pieces);
+  const out: AiBoardPiece[] = [...pieces];
   for (const key of skillView.rockObstacleCells) {
+    if (baseOcc.has(key)) continue;
     const [rowRaw, colRaw] = key.split(':');
     const row = Number(rowRaw);
     const col = Number(colRaw);
     if (!Number.isInteger(row) || !Number.isInteger(col)) continue;
     out.push({
-      side,
+      side: rockSide,
       row,
       col,
       pieceCode: 'ROCK_OBSTACLE',
@@ -347,6 +648,10 @@ function resolveEffectiveVectorsForPiece(
   position: AiBattlePosition,
   allPieces: AiBoardPiece[],
 ): AiPieceDefinition['moveVectors'] {
+  // 名刀「刀」: 前方ちょうど1マスのみ（テンプレは「上」基準、先手後手は getLegalTargetsFromVectors の orient で反映）
+  if (isKatanaPiece(piece)) {
+    return [{ dx: 0, dy: -1, maxStep: 1 }];
+  }
   const bishopNormalized = normalizeVectorsForBishop(piece, pieceDef.moveVectors);
   const goldNormalized = normalizeVectorsForGold(piece, bishopNormalized);
   const fixedHouseField = normalizeVectorsForFixedHouseField(piece, goldNormalized);
@@ -511,13 +816,34 @@ function generateBoardPieceMoves(input: {
       }
     }
   }
-  if (!pieceDef || pieceDef.moveVectors.length === 0) return [];
+  if (
+    !pieceDef &&
+    (isGunPiece(input.piece) || isKatanaPiece(input.piece))
+  ) {
+    pieceDef = { ...MINIMAL_SPECIAL_PIECE_DEF, char: input.piece.char };
+  }
+  if (!pieceDef) return [];
+  // 銃・刀はエンジン側でベクトルを上書きするため、カタログの moveVectors が空でも合法手を生成する。
+  if (
+    pieceDef.moveVectors.length === 0 &&
+    !isGunPiece(input.piece) &&
+    !isKatanaPiece(input.piece)
+  ) {
+    return [];
+  }
   let effectiveVectors = resolveEffectiveVectorsForPiece(
     input.piece,
     pieceDef,
     input.position,
     input.pieces,
   );
+  if (isGunPiece(input.piece)) {
+    effectiveVectors = [
+      { dx: 0, dy: -1, maxStep: 2 },
+      { dx: -1, dy: 1, maxStep: 2 },
+      { dx: 1, dy: 1, maxStep: 2 },
+    ];
+  }
   let effectiveCanJump = pieceDef.canJump === true;
 
   if (isMirrorPiece(input.piece)) {
@@ -540,26 +866,52 @@ function generateBoardPieceMoves(input: {
   }
 
   const leapVectors = effectiveVectors.filter((v) => isLeapOverOneMode(v.captureMode));
-  const normalVectors = effectiveVectors.filter((v) => !isLeapOverOneMode(v.captureMode));
-  const rockVirtualPieces = buildRockObstacleVirtualPieces(input.piece.side, input.skillView);
-  const pathPieces = [...input.pieces, ...rockVirtualPieces];
+  const normalVectors = effectiveVectors.filter((v) => {
+    if (isLeapOverOneMode(v.captureMode)) return false;
+    // 銃の前方ちょうど2マス（1マス目に敵がいても2マス目へ）: generateGunForwardTargets が担当する。
+    // テンプレ (0,-1) maxStep 2 を getLegalTargetsFromVectors に渡すと、1マス目の敵で打ち切られ 2マス目が出ない。
+    if (isGunPiece(input.piece) && v.dx === 0 && v.dy === -1) return false;
+    return true;
+  });
+  const pathPieces = buildPathPiecesWithRockObstaclesOnEmptyCells(
+    input.pieces,
+    input.skillView,
+    input.piece.side,
+  );
   const pathOccupancy = buildOccupancyMap(pathPieces);
   const normalTargets = isCloudPiece(input.piece)
     ? generateCloudTargetsFromVectors(pathOccupancy, input.piece, normalVectors)
     : getLegalTargetsFromVectors(pathPieces, input.piece, normalVectors, 9, {
         canJump: effectiveCanJump,
       });
+  const gunLineTargets = isGunPiece(input.piece) && !isMirrorPiece(input.piece)
+    ? [
+        ...generateGunForwardTargets(pathOccupancy, input.piece),
+        ...generateGunBackDiagonalTargets(pathOccupancy, input.piece),
+      ]
+    : [];
+  const gunLineKeySet =
+    gunLineTargets.length > 0
+      ? new Set(gunLineTargets.map((t) => `${t.row}:${t.col}`))
+      : null;
   const leapTargets = generateLeapOverOneTargets(pathOccupancy, input.piece, leapVectors);
   const reflectiveTargets = isReflectivePiece(input.piece)
     ? generateReflectiveTargets(pathOccupancy, input.piece)
     : [];
-  const targets = [...normalTargets, ...leapTargets, ...reflectiveTargets];
+  const targetsRaw = [...normalTargets, ...gunLineTargets, ...leapTargets, ...reflectiveTargets];
+  const seenTargetKeys = new Set<string>();
+  const targets = targetsRaw.filter((t) => {
+    const k = `${t.row}:${t.col}`;
+    if (seenTargetKeys.has(k)) return false;
+    seenTargetKeys.add(k);
+    return true;
+  });
   const movementRule =
     input.skillView.movementRulesByCell.get(
       `${input.piece.side}:${input.piece.row}:${input.piece.col}`,
     ) ?? null;
   const peopleFieldBuff = hasPeopleFieldBuffOnBoard(input.piece, input.pieces);
-  const filteredTargets =
+  let filteredTargets =
     movementRule === 'vertical_step_only'
       ? targets.filter(
           (target) =>
@@ -575,6 +927,23 @@ function generateBoardPieceMoves(input: {
             return false;
           })
         : targets;
+
+  // 銃の前方2マス貫通・斜め後ろ2マスは 2 歩相当のため、縦1マス／直交1マス制限だけだと誤って除外される。貫通先だけ復元する。
+  if (
+    gunLineKeySet &&
+    isGunPiece(input.piece) &&
+    !isMirrorPiece(input.piece) &&
+    (movementRule === 'vertical_step_only' || movementRule === 'orthogonal_step_only')
+  ) {
+    const seenF = new Set(filteredTargets.map((t) => `${t.row}:${t.col}`));
+    for (const t of targets) {
+      const k = `${t.row}:${t.col}`;
+      if (!gunLineKeySet.has(k) || seenF.has(k)) continue;
+      seenF.add(k);
+      filteredTargets.push(t);
+    }
+  }
+
   const captureFilteredTargets = filteredTargets.filter((target) => {
     const captured = findPieceAtFast(input.occupancy, target.row, target.col);
     if (!captured) return true;
@@ -583,6 +952,8 @@ function generateBoardPieceMoves(input: {
       return captured.side === input.piece.side && !isKingPiece(captured);
     }
     if (captured.side === input.piece.side) return false;
+    if (isArmorPiece(captured)) return false;
+    if (captured.side !== input.piece.side && isArmorPiece(input.piece)) return false;
     return !input.skillView.darkBlindCells.has(`${captured.side}:${captured.row}:${captured.col}`);
   });
 
@@ -596,10 +967,24 @@ function generateBoardPieceMoves(input: {
   const boatFilteredTargets = hazardFilteredTargets.filter((target) =>
     boatTowTargetCellAllowed(input.piece, from, target, input.occupancy),
   );
-  const pieceCode =
-    toBasePieceCode(input.piece.pieceCode) ??
-    toBasePieceCode(CHAR_TO_CODE[input.piece.char]) ??
-    'FU';
+  const pieceCode = resolvePieceCodeForLegalMove(input.piece, input.lookups);
+
+  if (isGunPiece(input.piece)) {
+    gunPieceDebugLog('合法手パイプライン', {
+      at: [input.piece.row, input.piece.col],
+      side: input.piece.side,
+      char: input.piece.char,
+      resolvedPieceCode: pieceCode,
+      movementRule,
+      gunLineTargets,
+      countTargets: targets.length,
+      countAfterMoveRule: filteredTargets.length,
+      countAfterCapture: captureFilteredTargets.length,
+      countAfterHazard: hazardFilteredTargets.length,
+      countAfterBoat: boatFilteredTargets.length,
+      cellsAfterBoat: boatFilteredTargets.map((t) => ({ row: t.row, col: t.col })),
+    });
+  }
 
   return boatFilteredTargets.flatMap((target) => {
     const captured = findPieceAtFast(input.occupancy, target.row, target.col);

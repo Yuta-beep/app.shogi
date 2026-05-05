@@ -2967,4 +2967,46 @@ describe('ai engine apply move', () => {
     expect(boardPieces(committed.position).some((p) => p.char === 'K')).toBe(false);
     expect(handTotal(committed.position.hands.player)).toBe(0);
   });
+
+  it('刀が前方1マスで敵を取ったとき着地点の左右の敵も取る', () => {
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: '4k4/9/9/9/3ppp3/4S4/9/9/4K4 b - 1',
+      stateHash: 'seed',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'enemy', row: 4, col: 3, pieceCode: 'FU', char: '歩', promoted: false },
+          { side: 'enemy', row: 4, col: 4, pieceCode: 'FU', char: '歩', promoted: false },
+          { side: 'enemy', row: 4, col: 5, pieceCode: 'FU', char: '歩', promoted: false },
+          { side: 'player', row: 5, col: 4, pieceCode: 'SWORD', char: '刀', promoted: false },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+      },
+      hands: { player: {}, enemy: {} },
+    };
+
+    const committed = applyMove({
+      position,
+      pieceCatalog,
+      move: {
+        fromRow: 5,
+        fromCol: 4,
+        toRow: 4,
+        toCol: 4,
+        pieceCode: 'SWORD',
+        promote: false,
+        dropPieceCode: null,
+        capturedPieceCode: 'FU',
+        notation: null,
+      },
+    });
+
+    const enemiesOnRow4 = boardPieces(committed.position).filter(
+      (p) => p.side === 'enemy' && p.row === 4 && (p.col === 3 || p.col === 4 || p.col === 5),
+    );
+    expect(enemiesOnRow4).toHaveLength(0);
+  });
 });

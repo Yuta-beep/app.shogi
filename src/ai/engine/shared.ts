@@ -15,6 +15,7 @@ import type {
   AiPieceLookups,
 } from '@/ai/model';
 import { buildPieceLookups, normalizePieceCode, toBasePieceCode } from '@/ai/model';
+import { assembleSkillDefinitionsV2ForSession } from '@/ai/engine/session-skill-definitions-v2';
 
 export const PIECE_VALUES: Readonly<Record<string, number>> = {
   OU: 100000,
@@ -123,6 +124,7 @@ export function buildBoardState(
   placements: AiBoardPiece[],
   pieceDefsByCode: Record<string, AiPieceDefinition>,
 ): Record<string, unknown> {
+  const skillDefinitionsV2 = assembleSkillDefinitionsV2ForSession(pieceDefsByCode);
   return {
     pieces: placements.map((piece) => ({
       side: piece.side,
@@ -146,6 +148,7 @@ export function buildBoardState(
           }
         : {}),
     })),
+    skill_definitions_v2: skillDefinitionsV2,
     custom_move_vectors: Object.fromEntries(
       Object.entries(pieceDefsByCode)
         .filter(([, item]) => item.moveVectors.length > 0)

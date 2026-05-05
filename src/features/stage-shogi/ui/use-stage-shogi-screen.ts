@@ -236,18 +236,24 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
     return () => clearTimeout(t);
   }, [pieces, promotionImageFlash]);
 
+  /** エンジン上書き（刀・銃など）を含む。長押し説明・SFEN 解決と将棋エンジンを揃える。 */
+  const pieceCatalogNormalized = useMemo(
+    () => normalizePieceCatalog(pieceCatalog),
+    [pieceCatalog],
+  );
+
   const pieceDefsByChar = useMemo(
     () =>
-      Object.fromEntries(pieceCatalog.map((item) => [item.char, item])) as Record<
+      Object.fromEntries(pieceCatalogNormalized.map((item) => [item.char, item])) as Record<
         string,
         PieceCatalogItem
       >,
-    [pieceCatalog],
+    [pieceCatalogNormalized],
   );
 
   const pieceDefsByCode = useMemo(() => {
     const map: Record<string, PieceCatalogItem> = {};
-    for (const it of pieceCatalog) {
+    for (const it of pieceCatalogNormalized) {
       if (it.pieceCode) {
         map[it.pieceCode.toUpperCase()] = it;
       }
@@ -267,11 +273,11 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
       }
     }
     return map;
-  }, [pieceCatalog, pieceDefsByChar]);
+  }, [pieceCatalogNormalized, pieceDefsByChar]);
 
   const promotedPieceDefsByCode = useMemo(() => {
     const map: Record<string, PieceCatalogItem> = {};
-    for (const item of pieceCatalog) {
+    for (const item of pieceCatalogNormalized) {
       if (!item.isPromoted) continue;
       const byPieceCode = item.pieceCode?.toUpperCase();
       if (byPieceCode) {
@@ -291,9 +297,12 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
       }
     }
     return map;
-  }, [pieceCatalog, pieceDefsByChar]);
+  }, [pieceCatalogNormalized, pieceDefsByChar]);
 
-  const pieceSfenMapping = useMemo(() => createPieceSfenMapping(pieceCatalog), [pieceCatalog]);
+  const pieceSfenMapping = useMemo(
+    () => createPieceSfenMapping(pieceCatalogNormalized),
+    [pieceCatalogNormalized],
+  );
 
   function resolveSkillName(move: BattleMove): string | null {
     const code = move.pieceCode || move.dropPieceCode;
@@ -753,9 +762,14 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
             ? promotedPieceDefsByCode[codeKey]
             : null;
           const imageSignedUrl = promotedDef?.imageSignedUrl ?? moved.imageSignedUrl;
-          const char = resolvedPieceCode
+          const resolvedChar = resolvedPieceCode
             ? pieceCharFromCode(resolvedPieceCode, moved.side, promoted)
             : moved.char;
+          const char =
+            resolvedChar === '?' ||
+            (resolvedPieceCode != null && resolvedChar === resolvedPieceCode)
+              ? moved.char
+              : resolvedChar;
           preservedMovedPiece = {
             side: moved.side,
             toRow: selectedMoveForApply.toRow,

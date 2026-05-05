@@ -21,6 +21,24 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return value as Record<string, unknown>;
 }
 
+function isOpaquePieceInstanceId(value: string | null | undefined): boolean {
+  if (!value) return false;
+  return /^piece_[a-z0-9]+$/i.test(value.trim());
+}
+
+function charFromCanonicalCode(code: string | null): string | null {
+  if (!code) return null;
+  if (code === 'SWORD' || code === 'KATANA') return '刀';
+  if (code === 'GUN') return '銃';
+  if (code === 'ARMOR') return '鎧';
+  if (code === 'SHIELD') return '盾';
+  for (const [char, mapped] of Object.entries(CHAR_TO_CODE)) {
+    const base = toBasePieceCode(mapped);
+    if (base === code) return char;
+  }
+  return null;
+}
+
 export function sanitizeHandsBag(
   bag: Partial<Record<string, number>> | undefined,
 ): Record<string, number> {
@@ -90,7 +108,12 @@ export function piecesFromBoardState(position: AiBattlePosition): AiBoardPiece[]
         CHAR_TO_CODE[String(obj.char ?? rawPiece?.char ?? '')],
     );
     const promoted = Boolean(obj.promoted ?? rawPiece?.promoted ?? false);
-    const char = String(obj.char ?? rawPiece?.char ?? '?') || (pieceCode ? pieceCode : '?');
+    const rawChar = String(obj.char ?? rawPiece?.char ?? '?') || (pieceCode ? pieceCode : '?');
+    const baseCode = toBasePieceCode(pieceCode);
+    const char =
+      isOpaquePieceInstanceId(rawChar) || rawChar === pieceCode
+        ? (charFromCanonicalCode(baseCode) ?? rawChar)
+        : rawChar;
 
     const livesRaw = obj.kbossLivesRemaining ?? obj.kboss_lives_remaining;
     const kbossLivesRemaining =
@@ -109,7 +132,7 @@ export function piecesFromBoardState(position: AiBattlePosition): AiBoardPiece[]
       side,
       row,
       col,
-      pieceCode: toBasePieceCode(pieceCode),
+      pieceCode: baseCode,
       char,
       promoted,
       ...(kbossLivesRemaining != null ? { kbossLivesRemaining } : {}),

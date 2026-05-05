@@ -269,6 +269,10 @@ export function pieceCodeFromPlacement(
     return toBasePieceCode(catalogItem.pieceCode) ?? catalogItem.pieceCode;
   }
   if (catalogItem && isOpaquePieceInstanceId(catalogItem.pieceCode)) {
+    if (char === '刀') return 'SWORD';
+    if (char === '銃') return 'GUN';
+    if (char === '鎧') return 'ARMOR';
+    if (char === '盾') return 'SHIELD';
     const fromKanji = CHAR_TO_CODE[char];
     if (fromKanji) return toBasePieceCode(fromKanji) ?? fromKanji;
     return catalogItem.pieceCode;

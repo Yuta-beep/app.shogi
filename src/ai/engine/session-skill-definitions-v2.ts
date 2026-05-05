@@ -3,7 +3,8 @@ import type { PieceCatalogItem } from '@/domain/models/piece';
 /**
  * ステージ開始時に boardState.skill_definitions_v2 へ載せる定義。
  * BFF が駒マスタに structured skill を載せていない場合でも、幻・霧のクライアント挙動を成立させる。
- * API 側で同名 skillId が来た場合はそちらで上書きする。
+ * 刀(52)・銃(54) は BFF の古い定義より常にここで上書きし、実処理は将棋エンジン（apply-move / legal-moves）
+ * と skill-runtime の二重実行ガードに合わせる。
  */
 const CANONICAL_FALLBACK_DEFINITIONS: ReadonlyArray<Record<string, unknown>> = [
   {
@@ -32,6 +33,52 @@ const CANONICAL_FALLBACK_DEFINITIONS: ReadonlyArray<Record<string, unknown>> = [
       },
     ],
   },
+  {
+    skillId: 52,
+    pieceChars: ['刀'],
+    trigger: { group: 'event_capture', type: 'after_capture' },
+    conditions: [],
+    effects: [
+      {
+        type: 'multi_capture',
+        target: { group: 'adjacent', selector: 'adjacent_enemy' },
+        params: { captureMode: 'adjacent_after_capture' },
+      },
+    ],
+    source: {
+      skillText:
+        '前方ちょうど1マスで敵駒を取ったとき、着地点の左右1マスにいる敵駒もまとめて取る（鎧は除く）。実装は apply-move。',
+      sourceKind: 'manual',
+      sourceFile: 'session-skill-definitions-v2',
+      sourceFunction: 'CANONICAL_KATANA',
+    },
+    classification: { implementationKind: 'primitive', tags: ['capture_trigger', 'multi_capture'] },
+    scriptHook: null,
+    notes: 'canonical-engine-parity',
+  },
+  {
+    skillId: 54,
+    pieceChars: ['銃'],
+    trigger: { group: 'continuous', type: 'continuous_rule' },
+    conditions: [],
+    effects: [
+      {
+        type: 'multi_capture',
+        target: { group: 'line', selector: 'front_enemy' },
+        params: { captureMode: 'forward_chain' },
+      },
+    ],
+    source: {
+      skillText:
+        '前方ちょうど2マスまたは斜め後ろ2マスへの貫通取り。実装は apply-move（skill-runtime は銃で二重実行しない）。',
+      sourceKind: 'manual',
+      sourceFile: 'session-skill-definitions-v2',
+      sourceFunction: 'CANONICAL_GUN',
+    },
+    classification: { implementationKind: 'primitive', tags: ['continuous_rule', 'multi_capture'] },
+    scriptHook: null,
+    notes: 'canonical-engine-parity',
+  },
 ];
 
 type PieceCatalogItemWithSkillJson = PieceCatalogItem & {
@@ -55,15 +102,6 @@ export function assembleSkillDefinitionsV2ForSession(
   const bySkillId = new Map<number, Record<string, unknown>>();
   const extras: Record<string, unknown>[] = [];
 
-  for (const def of CANONICAL_FALLBACK_DEFINITIONS) {
-    const id = Number(def.skillId);
-    if (Number.isFinite(id)) {
-      bySkillId.set(id, { ...def });
-    } else {
-      extras.push({ ...def });
-    }
-  }
-
   for (const item of Object.values(pieceDefsByCode)) {
     if (!item) continue;
     for (const entry of definitionsFromCatalogItem(item as PieceCatalogItemWithSkillJson)) {
@@ -74,6 +112,27 @@ export function assembleSkillDefinitionsV2ForSession(
         bySkillId.set(sid, rec);
       } else {
         extras.push(rec);
+      }
+    }
+  }
+
+  for (const def of CANONICAL_FALLBACK_DEFINITIONS) {
+    const id = Number(def.skillId);
+    if (!Number.isFinite(id)) {
+      extras.push({ ...def });
+      continue;
+    }
+    if (!bySkillId.has(id)) {
+      bySkillId.set(id, { ...def });
+    }
+  }
+
+  // 刀(52)・銃(54): カタログ／BFF の不整合より正典（上のフォールバック）を常に優先。
+  for (const def of CANONICAL_FALLBACK_DEFINITIONS) {
+    const id = Number(def.skillId);
+    if (id === 52 || id === 54) {
+      if (Number.isFinite(id)) {
+        bySkillId.set(id, { ...def });
       }
     }
   }

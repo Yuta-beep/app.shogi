@@ -173,6 +173,15 @@ export function addHandPiece(
   return next;
 }
 
+/** pieceCode が欠けた盤面でも手駒キーに落とせるよう、漢字から canonical を補う（piece-conversion と値を揃える）。 */
+const CAPTURE_CHAR_TO_HAND_CODE: Readonly<Record<string, string>> = {
+  刀: 'SWORD',
+  剣: 'SWORD',
+  銃: 'GUN',
+  鎧: 'ARMOR',
+  盾: 'SHIELD',
+};
+
 export function capturedToHandPieceCode(piece: BoardPiece) {
   const code =
     normalizePieceCode(piece.pieceCode) ??
@@ -188,7 +197,7 @@ export function capturedToHandPieceCode(piece: BoardPiece) {
               ? 'GRAVE'
               : piece.char === '霊'
                 ? 'SPIRIT'
-                : null);
+                : (CAPTURE_CHAR_TO_HAND_CODE[piece.char] ?? null));
   if (!code) return null;
   if (KING_CODES.has(code)) return null;
   return code;
