@@ -1,6 +1,7 @@
 import {
   canDropPiece,
   canPromoteByMove,
+  capturedToHandPieceCode,
   getLegalTargetsFromVectors,
   mustPromoteByMove,
   type Side,
@@ -96,8 +97,51 @@ function isGunPiece(piece: AiBoardPiece): boolean {
 }
 
 function gunPieceDebugLog(label: string, payload: Record<string, unknown>): void {
-  if (typeof __DEV__ === 'undefined' || !__DEV__) return;
-  console.log(`[銃-debug] ${label}`, payload);
+  void label;
+  void payload;
+}
+
+function isBookPiece(piece: AiBoardPiece): boolean {
+  const ch = normKanjiForEngineRules(piece.char);
+  if (ch === '書') return true;
+  const code = toBasePieceCode(piece.pieceCode);
+  return code === 'BOOK';
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object') return null;
+  return value as Record<string, unknown>;
+}
+
+function lastMovedPieceForBook(
+  position: AiBattlePosition,
+  piece: AiBoardPiece,
+): AiBoardPiece | null {
+  const boardState = asRecord(position.boardState);
+  const skillState = asRecord(boardState?.skill_state ?? boardState?.skillState);
+  // 「書」は“自分が直前に動かした駒”の移動範囲を継承する。
+  // 評価対象の駒 side を基準に参照することで、敵駒プレビュー時でも意図どおり解決する。
+  const key = piece.side === 'player' ? 'last_player_moved_piece' : 'last_enemy_moved_piece';
+  const raw = asRecord(skillState?.[key]);
+  if (!raw) return null;
+  const row = typeof raw.row === 'number' ? raw.row : null;
+  const col = typeof raw.col === 'number' ? raw.col : null;
+  if (row == null || col == null) return null;
+  const side = raw.side === 'enemy' ? 'enemy' : 'player';
+  if (side !== piece.side) return null;
+  const pieceCode = typeof raw.pieceCode === 'string' ? raw.pieceCode : null;
+  const char = typeof raw.char === 'string' ? raw.char : '';
+  const copiedMoveVectors = Array.isArray(raw.copiedMoveVectors) ? raw.copiedMoveVectors : null;
+  return {
+    side,
+    row,
+    col,
+    pieceCode,
+    char,
+    promoted: raw.promoted === true,
+    ...(copiedMoveVectors ? { copiedMoveVectors } : {}),
+    imageSignedUrl: null,
+  };
 }
 
 /** `CHAR_TO_CODE` に無い幻駒は、カタログの漢字→pieceCode で着手の pieceCode を決める（刀が歩になる不具合の防止）。 */
@@ -110,9 +154,38 @@ function resolvePieceCodeForLegalMove(piece: AiBoardPiece, lookups: AiPieceLooku
   if (fromCatalog && !isOpaquePieceInstanceId(fromCatalog)) return fromCatalog;
   if (ch === '刀') return 'SWORD';
   if (ch === '銃') return 'GUN';
+  if (ch === '書') return 'BOOK';
+  if (ch === '封') return 'SEAL';
   const legacy = toBasePieceCode(CHAR_TO_CODE[piece.char]);
   if (legacy) return legacy;
   return 'FU';
+}
+
+function resolvePieceDefForBookCopy(
+  piece: AiBoardPiece,
+  lookups: AiPieceLookups,
+): AiPieceDefinition | null {
+  const ch = normKanjiForEngineRules(piece.char);
+  const canonicalFromChar = toBasePieceCode(CHAR_TO_CODE[ch] ?? null);
+  if (canonicalFromChar) {
+    const byCanonical = lookups.pieceDefsByCode[canonicalFromChar];
+    if (byCanonical) return byCanonical;
+  }
+  const direct = resolvePieceDef(piece, lookups);
+  if (direct && Array.isArray(direct.moveVectors) && direct.moveVectors.length > 0) {
+    return direct;
+  }
+  const code = resolvePieceCodeForLegalMove(piece, lookups);
+  const byCode = lookups.pieceDefsByCode[code];
+  if (byCode) return byCode;
+  return lookups.pieceDefsByChar[piece.char] ?? lookups.pieceDefsByChar[ch] ?? null;
+}
+
+function isKingLikePieceForBook(piece: AiBoardPiece): boolean {
+  const ch = normKanjiForEngineRules(piece.char);
+  if (ch === '王' || ch === '玉') return true;
+  const code = toBasePieceCode(piece.pieceCode);
+  return code === 'OU' || code === 'KING';
 }
 
 function isArmorPiece(piece: AiBoardPiece): boolean {
@@ -157,7 +230,10 @@ function gunForwardTwoLandingCoords(
   return { midRow: fromRow + d, midCol: fromCol };
 }
 
-function generateGunForwardTargets(occupancy: OccupancyMap, piece: AiBoardPiece): { row: number; col: number }[] {
+function generateGunForwardTargets(
+  occupancy: OccupancyMap,
+  piece: AiBoardPiece,
+): { row: number; col: number }[] {
   const out: { row: number; col: number }[] = [];
   const seen = new Set<string>();
   const d = gunForwardRowDelta(piece.side);
@@ -224,7 +300,11 @@ function generateGunForwardTargets(occupancy: OccupancyMap, piece: AiBoardPiece)
     logBlock('1マス目が王/玉');
     return out;
   }
-  if (r2Valid && p2 && (p2.char === '王' || p2.char === '玉' || toBasePieceCode(p2.pieceCode) === 'OU')) {
+  if (
+    r2Valid &&
+    p2 &&
+    (p2.char === '王' || p2.char === '玉' || toBasePieceCode(p2.pieceCode) === 'OU')
+  ) {
     logBlock('2マス目が王/玉');
     return out;
   }
@@ -284,7 +364,10 @@ function generateGunForwardTargets(occupancy: OccupancyMap, piece: AiBoardPiece)
 }
 
 /** 銃: 斜め後ろ最大2マス（中間に味方・王・鎧・K耐久2はブロック）。前方2マス貫通と同じルールで2マス目着地を生成。 */
-function generateGunBackDiagonalTargets(occupancy: OccupancyMap, piece: AiBoardPiece): { row: number; col: number }[] {
+function generateGunBackDiagonalTargets(
+  occupancy: OccupancyMap,
+  piece: AiBoardPiece,
+): { row: number; col: number }[] {
   const out: { row: number; col: number }[] = [];
   const seen = new Set<string>();
   const push = (row: number, col: number) => {
@@ -647,7 +730,98 @@ function resolveEffectiveVectorsForPiece(
   pieceDef: AiPieceDefinition,
   position: AiBattlePosition,
   allPieces: AiBoardPiece[],
+  lookups: AiPieceLookups,
+  depth = 0,
 ): AiPieceDefinition['moveVectors'] {
+  const asBookMovementOnlyVectors = (vectors: AiPieceDefinition['moveVectors']) =>
+    vectors.map((v) => ({ dx: v.dx, dy: v.dy, maxStep: v.maxStep }));
+
+  let didResolveBookCopiedVectors = false;
+  if (depth <= 0 && isBookPiece(piece)) {
+    const boardState = asRecord(position.boardState);
+    const customMoveVectors = asRecord(boardState?.custom_move_vectors);
+    const marker = lastMovedPieceForBook(position, piece);
+    const markerVectorsRaw = (marker as unknown as { copiedMoveVectors?: unknown }).copiedMoveVectors;
+    if (Array.isArray(markerVectorsRaw) && markerVectorsRaw.length > 0) {
+      const markerVectors = markerVectorsRaw
+        .map((v) => asRecord(v))
+        .filter((v): v is Record<string, unknown> => Boolean(v))
+        .map((v) => {
+          const dx = Number(v.dx);
+          const dy = Number(v.dy);
+          const maxStep = Number(v.maxStep);
+          const captureMode = typeof v.captureMode === 'string' ? v.captureMode : undefined;
+          return Number.isFinite(dx) && Number.isFinite(dy) && Number.isFinite(maxStep)
+            ? {
+                dx,
+                dy,
+                maxStep,
+                ...(captureMode ? { captureMode } : {}),
+              }
+            : null;
+        })
+        .filter((v): v is { dx: number; dy: number; maxStep: number; captureMode?: string } => v != null);
+      if (markerVectors.length > 0) {
+        didResolveBookCopiedVectors = true;
+        return asBookMovementOnlyVectors(markerVectors);
+      }
+    }
+    const copied = marker
+      ? // skill_state の side / code が壊れていても、盤上の同座標実体を最優先で使う。
+        allPieces.find((p) => p.row === marker.row && p.col === marker.col) ??
+        allPieces.find((p) => p.side === marker.side && p.row === marker.row && p.col === marker.col) ??
+        marker
+      : null;
+    if (copied && !isBookPiece(copied)) {
+      const customVectorsRaw = customMoveVectors?.[
+        String(copied.pieceCode ?? marker?.pieceCode ?? '').toUpperCase()
+      ];
+      if (Array.isArray(customVectorsRaw) && customVectorsRaw.length > 0) {
+        const customVectors = customVectorsRaw
+          .map((v) => asRecord(v))
+          .filter((v): v is Record<string, unknown> => Boolean(v))
+          .map((v) => {
+            const dc = Number(v.dc);
+            const dr = Number(v.dr);
+            const slide = v.slide === true;
+            const captureMode = typeof v.capture_mode === 'string' ? v.capture_mode : undefined;
+            if (!Number.isFinite(dc) || !Number.isFinite(dr)) return null;
+            return {
+              dx: dc,
+              dy: dr,
+              maxStep: slide ? 9 : 1,
+              ...(captureMode ? { captureMode } : {}),
+            };
+          })
+          .filter(
+            (v): v is { dx: number; dy: number; maxStep: number; captureMode?: string } => v != null,
+          );
+        if (customVectors.length > 0) {
+          didResolveBookCopiedVectors = true;
+          return asBookMovementOnlyVectors(customVectors);
+        }
+      }
+      const copiedDef = resolvePieceDefForBookCopy(copied, lookups);
+      if (copiedDef) {
+        didResolveBookCopiedVectors = true;
+        // 「書」はコピー元のベクトルをそのまま使い、向きは最終的に「書」自身の side で解決する。
+        // ここで copy 元 side で正規化すると向きが逆転して合法手が空になるケースがある。
+        return asBookMovementOnlyVectors(copiedDef.moveVectors);
+      }
+      if (isKingLikePieceForBook(copied)) {
+        const kingDef = lookups.pieceDefsByCode.OU ?? lookups.pieceDefsByChar['王'] ?? null;
+        if (kingDef) {
+          didResolveBookCopiedVectors = true;
+          return kingDef.moveVectors;
+        }
+      }
+    }
+    // 「書」はデフォルト移動を持たず、毎回「相手の直前移動駒」の移動範囲のみを継承する。
+    // 参照元を解決できないターンは移動不可にする。
+    if (!didResolveBookCopiedVectors) {
+      return [];
+    }
+  }
   // 名刀「刀」: 前方ちょうど1マスのみ（テンプレは「上」基準、先手後手は getLegalTargetsFromVectors の orient で反映）
   if (isKatanaPiece(piece)) {
     return [{ dx: 0, dy: -1, maxStep: 1 }];
@@ -805,6 +979,45 @@ function generateBoardPieceMoves(input: {
   occupancy: OccupancyMap;
   skillView: SkillRuntimeView;
 }): AiBattleMove[] {
+  if (isBookPiece(input.piece)) {
+    const aroundAllies = input.pieces.filter((ally) => {
+      if (ally.side !== input.piece.side) return false;
+      if (ally.row === input.piece.row && ally.col === input.piece.col) return false;
+      const dr = Math.abs(ally.row - input.piece.row);
+      const dc = Math.abs(ally.col - input.piece.col);
+      return dr <= 1 && dc <= 1;
+    });
+    const targetKeys = new Set<string>();
+    const targets: { row: number; col: number }[] = [];
+    for (const ally of aroundAllies) {
+      // 「書」同士の相互参照ループを避けるため、隣接書は参照対象から除外する。
+      if (isBookPiece(ally)) continue;
+      const allyMoves = generateBoardPieceMoves({
+        ...input,
+        piece: ally,
+      });
+      for (const mv of allyMoves) {
+        const row = mv.toRow;
+        const col = mv.toCol;
+        const key = `${row}:${col}`;
+        if (targetKeys.has(key)) continue;
+        targetKeys.add(key);
+        targets.push({ row, col });
+      }
+    }
+    const from = { row: input.piece.row, col: input.piece.col };
+    const pieceCode = resolvePieceCodeForLegalMove(input.piece, input.lookups);
+    return targets.map((to) =>
+      createMove({
+        from,
+        to,
+        pieceCode,
+        promote: false,
+        capturedPieceCode: toBasePieceCode(findPieceAtFast(input.occupancy, to.row, to.col)?.pieceCode ?? null),
+      }),
+    );
+  }
+
   const pieceForDef = effectivePieceForRulesAfterSpring(input.piece, input.pieces, input.lookups);
   let pieceDef = resolvePieceDef(pieceForDef, input.lookups);
   if (isMachinePiece(input.piece)) {
@@ -816,10 +1029,7 @@ function generateBoardPieceMoves(input: {
       }
     }
   }
-  if (
-    !pieceDef &&
-    (isGunPiece(input.piece) || isKatanaPiece(input.piece))
-  ) {
+  if (!pieceDef && (isGunPiece(input.piece) || isKatanaPiece(input.piece))) {
     pieceDef = { ...MINIMAL_SPECIAL_PIECE_DEF, char: input.piece.char };
   }
   if (!pieceDef) return [];
@@ -836,6 +1046,7 @@ function generateBoardPieceMoves(input: {
     pieceDef,
     input.position,
     input.pieces,
+    input.lookups,
   );
   if (isGunPiece(input.piece)) {
     effectiveVectors = [
@@ -859,6 +1070,7 @@ function generateBoardPieceMoves(input: {
           selectedDef,
           input.position,
           input.pieces,
+          input.lookups,
         );
         effectiveCanJump = selectedDef.canJump === true;
       }
@@ -884,16 +1096,15 @@ function generateBoardPieceMoves(input: {
     : getLegalTargetsFromVectors(pathPieces, input.piece, normalVectors, 9, {
         canJump: effectiveCanJump,
       });
-  const gunLineTargets = isGunPiece(input.piece) && !isMirrorPiece(input.piece)
-    ? [
-        ...generateGunForwardTargets(pathOccupancy, input.piece),
-        ...generateGunBackDiagonalTargets(pathOccupancy, input.piece),
-      ]
-    : [];
+  const gunLineTargets =
+    isGunPiece(input.piece) && !isMirrorPiece(input.piece)
+      ? [
+          ...generateGunForwardTargets(pathOccupancy, input.piece),
+          ...generateGunBackDiagonalTargets(pathOccupancy, input.piece),
+        ]
+      : [];
   const gunLineKeySet =
-    gunLineTargets.length > 0
-      ? new Set(gunLineTargets.map((t) => `${t.row}:${t.col}`))
-      : null;
+    gunLineTargets.length > 0 ? new Set(gunLineTargets.map((t) => `${t.row}:${t.col}`)) : null;
   const leapTargets = generateLeapOverOneTargets(pathOccupancy, input.piece, leapVectors);
   const reflectiveTargets = isReflectivePiece(input.piece)
     ? generateReflectiveTargets(pathOccupancy, input.piece)
@@ -906,10 +1117,12 @@ function generateBoardPieceMoves(input: {
     seenTargetKeys.add(k);
     return true;
   });
-  const movementRule =
-    input.skillView.movementRulesByCell.get(
-      `${input.piece.side}:${input.piece.row}:${input.piece.col}`,
-    ) ?? null;
+  // 「書」はコピー元の移動レンジをそのまま使うため、セル制約ルールの上書きは適用しない。
+  const movementRule = isBookPiece(input.piece)
+    ? null
+    : (input.skillView.movementRulesByCell.get(
+        `${input.piece.side}:${input.piece.row}:${input.piece.col}`,
+      ) ?? null);
   const peopleFieldBuff = hasPeopleFieldBuffOnBoard(input.piece, input.pieces);
   let filteredTargets =
     movementRule === 'vertical_step_only'
@@ -986,9 +1199,12 @@ function generateBoardPieceMoves(input: {
     });
   }
 
-  return boatFilteredTargets.flatMap((target) => {
+  const moves = boatFilteredTargets.flatMap((target) => {
     const captured = findPieceAtFast(input.occupancy, target.row, target.col);
-    const capturedPieceCode = toBasePieceCode(captured?.pieceCode ?? null);
+    const capturedPieceCode = captured
+      ? (toBasePieceCode(capturedToHandPieceCode(captured)) ??
+        toBasePieceCode(captured?.pieceCode ?? null))
+      : null;
     const transformedByA = isATransformedPawn(input.skillView, input.piece);
     const promote = transformedByA ? false : canPromoteByMove(input.piece, from, target, 9);
     const mustPromote = transformedByA ? false : mustPromoteByMove(input.piece, target, 9);
@@ -1003,6 +1219,7 @@ function generateBoardPieceMoves(input: {
       createMove({ from, to: target, pieceCode, promote: true, capturedPieceCode }),
     ];
   });
+  return moves;
 }
 
 function generateDropMoves(input: {

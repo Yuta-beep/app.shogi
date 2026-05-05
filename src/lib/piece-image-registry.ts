@@ -775,6 +775,8 @@ const aliasCodeToChar: Readonly<Record<string, string>> = {
   GUN: '銃',
   ARMOR: '鎧',
   SHIELD: '盾',
+  BOOK: '書',
+  SEAL: '封',
 };
 for (const [code, char] of Object.entries(aliasCodeToChar)) {
   const source = pieceImageByChar.get(char);

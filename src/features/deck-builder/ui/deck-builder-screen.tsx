@@ -195,9 +195,7 @@ export function DeckBuilderScreen() {
                       void playSe('tap');
                       applyCellAction(row, col);
                     }}
-                    onLongPress={
-                      placement ? () => openPieceDetail(placement.piece) : undefined
-                    }
+                    onLongPress={placement ? () => openPieceDetail(placement.piece) : undefined}
                   >
                     {placement ? (
                       resolveDeckPieceImageSource(placement.piece) ? (

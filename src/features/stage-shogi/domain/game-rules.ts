@@ -180,24 +180,91 @@ const CAPTURE_CHAR_TO_HAND_CODE: Readonly<Record<string, string>> = {
   銃: 'GUN',
   鎧: 'ARMOR',
   盾: 'SHIELD',
+  書: 'BOOK',
+  書物: 'BOOK',
+  封: 'SEAL',
 };
 
+const OPAQUE_CAPTURE_CODE_TO_HAND_CODE: Readonly<Record<string, string>> = {
+  PIECE_5D848242A136: 'BOOK',
+  PIECE_7000FED9D9D4: 'SEAL',
+};
+
+function opaqueCapturedCodeToHandCode(rawCode: string | null): string | null {
+  if (!rawCode) return null;
+  const upper = rawCode.toUpperCase();
+  if (OPAQUE_CAPTURE_CODE_TO_HAND_CODE[upper]) {
+    return OPAQUE_CAPTURE_CODE_TO_HAND_CODE[upper]!;
+  }
+  // 文字列揺れ（PIECE_SHOGI_*, 余計な接頭辞など）でも「書」ID なら BOOK に寄せる。
+  if (upper.includes('5D848242A136')) return 'BOOK';
+  if (upper.includes('7000FED9D9D4')) return 'SEAL';
+  if (upper.includes('BOOK')) return 'BOOK';
+  if (upper.includes('SEAL')) return 'SEAL';
+  return null;
+}
+
+function isKingLikePiece(piece: BoardPiece): boolean {
+  const code = (piece.pieceCode ?? '').toUpperCase();
+  return piece.char === '王' || piece.char === '玉' || code === 'OU';
+}
+
+function isSealCode(pieceCode: string): boolean {
+  const code = pieceCode.toUpperCase();
+  return code === 'SEAL';
+}
+
+function hasAdjacentEnemyKing(
+  placements: BoardPiece[],
+  side: Side,
+  row: number,
+  col: number,
+  boardSize: number,
+): boolean {
+  for (let dr = -1; dr <= 1; dr += 1) {
+    for (let dc = -1; dc <= 1; dc += 1) {
+      if (dr === 0 && dc === 0) continue;
+      const r = row + dr;
+      const c = col + dc;
+      if (!isInsideBoard(r, c, boardSize)) continue;
+      const piece = findPieceAt(placements, r, c);
+      if (!piece) continue;
+      if (piece.side === side) continue;
+      if (isKingLikePiece(piece)) return true;
+    }
+  }
+  return false;
+}
+
 export function capturedToHandPieceCode(piece: BoardPiece) {
-  const code =
-    normalizePieceCode(piece.pieceCode) ??
-    (piece.char === '牢'
+  const normalizedChar = (() => {
+    try {
+      return piece.char?.normalize('NFKC') ?? '';
+    } catch {
+      return piece.char ?? '';
+    }
+  })();
+  const codeFromChar =
+    normalizedChar === '牢'
       ? 'PRISON'
-      : piece.char === '柵'
+      : normalizedChar === '柵'
         ? 'FENCE'
-        : piece.char === '岩'
+        : normalizedChar === '岩'
           ? 'ROCK'
-          : piece.char === '鉱'
+          : normalizedChar === '鉱'
             ? 'ORE'
-            : piece.char === '墓'
+            : normalizedChar === '墓'
               ? 'GRAVE'
-              : piece.char === '霊'
+              : normalizedChar === '霊'
                 ? 'SPIRIT'
-                : (CAPTURE_CHAR_TO_HAND_CODE[piece.char] ?? null));
+                : (CAPTURE_CHAR_TO_HAND_CODE[normalizedChar] ?? null);
+  const rawCode = normalizePieceCode(piece.pieceCode);
+  const isOpaque = Boolean(rawCode && /^PIECE_[A-Z0-9_]+$/i.test(rawCode));
+  const mappedOpaque = opaqueCapturedCodeToHandCode(rawCode);
+  const code =
+    rawCode && !isOpaque
+      ? rawCode
+      : (codeFromChar ?? mappedOpaque);
   if (!code) return null;
   if (KING_CODES.has(code)) return null;
   return code;
@@ -237,6 +304,9 @@ export function canDropPiece(
   if (getHandCount(hands, side, pieceCode) <= 0) return false;
   if (isDropDeadEnd(pieceCode, side, to.row, boardSize)) return false;
   if (pieceCode === 'FU' && hasUnpromotedPawnInFile(placements, side, to.col)) return false;
+  if (isSealCode(pieceCode) && hasAdjacentEnemyKing(placements, side, to.row, to.col, boardSize)) {
+    return false;
+  }
   return true;
 }
 

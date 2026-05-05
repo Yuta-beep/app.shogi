@@ -44,6 +44,20 @@ function applyClientEnginePieceCatalogOverrides(item: PieceCatalogItem): PieceCa
     };
   }
 
+  if (ch === '書' || baseCode === 'BOOK') {
+    return {
+      ...item,
+      skill: '移動範囲が1手前に相手が移動させた駒の移動範囲と同じになる。',
+    };
+  }
+
+  if (ch === '封' || baseCode === 'SEAL') {
+    return {
+      ...item,
+      skill: 'この駒の斜め4方向に隣接する敵駒は移動できない。',
+    };
+  }
+
   return item;
 }
 

@@ -168,6 +168,12 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
   const [clearRewardText, setClearRewardText] = useState<string | null>(null);
   const [skillActivationText, setSkillActivationText] = useState<string | null>(null);
   const [inspectingPiece, setInspectingPiece] = useState<InspectingPieceState>(null);
+  const debugLogPieceMoveRanges = (label: string, side: Side, turn: number, moves: BattleMove[]) => {
+    void label;
+    void side;
+    void turn;
+    void moves;
+  };
 
   const loadPieceCatalogUseCase = useMemo(() => createLoadPieceCatalogUseCase(), []);
   const claimStageClearRewardUseCase = useMemo(() => createClaimStageClearRewardUseCase(), []);
@@ -237,10 +243,7 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
   }, [pieces, promotionImageFlash]);
 
   /** エンジン上書き（刀・銃など）を含む。長押し説明・SFEN 解決と将棋エンジンを揃える。 */
-  const pieceCatalogNormalized = useMemo(
-    () => normalizePieceCatalog(pieceCatalog),
-    [pieceCatalog],
-  );
+  const pieceCatalogNormalized = useMemo(() => normalizePieceCatalog(pieceCatalog), [pieceCatalog]);
 
   const pieceDefsByChar = useMemo(
     () =>
@@ -559,6 +562,7 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
           return;
         }
         setPlayerLegalMoves(result.legalMoves);
+        debugLogPieceMoveRanges('loadGameLegalMoves', result.sideToMove, moveNo, result.legalMoves);
       })
       .catch((error: unknown) => {
         if (active) {
@@ -800,6 +804,72 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
         await waitForAiMoveVisualCommit();
       }
 
+      if (selectedMoveForApply) {
+        const board = (patchedAiPosition.boardState ?? {}) as Record<string, unknown>;
+        const skillStateRaw =
+          (board.skill_state as Record<string, unknown> | undefined) ??
+          (board.skillState as Record<string, unknown> | undefined) ??
+          {};
+        const skillState = { ...skillStateRaw };
+        const movedBefore =
+          selectedMoveForApply.fromRow != null && selectedMoveForApply.fromCol != null
+            ? findPieceAt(piecesRef.current, selectedMoveForApply.fromRow, selectedMoveForApply.fromCol)
+            : null;
+        const movedNow = findPieceAt(
+          piecesRef.current,
+          selectedMoveForApply.toRow,
+          selectedMoveForApply.toCol,
+        );
+        const movedCodeFromBoard = movedBefore
+          ? pieceCodeFromPlacement(movedBefore.pieceCode ?? null, movedBefore.char, pieceDefsByChar)
+          : movedNow
+            ? pieceCodeFromPlacement(movedNow.pieceCode ?? null, movedNow.char, pieceDefsByChar)
+          : null;
+        const rawMovedCode =
+          (movedCodeFromBoard ?? selectedMoveForApply.pieceCode ?? '').toUpperCase() || null;
+        const movedCodeFromChar = movedBefore?.char
+          ? toAiBasePieceCode(CHAR_TO_CODE[movedBefore.char] ?? null)
+          : movedNow?.char
+            ? toAiBasePieceCode(CHAR_TO_CODE[movedNow.char] ?? null)
+            : null;
+        const movedCode =
+          (rawMovedCode && !/^PIECE_[A-Z0-9_]+$/i.test(rawMovedCode)
+            ? rawMovedCode
+            : movedCodeFromChar ?? rawMovedCode) || null;
+        const movedCharRaw =
+          movedBefore?.char && !/^piece_[a-z0-9]+$/i.test(movedBefore.char)
+            ? movedBefore.char
+            : movedNow?.char && !/^piece_[a-z0-9]+$/i.test(movedNow.char)
+              ? movedNow.char
+            : movedCode
+              ? pieceCharFromCode(movedCode, 'enemy', selectedMoveForApply.promote === true)
+              : '?';
+        const movedChar =
+          movedCharRaw && movedCharRaw !== '?' && movedCharRaw !== movedCode ? movedCharRaw : null;
+        const movedDef =
+          (movedCode ? pieceDefsByCode[movedCode] : undefined) ??
+          (movedChar ? pieceDefsByChar[movedChar] : undefined);
+        const copiedMoveVectors = Array.isArray(movedDef?.moveVectors)
+          ? movedDef.moveVectors.map((v) => ({
+              dx: v.dx,
+              dy: v.dy,
+              maxStep: v.maxStep,
+              ...(v.captureMode ? { captureMode: v.captureMode } : {}),
+            }))
+          : [];
+        skillState.last_enemy_moved_piece = {
+          side: 'enemy',
+          row: selectedMoveForApply.toRow,
+          col: selectedMoveForApply.toCol,
+          pieceCode: movedCode,
+          char: movedChar,
+          promoted: selectedMoveForApply.promote === true,
+          copiedMoveVectors,
+        };
+        board.skill_state = skillState;
+        patchedAiPosition.boardState = board;
+      }
+
       const nextWinner = syncFromCanonicalPosition(
         patchedAiPosition,
         response.game,
@@ -888,6 +958,12 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
           const legal = await loadGameLegalMovesUseCase.execute({ gameId });
           setStateHash(legal.stateHash ?? latest.position.stateHash ?? null);
           setPlayerLegalMoves(legal.legalMoves);
+          debugLogPieceMoveRanges(
+            'recover-loadGameLegalMoves',
+            latest.position.sideToMove,
+            latest.position.turnNumber,
+            legal.legalMoves,
+          );
           illegalRecoverSignatureRef.current = null;
           illegalRecoverAttemptsRef.current = 0;
         } catch {
@@ -928,12 +1004,106 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
       if (result.skillTriggered) {
         showSkillActivation('player', result.move);
       }
-      const patchedPlayerPosition = patchHandsForStarReturnSkill(
+      let patchedPlayerPosition = patchHandsForStarReturnSkill(
         result.position,
         'player',
         result.move,
         result.skillTriggered,
       );
+      const capturedBefore = rollbackSnapshot
+        ? findPieceAt(rollbackSnapshot.pieces, move.toRow, move.toCol)
+        : null;
+      const capturedCodeUpper = (capturedBefore?.pieceCode ?? '').toUpperCase();
+      const capturedCharNorm = (() => {
+        try {
+          return (capturedBefore?.char ?? '').normalize('NFKC');
+        } catch {
+          return capturedBefore?.char ?? '';
+        }
+      })();
+      const capturedBook =
+        capturedBefore?.side === 'enemy' &&
+        (capturedCharNorm === '書' ||
+          capturedCharNorm === '書物' ||
+          capturedCodeUpper.includes('BOOK') ||
+          capturedCodeUpper.includes('5D848242A136'));
+      if (capturedBook) {
+        const handsRoot = {
+          player: { ...(patchedPlayerPosition.hands?.player ?? {}) },
+          enemy: { ...(patchedPlayerPosition.hands?.enemy ?? {}) },
+        };
+        const beforeCount = Math.max(0, Math.floor((rollbackSnapshot?.hands.player?.BOOK as number) ?? 0));
+        const afterCount = Math.max(0, Math.floor((handsRoot.player.BOOK as number) ?? 0));
+        if (afterCount <= beforeCount) {
+          handsRoot.player.BOOK = afterCount + 1;
+          patchedPlayerPosition = {
+            ...patchedPlayerPosition,
+            hands: handsRoot,
+          };
+        }
+        console.log('[book-capture-debug] client-post-commit-fix', {
+          beforeCount,
+          afterCount,
+          fixedCount: handsRoot.player.BOOK ?? afterCount,
+          capturedChar: capturedBefore?.char ?? null,
+          capturedCode: capturedBefore?.pieceCode ?? null,
+          resultCapturedCode: result.move.capturedPieceCode ?? null,
+        });
+      }
+      if (move.fromRow != null && move.fromCol != null) {
+        const movedAfter = findPieceAt(optimisticBaseline, move.toRow, move.toCol);
+        const movedCodeFromBoard = movedAfter
+          ? pieceCodeFromPlacement(movedAfter.pieceCode ?? null, movedAfter.char, pieceDefsByChar)
+          : null;
+        const rawMovedCode = (movedCodeFromBoard ?? move.pieceCode ?? '').toUpperCase() || null;
+        const movedCodeFromChar = movedAfter?.char
+          ? toAiBasePieceCode(CHAR_TO_CODE[movedAfter.char] ?? null)
+          : null;
+        const movedCode =
+          (rawMovedCode && !/^PIECE_[A-Z0-9_]+$/i.test(rawMovedCode)
+            ? rawMovedCode
+            : movedCodeFromChar ?? rawMovedCode) || null;
+        const movedCharRaw =
+          movedAfter?.char && !/^piece_[a-z0-9]+$/i.test(movedAfter.char)
+            ? movedAfter.char
+            : movedCode
+              ? pieceCharFromCode(movedCode, 'player', move.promote === true)
+              : '?';
+        const movedChar =
+          movedCharRaw && movedCharRaw !== '?' && movedCharRaw !== movedCode ? movedCharRaw : null;
+        const movedDef =
+          (movedCode ? pieceDefsByCode[movedCode] : undefined) ??
+          (movedChar ? pieceDefsByChar[movedChar] : undefined);
+        const copiedMoveVectors = Array.isArray(movedDef?.moveVectors)
+          ? movedDef.moveVectors.map((v) => ({
+              dx: v.dx,
+              dy: v.dy,
+              maxStep: v.maxStep,
+              ...(v.captureMode ? { captureMode: v.captureMode } : {}),
+            }))
+          : [];
+        const board = (patchedPlayerPosition.boardState ?? {}) as Record<string, unknown>;
+        const skillStateRaw =
+          (board.skill_state as Record<string, unknown> | undefined) ??
+          (board.skillState as Record<string, unknown> | undefined) ??
+          {};
+        board.skill_state = {
+          ...skillStateRaw,
+          last_player_moved_piece: {
+            side: 'player',
+            row: move.toRow,
+            col: move.toCol,
+            pieceCode: movedCode,
+            char: movedChar,
+            promoted: move.promote === true,
+            copiedMoveVectors,
+          },
+        };
+        patchedPlayerPosition = {
+          ...patchedPlayerPosition,
+          boardState: board,
+        };
+      }
 
       const nextWinner = syncFromCanonicalPosition(
         patchedPlayerPosition,
@@ -1306,10 +1476,16 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
           const record = getLocalBattleGame(gameId);
           const built = buildBoardState(pieces, pieceDefsByCode) as Record<string, unknown>;
           const regBoard = record?.position?.boardState as Record<string, unknown> | undefined;
+          const latestBoard = aiPositionRef.current?.boardState as Record<string, unknown> | undefined;
           const mergedBoard: Record<string, unknown> = { ...built };
+          const latestSkillState =
+            latestBoard?.skill_state ?? latestBoard?.skillState ?? null;
+          if (latestSkillState != null) {
+            mergedBoard.skill_state = latestSkillState;
+          }
           if (regBoard != null) {
             const skillState = regBoard.skill_state ?? regBoard.skillState;
-            if (skillState != null) {
+            if (skillState != null && mergedBoard.skill_state == null) {
               mergedBoard.skill_state = skillState;
             }
           }
@@ -1504,17 +1680,34 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
       target.promoted && target.pieceCode
         ? (PROMOTED_CODE_TO_CHAR[target.pieceCode] ?? target.char)
         : target.char;
+    const resolvedChar =
+      lookupChar === '?' && target.pieceCode
+        ? pieceCharFromCode(target.pieceCode, target.side, target.promoted === true)
+        : lookupChar;
+    const opaqueBookCode =
+      typeof target.pieceCode === 'string' && /5D848242A136/i.test(target.pieceCode);
+    const displayChar =
+      resolvedChar && resolvedChar !== '?'
+        ? resolvedChar
+        : (target.pieceCode ?? '').toUpperCase() === 'BOOK'
+          ? '書'
+        : opaqueBookCode
+          ? '書'
+          : lookupChar;
     const detail =
-      pieceDefsByChar[lookupChar] ??
+      pieceDefsByChar[displayChar] ??
       (target.pieceCode ? pieceDefsByCode[target.pieceCode] : undefined) ??
       null;
 
     setInspectingPiece({
-      char: lookupChar,
+      char: displayChar,
       pieceCode: target.pieceCode,
-      name: detail?.name ?? lookupChar,
-      desc: resolveInspectSkillDescription(lookupChar, detail?.desc),
-      move: resolveInspectMoveDescription(lookupChar, detail?.move),
+      name:
+        (target.pieceCode ?? '').toUpperCase() === 'BOOK' || displayChar === '書'
+          ? '書物'
+          : (detail?.name ?? displayChar),
+      desc: resolveInspectSkillDescription(displayChar, detail?.desc, target.pieceCode),
+      move: resolveInspectMoveDescription(displayChar, detail?.move, target.pieceCode),
       imageSignedUrl: detail?.imageSignedUrl ?? target.imageSignedUrl ?? null,
     });
   }

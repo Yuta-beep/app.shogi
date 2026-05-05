@@ -160,6 +160,32 @@ const pieceCatalog: AiPieceDefinition[] = [
     moveVectors: [{ dx: 0, dy: -1, maxStep: 1 }],
     isRepeatable: true,
   },
+  {
+    pieceCode: 'BOOK',
+    canonicalCode: 'BOOK',
+    sfenCode: 'o',
+    char: '書',
+    name: '書',
+    unlock: 'default',
+    desc: '',
+    skill: '',
+    move: '',
+    moveVectors: [{ dx: 0, dy: -1, maxStep: 1 }],
+    isRepeatable: true,
+  },
+  {
+    pieceCode: 'SEAL',
+    canonicalCode: 'SEAL',
+    sfenCode: 'e',
+    char: '封',
+    name: '封',
+    unlock: 'default',
+    desc: '',
+    skill: '',
+    move: '',
+    moveVectors: [{ dx: 0, dy: -1, maxStep: 1 }],
+    isRepeatable: true,
+  },
 ];
 
 describe('ai engine legal moves', () => {
@@ -822,5 +848,71 @@ describe('ai engine legal moves', () => {
     expect(goldMoves.some((m) => m.toRow === 5 && m.toCol === 3)).toBe(false);
     expect(goldMoves.some((m) => m.toRow === 5 && m.toCol === 5)).toBe(false);
     expect(goldMoves).toHaveLength(6);
+  });
+
+  it('book copies last enemy moved piece movement range', () => {
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 3,
+      moveCount: 2,
+      sfen: '4k4/9/9/9/4N4/4o4/9/9/4K4 b - 1',
+      stateHash: 'seed',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'enemy', row: 4, col: 4, pieceCode: 'KE', char: '桂', promoted: false },
+          { side: 'player', row: 5, col: 4, pieceCode: 'BOOK', char: '書', promoted: false },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+        skill_state: {
+          last_enemy_moved_piece: {
+            side: 'enemy',
+            row: 4,
+            col: 4,
+            pieceCode: 'KE',
+            char: '桂',
+            promoted: false,
+          },
+        },
+      },
+      hands: { player: {}, enemy: {} },
+    };
+    const legal = generateLegalMoves({ position, pieceCatalog });
+    const bookMoves = legal.legalMoves.filter((m) => m.fromRow === 5 && m.fromCol === 4);
+    expect(bookMoves.some((m) => m.toRow === 3 && m.toCol === 3)).toBe(true);
+    expect(bookMoves.some((m) => m.toRow === 3 && m.toCol === 5)).toBe(true);
+  });
+
+  it('seal immobilizes enemies on diagonal adjacent cells', () => {
+    const position: AiBattlePosition = {
+      sideToMove: 'enemy',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: '4k4/9/9/3p1p3/4e4/3p1p3/9/9/4K4 w - 1',
+      stateHash: 'seed',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'enemy', row: 3, col: 3, pieceCode: 'FU', char: '歩', promoted: false },
+          { side: 'enemy', row: 3, col: 5, pieceCode: 'FU', char: '歩', promoted: false },
+          { side: 'enemy', row: 5, col: 3, pieceCode: 'FU', char: '歩', promoted: false },
+          { side: 'enemy', row: 5, col: 5, pieceCode: 'FU', char: '歩', promoted: false },
+          { side: 'player', row: 4, col: 4, pieceCode: 'SEAL', char: '封', promoted: false },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+      },
+      hands: { player: {}, enemy: {} },
+    };
+    const legal = generateLegalMoves({ position, pieceCatalog });
+    const diagEnemyMoves = legal.legalMoves.filter(
+      (m) =>
+        m.fromRow != null &&
+        m.fromCol != null &&
+        ((m.fromRow === 3 && m.fromCol === 3) ||
+          (m.fromRow === 3 && m.fromCol === 5) ||
+          (m.fromRow === 5 && m.fromCol === 3) ||
+          (m.fromRow === 5 && m.fromCol === 5)),
+    );
+    expect(diagEnemyMoves).toHaveLength(0);
   });
 });

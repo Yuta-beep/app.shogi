@@ -53,10 +53,28 @@ const KATANA_SKILL_INSPECT =
 
 const GUN_SKILL_INSPECT =
   '前方ちょうど2マス、または斜め後ろ2マスへの移動で、進路上の敵駒を貫いて取る（中間の味方はルールに従い除去される場合がある）。';
+const BOOK_SKILL_INSPECT = 'なし';
+const SEAL_SKILL_INSPECT =
+  'この駒の斜め4方向に隣接する敵駒は移動できない。';
 
-export function resolveInspectSkillDescription(char: string, desc: string | undefined): string {
+function isBookOrSealByCode(pieceCode?: string | null): { book: boolean; seal: boolean } {
+  const code = (pieceCode ?? '').toUpperCase();
+  return {
+    book: code === 'BOOK',
+    seal: code === 'SEAL',
+  };
+}
+
+export function resolveInspectSkillDescription(
+  char: string,
+  desc: string | undefined,
+  pieceCode?: string | null,
+): string {
+  const byCode = isBookOrSealByCode(pieceCode);
   if (char === '刀') return KATANA_SKILL_INSPECT;
   if (char === '銃') return GUN_SKILL_INSPECT;
+  if (char === '書' || byCode.book) return BOOK_SKILL_INSPECT;
+  if (char === '封' || byCode.seal) return SEAL_SKILL_INSPECT;
   if (char === '葉') return LEAF_SKILL_DESCRIPTION;
   if (char === '電') return ELECTRIC_SKILL_DESCRIPTION;
   if (char === '氷') return ICE_SKILL_DESCRIPTION;
@@ -81,9 +99,16 @@ export function resolveInspectSkillDescription(char: string, desc: string | unde
   return normalized.length > 0 ? normalized : '詳細は準備中です。';
 }
 
-export function resolveInspectMoveDescription(char: string, move: string | undefined): string {
+export function resolveInspectMoveDescription(
+  char: string,
+  move: string | undefined,
+  pieceCode?: string | null,
+): string {
+  const byCode = isBookOrSealByCode(pieceCode);
   if (char === '刀') return '前方1マス。';
   if (char === '銃') return '前1～2マス、または斜め後ろ2マス。';
+  if (char === '書' || byCode.book) return '周囲8マスの味方駒が動ける範囲の和集合。';
+  if (char === '封' || byCode.seal) return '通常移動 + 斜め4方向に移動不能オーラ。';
   if (char === '闇') return '全方向に1マス';
   if (char === '月') {
     return 'TURN数を4で割った余りが0または1のときは全方位に1マス、余りが2または3のときは全方位に2マスまで移動できる。';

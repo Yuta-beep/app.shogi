@@ -61,6 +61,7 @@ const PRISON_FENCE_PIECE_CODES = new Set([
   '406177108665',
   '95E4E9F3D8E5',
 ]);
+const SEAL_PIECE_CODES = new Set(['SEAL', '封']);
 const TREASURE_REWARD_CODES = ['KI', 'GI', 'COPPER'] as const;
 
 function stableHashSkillSeed(value: string): number {
@@ -79,6 +80,12 @@ function normalizeSkillPieceCode(raw: string | null | undefined): string {
   if (upper.startsWith('PIECE_SHOGI_')) return upper.slice('PIECE_SHOGI_'.length);
   if (upper.startsWith('PIECE_')) return upper.slice('PIECE_'.length);
   return upper;
+}
+
+function isSealPieceForAura(piece: { char: string; pieceCode: string | null }): boolean {
+  if (piece.char === '封') return true;
+  const code = normalizeSkillPieceCode(toBasePieceCode(piece.pieceCode) ?? '');
+  return SEAL_PIECE_CODES.has(code);
 }
 
 /** skill_definitions_v2 の pieceChars が漢字のみ（例: 霧）でも pieceCode（例: MIST）と突合できるようにする */
@@ -745,6 +752,25 @@ export function createSkillRuntimeView(position: AiBattlePosition): SkillRuntime
     }
   }
 
+  // 封: 斜め4方向に隣接する敵駒を移動不可にする常時オーラ。
+  const boardPieces = piecesFromBoardState(position);
+  for (const piece of boardPieces) {
+    if (!isSealPieceForAura(piece)) continue;
+    for (const [dr, dc] of [
+      [-1, -1],
+      [-1, 1],
+      [1, -1],
+      [1, 1],
+    ] as const) {
+      const row = piece.row + dr;
+      const col = piece.col + dc;
+      if (row < 0 || row > 8 || col < 0 || col > 8) continue;
+      const target = boardPieces.find((p) => p.row === row && p.col === col);
+      if (!target || target.side === piece.side) continue;
+      immobilizedCells.add(cellKey(target.side, row, col));
+    }
+  }
+
   for (const entry of state.board_hazards) {
     const type = asString(entry.hazard_type ?? entry.hazardType);
     const row = asNumber(entry.row);
@@ -873,12 +899,10 @@ export function applyBoardHazardsOnLanding(input: {
 /** 「実」で異化した駒: 周囲 8 マスに敵の「実」がいなくなったら元の駒に戻す。 */
 function applyExperimentMutantReverts(pieces: AiBoardPiece[]): void {
   for (const piece of pieces) {
-    const hasRevert =
-      piece.mutantRevertChar != null || piece.mutantRevertPieceCode != null;
+    const hasRevert = piece.mutantRevertChar != null || piece.mutantRevertPieceCode != null;
     if (!hasRevert) continue;
 
-    const isMutantSurface =
-      piece.char === '異' || toBasePieceCode(piece.pieceCode) === 'MUTANT';
+    const isMutantSurface = piece.char === '異' || toBasePieceCode(piece.pieceCode) === 'MUTANT';
     if (!isMutantSurface) {
       delete piece.mutantRevertPieceCode;
       delete piece.mutantRevertChar;
@@ -891,8 +915,7 @@ function applyExperimentMutantReverts(pieces: AiBoardPiece[]): void {
     let adjacentEnemyExperiment = false;
     for (const other of pieces) {
       if (other.side !== enemySide) continue;
-      const isExperiment =
-        other.char === '実' || toBasePieceCode(other.pieceCode) === 'EXPERIMENT';
+      const isExperiment = other.char === '実' || toBasePieceCode(other.pieceCode) === 'EXPERIMENT';
       if (!isExperiment) continue;
       const dr = Math.abs(other.row - piece.row);
       const dc = Math.abs(other.col - piece.col);
@@ -2414,8 +2437,7 @@ export function applyMoveSkillEffects(input: {
             ) {
               continue;
             }
-            const armor =
-              target.char === '鎧' || toBasePieceCode(target.pieceCode) === 'ARMOR';
+            const armor = target.char === '鎧' || toBasePieceCode(target.pieceCode) === 'ARMOR';
             if (armor) continue;
             const spirit =
               target.char === '霊' ||
@@ -2499,8 +2521,7 @@ export function applyMoveSkillEffects(input: {
           ) {
             continue;
           }
-          const armor =
-            target.char === '鎧' || toBasePieceCode(target.pieceCode) === 'ARMOR';
+          const armor = target.char === '鎧' || toBasePieceCode(target.pieceCode) === 'ARMOR';
           if (armor) continue;
           const spirit =
             target.char === '霊' ||

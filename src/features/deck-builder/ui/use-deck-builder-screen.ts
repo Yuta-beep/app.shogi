@@ -265,9 +265,7 @@ export function isPieceBannedFromMyDeck(piece: OwnedPiece): boolean {
 }
 
 function filterBannedPiecesOutOfDeckArea(placements: BoardPlacement[]): BoardPlacement[] {
-  return placements.filter(
-    (p) => !(isDeckAreaRow(p.row) && isPieceBannedFromMyDeck(p.piece)),
-  );
+  return placements.filter((p) => !(isDeckAreaRow(p.row) && isPieceBannedFromMyDeck(p.piece)));
 }
 
 function isAllowedDeckPlacementByHtmlRules(piece: OwnedPiece, row: number, col: number): boolean {
@@ -681,7 +679,9 @@ export function useDeckBuilderScreen() {
     openDefaultModal: () => setDefaultModalOpen(true),
     closeDefaultModal: () => setDefaultModalOpen(false),
     loadDefault: () => {
-      setBoardPlacements(filterBannedPiecesOutOfDeckArea(createDefaultBoardPlacements(ownedPieces)));
+      setBoardPlacements(
+        filterBannedPiecesOutOfDeckArea(createDefaultBoardPlacements(ownedPieces)),
+      );
       setDefaultModalOpen(false);
       setSelectedPieceForPlacement(null);
     },

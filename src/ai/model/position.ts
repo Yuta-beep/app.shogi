@@ -126,7 +126,8 @@ export function piecesFromBoardState(position: AiBattlePosition): AiBoardPiece[]
     const mrpr = obj.mutantRevertPromoted ?? obj.mutant_revert_promoted;
     const mrimg = obj.mutantRevertImageSignedUrl ?? obj.mutant_revert_image_signed_url;
     const hasMutantRevert =
-      (typeof mrpc === 'string' && mrpc.length > 0) || (typeof mrch === 'string' && mrch.length > 0);
+      (typeof mrpc === 'string' && mrpc.length > 0) ||
+      (typeof mrch === 'string' && mrch.length > 0);
 
     pieces.push({
       side,

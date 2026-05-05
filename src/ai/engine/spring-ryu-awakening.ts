@@ -46,7 +46,9 @@ export type SpringDragonAwakeningPieceLike = {
 /** 盤面表示: 泉が味方にいる間、小竜を辰の見た目に寄せる（`getLocalPieceImageSource` が pieceCode 優先のため、辰の pieceCode も載せる）。 */
 export function mapPiecesForSpringDragonAwakeningDisplay<T extends SpringDragonAwakeningPieceLike>(
   pieces: T[],
-  pieceDefsByChar: Partial<Record<string, { imageSignedUrl?: string | null; pieceCode?: string | null }>>,
+  pieceDefsByChar: Partial<
+    Record<string, { imageSignedUrl?: string | null; pieceCode?: string | null }>
+  >,
 ): T[] {
   const sidesWithSpring = new Set<'player' | 'enemy'>();
   for (const p of pieces) {

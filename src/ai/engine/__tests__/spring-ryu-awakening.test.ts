@@ -56,9 +56,9 @@ describe('spring-ryu-awakening', () => {
     ];
     expect(hasAllySpringPieceOnBoard(pieces, 'player')).toBe(true);
     expect(hasAllySpringPieceOnBoard(pieces, 'enemy')).toBe(true);
-    expect(hasAllySpringPieceOnBoard([{ side: 'player', char: '歩', row: 0, col: 0 }], 'player')).toBe(
-      false,
-    );
+    expect(
+      hasAllySpringPieceOnBoard([{ side: 'player', char: '歩', row: 0, col: 0 }], 'player'),
+    ).toBe(false);
   });
 
   it('maps small dragon for rules to tatsu when spring is ally', () => {
@@ -73,16 +73,24 @@ describe('spring-ryu-awakening', () => {
   });
 
   it('does not awaken without spring', () => {
-    const pieces = [{ side: 'player', char: '竜', row: 4, col: 4, pieceCode: 'RYU', promoted: false }];
+    const pieces = [
+      { side: 'player', char: '竜', row: 4, col: 4, pieceCode: 'RYU', promoted: false },
+    ];
     const eff = effectivePieceForRulesAfterSpring(pieces[0] as never, pieces as never, lookups);
     expect(eff.pieceCode).toBe('RYU');
     expect(eff.char).toBe('竜');
   });
 
   it('isUnpromotedSmallDragonPiece matches RYU and 竜', () => {
-    expect(isUnpromotedSmallDragonPiece({ char: '竜', pieceCode: 'X', promoted: false })).toBe(true);
-    expect(isUnpromotedSmallDragonPiece({ char: '飛', pieceCode: 'RYU', promoted: false })).toBe(true);
-    expect(isUnpromotedSmallDragonPiece({ char: '竜', pieceCode: 'RYU', promoted: true })).toBe(false);
+    expect(isUnpromotedSmallDragonPiece({ char: '竜', pieceCode: 'X', promoted: false })).toBe(
+      true,
+    );
+    expect(isUnpromotedSmallDragonPiece({ char: '飛', pieceCode: 'RYU', promoted: false })).toBe(
+      true,
+    );
+    expect(isUnpromotedSmallDragonPiece({ char: '竜', pieceCode: 'RYU', promoted: true })).toBe(
+      false,
+    );
   });
 
   it('display mapper sets char 辰, tatsu pieceCode, and image', () => {

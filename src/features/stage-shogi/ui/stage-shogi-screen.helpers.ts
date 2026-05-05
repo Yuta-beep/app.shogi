@@ -620,7 +620,9 @@ export function reconcileExtendedPieceHandsAgainstBoard(
         codeU === 'MACHINE' ||
         codeU === 'HOUSE' ||
         codeU === 'PEOPLE' ||
-        codeU === 'FIELD'
+        codeU === 'FIELD' ||
+        codeU === 'BOOK' ||
+        codeU === 'SEAL'
       ) {
         continue;
       }

@@ -67,6 +67,69 @@ function isVanishOnCapturePiece(piece: { pieceCode: string | null; char: string 
   return false;
 }
 
+function resolveCapturedHandCode(
+  captured: AiBoardPiece,
+  fallbackCapturedCode: string | null,
+): string | null {
+  const rawCapturedCode = (captured.pieceCode ?? '').toUpperCase();
+  const capturedChar = (() => {
+    try {
+      return (captured.char ?? '').normalize('NFKC');
+    } catch {
+      return captured.char ?? '';
+    }
+  })();
+  if (capturedChar === '書' || capturedChar === '書物' || rawCapturedCode.includes('5D848242A136')) {
+    return 'BOOK';
+  }
+  if (capturedChar === '封' || rawCapturedCode.includes('7000FED9D9D4')) {
+    return 'SEAL';
+  }
+  if (rawCapturedCode.includes('BOOK')) {
+    return 'BOOK';
+  }
+  if (rawCapturedCode.includes('SEAL')) {
+    return 'SEAL';
+  }
+  const fromCaptured = toBasePieceCode(capturedToHandPieceCode(captured));
+  if (fromCaptured) return fromCaptured;
+  const fb = toBasePieceCode(fallbackCapturedCode);
+  if (!fb) return null;
+  if (fb.includes('BOOK') || fb.includes('5D848242A136')) return 'BOOK';
+  if (fb.includes('SEAL') || fb.includes('7000FED9D9D4')) return 'SEAL';
+  // opaque id をそのまま手駒キーにしない（手駒表示不能の原因）。
+  if (/^PIECE_[A-Z0-9_]+$/i.test(fb)) return null;
+  return fb;
+}
+
+function debugLogBookCaptureToHand(input: {
+  actorSide: Side;
+  captured: AiBoardPiece;
+  resolvedCode: string | null;
+  fallbackCapturedCode: string | null;
+  hands: HandsBag;
+}): void {
+  const ch = (() => {
+    try {
+      return (input.captured.char ?? '').normalize('NFKC');
+    } catch {
+      return input.captured.char ?? '';
+    }
+  })();
+  const rawCode = (input.captured.pieceCode ?? '').toUpperCase();
+  const isBook = ch === '書' || ch === '書物' || rawCode.includes('BOOK') || rawCode.includes('5D848242A136');
+  if (!isBook) return;
+  console.info('[book-capture-debug] add-to-hand', {
+    actorSide: input.actorSide,
+    capturedAt: [input.captured.row, input.captured.col],
+    capturedChar: input.captured.char,
+    capturedCode: input.captured.pieceCode,
+    fallbackCapturedCode: input.fallbackCapturedCode,
+    resolvedCode: input.resolvedCode,
+    actorHands: input.hands[input.actorSide],
+  });
+}
+
 function kbossEffectiveLives(piece: { kbossLivesRemaining?: number }): number {
   const v = piece.kbossLivesRemaining;
   if (v === 1 || v === 2) return v;
@@ -88,8 +151,7 @@ function isGunPieceForApply(piece: { pieceCode: string | null; char: string }): 
 }
 
 function gunApplyDebugLog(payload: Record<string, unknown>): void {
-  if (typeof __DEV__ === 'undefined' || !__DEV__) return;
-  console.log('[銃-debug] apply-move', payload);
+  void payload;
 }
 
 function isKatanaPieceForApply(piece: { pieceCode: string | null; char: string }): boolean {
@@ -107,17 +169,12 @@ function katanaForwardOneDeltaRow(actorSide: Side): number {
 /** 前方ちょうど1マスへ進む着手（名刀の唯一の移動）か。打ちは対象外。 */
 function isKatanaForwardCaptureMove(
   actorSide: Side,
-  move: Pick<
-    BattleMove,
-    'fromRow' | 'fromCol' | 'toRow' | 'toCol' | 'dropPieceCode'
-  >,
+  move: Pick<BattleMove, 'fromRow' | 'fromCol' | 'toRow' | 'toCol' | 'dropPieceCode'>,
 ): boolean {
   if (move.dropPieceCode) return false;
   if (move.fromRow == null || move.fromCol == null) return false;
   const dForward = katanaForwardOneDeltaRow(actorSide);
-  return (
-    move.fromCol === move.toCol && move.toRow === move.fromRow + dForward
-  );
+  return move.fromCol === move.toCol && move.toRow === move.fromRow + dForward;
 }
 
 /** skill_definitions_v2 に依存せず、名刀「刀」は前方1マスで敵を取ったとき、着地点の左右1マスにいる敵駒をまとめて処理する（鎧は斬撃で取れない）。 */
@@ -128,10 +185,7 @@ function applyIntrinsicKatanaSideCaptures(input: {
   actorSide: Side;
   didCapture: boolean;
   movedPiece: AiBoardPiece | null;
-  move: Pick<
-    BattleMove,
-    'fromRow' | 'fromCol' | 'toRow' | 'toCol' | 'dropPieceCode'
-  >;
+  move: Pick<BattleMove, 'fromRow' | 'fromCol' | 'toRow' | 'toCol' | 'dropPieceCode'>;
 }): {
   nextPieces: AiBoardPiece[];
   hands: HandsBag;
@@ -306,18 +360,30 @@ function applyHostileCaptureAtCell(input: {
       starReturnProcTriggered = true;
       hands = addHandPiece(hands, captured.side, 'HOS', 1);
     } else {
-      const capturedCode =
-        toBasePieceCode(capturedToHandPieceCode(captured)) ?? input.fallbackCapturedCode;
+      const capturedCode = resolveCapturedHandCode(captured, input.fallbackCapturedCode);
       if (capturedCode) {
         hands = addHandPiece(hands, input.actorSide, capturedCode, 1);
       }
+      debugLogBookCaptureToHand({
+        actorSide: input.actorSide,
+        captured,
+        resolvedCode: capturedCode,
+        fallbackCapturedCode: input.fallbackCapturedCode,
+        hands,
+      });
     }
   } else {
-    const capturedCode =
-      toBasePieceCode(capturedToHandPieceCode(captured)) ?? input.fallbackCapturedCode;
+    const capturedCode = resolveCapturedHandCode(captured, input.fallbackCapturedCode);
     if (capturedCode) {
       hands = addHandPiece(hands, input.actorSide, capturedCode, 1);
     }
+    debugLogBookCaptureToHand({
+      actorSide: input.actorSide,
+      captured,
+      resolvedCode: capturedCode,
+      fallbackCapturedCode: input.fallbackCapturedCode,
+      hands,
+    });
   }
 
   return { nextPieces, hands, didCapture: true, starReturnProcTriggered, rebuffKboss };
@@ -405,13 +471,16 @@ export function applyMove(input: {
 
     // 銃: 前方ちょうど2マスへ進む手では、まず1マス目の敵を取ってから2マス目へ入る（両方敵なら同一手で連続取り）。斜め後ろ2マス貫通も同様。
     const gunPen =
-      isGunPieceForApply(movingPiece) &&
-      move.fromRow != null &&
-      move.fromCol != null
-        ? computeGunPenetrationMidpoint(actorSide, move.fromRow, move.fromCol, move.toRow, move.toCol)
+      isGunPieceForApply(movingPiece) && move.fromRow != null && move.fromCol != null
+        ? computeGunPenetrationMidpoint(
+            actorSide,
+            move.fromRow,
+            move.fromCol,
+            move.toRow,
+            move.toCol,
+          )
         : null;
-    const midForGun =
-      gunPen != null ? findPieceAt(nextPieces, gunPen.midRow, gunPen.midCol) : null;
+    const midForGun = gunPen != null ? findPieceAt(nextPieces, gunPen.midRow, gunPen.midCol) : null;
 
     if (isGunPieceForApply(movingPiece)) {
       gunApplyDebugLog({
@@ -518,11 +587,7 @@ export function applyMove(input: {
           const ph = nextPieces[phIdx]!;
           nextPieces[phIdx] = { ...ph, row: pick.row, col: pick.col };
         }
-      } else if (
-        !captureOwnPiece &&
-        isKbossPiece(captured) &&
-        kbossEffectiveLives(captured) > 1
-      ) {
+      } else if (!captureOwnPiece && isKbossPiece(captured) && kbossEffectiveLives(captured) > 1) {
         rebuffKboss = true;
         didCapture = false;
         const kIdx = nextPieces.findIndex(
@@ -543,8 +608,7 @@ export function applyMove(input: {
         const fallbackCapturedCode = toBasePieceCode(move.capturedPieceCode);
         if (captureOwnPiece) {
           // 雲の味方捕獲は自分の手駒に加える。
-          const capturedCode =
-            toBasePieceCode(capturedToHandPieceCode(captured)) ?? fallbackCapturedCode;
+          const capturedCode = resolveCapturedHandCode(captured, fallbackCapturedCode);
           if (capturedCode) {
             hands = addHandPiece(hands, actorSide, capturedCode, 1);
           }
@@ -564,15 +628,13 @@ export function applyMove(input: {
               starReturnProcTriggered = true;
               hands = addHandPiece(hands, captured.side, 'HOS', 1);
             } else {
-              const capturedCode =
-                toBasePieceCode(capturedToHandPieceCode(captured)) ?? fallbackCapturedCode;
+              const capturedCode = resolveCapturedHandCode(captured, fallbackCapturedCode);
               if (capturedCode) {
                 hands = addHandPiece(hands, actorSide, capturedCode, 1);
               }
             }
           } else {
-            const capturedCode =
-              toBasePieceCode(capturedToHandPieceCode(captured)) ?? fallbackCapturedCode;
+            const capturedCode = resolveCapturedHandCode(captured, fallbackCapturedCode);
             if (capturedCode) {
               hands = addHandPiece(hands, actorSide, capturedCode, 1);
             }
@@ -624,8 +686,7 @@ export function applyMove(input: {
         didCapture,
         rebuffKboss,
         hadGunPenetration: gunPen != null,
-        intrinsicCombatSkillFlag:
-          gunPen != null && isGunPieceForApply(movingPiece) && didCapture,
+        intrinsicCombatSkillFlag: gunPen != null && isGunPieceForApply(movingPiece) && didCapture,
         landing: movedPieceAfterApply
           ? { row: movedPieceAfterApply.row, col: movedPieceAfterApply.col }
           : null,
@@ -725,6 +786,25 @@ export function applyMove(input: {
     ...(recomputedPosition.boardState ?? {}),
     ...(nextPosition.boardState ?? {}),
   };
+  const skillStateRaw =
+    (recomputedPosition.boardState as Record<string, unknown>).skill_state ??
+    (recomputedPosition.boardState as Record<string, unknown>).skillState;
+  const skillState =
+    skillStateRaw && typeof skillStateRaw === 'object'
+      ? { ...(skillStateRaw as Record<string, unknown>) }
+      : {};
+  if (movedPieceAfterApply) {
+    const key = actorSide === 'player' ? 'last_player_moved_piece' : 'last_enemy_moved_piece';
+    skillState[key] = {
+      side: actorSide,
+      row: movedPieceAfterApply.row,
+      col: movedPieceAfterApply.col,
+      pieceCode: movedPieceAfterApply.pieceCode,
+      char: movedPieceAfterApply.char,
+      promoted: movedPieceAfterApply.promoted === true,
+    };
+  }
+  (recomputedPosition.boardState as Record<string, unknown>).skill_state = skillState;
   nextPosition = recomputedPosition;
 
   if (!winnerSide) {
