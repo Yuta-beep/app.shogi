@@ -1686,6 +1686,8 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
         : lookupChar;
     const opaqueBookCode =
       typeof target.pieceCode === 'string' && /5D848242A136/i.test(target.pieceCode);
+    const opaqueSaintCode =
+      typeof target.pieceCode === 'string' && /A3BAB6C13DC7/i.test(target.pieceCode);
     const displayChar =
       resolvedChar && resolvedChar !== '?'
         ? resolvedChar
@@ -1693,7 +1695,11 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
           ? '書'
         : opaqueBookCode
           ? '書'
-          : lookupChar;
+          : (target.pieceCode ?? '').toUpperCase() === 'SAINT'
+            ? '聖'
+            : opaqueSaintCode
+              ? '聖'
+              : lookupChar;
     const detail =
       pieceDefsByChar[displayChar] ??
       (target.pieceCode ? pieceDefsByCode[target.pieceCode] : undefined) ??

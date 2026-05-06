@@ -427,6 +427,10 @@ export const CODE_TO_CHAR: Readonly<Record<string, string>> = {
   EXPERIMENT: '実',
   MUTANT: '異',
   KBOSS: 'K',
+  BIGNOISE: '轟',
+  BULL: '犇',
+  RITUAL: '礼',
+  SAINT: '聖',
 };
 
 export const PROMOTED_CODE_TO_CHAR: Readonly<Record<string, string>> = {
@@ -506,6 +510,10 @@ export const CHAR_TO_CODE: Readonly<Record<string, string>> = {
   実: 'EXPERIMENT',
   異: 'MUTANT',
   K: 'KBOSS',
+  轟: 'BIGNOISE',
+  犇: 'BULL',
+  礼: 'RITUAL',
+  聖: 'SAINT',
   /** 刀／剣／銃／鎧／盾は `CHAR_TO_CODE` に載せない（`piecesFromBoardState` が canonical に寄せて `resolvePieceDef` が壊れる）。手駒は `game-rules` の CAPTURE_CHAR_TO_HAND_CODE。 */
 };
 

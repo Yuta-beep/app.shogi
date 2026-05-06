@@ -622,8 +622,17 @@ export function reconcileExtendedPieceHandsAgainstBoard(
         codeU === 'PEOPLE' ||
         codeU === 'FIELD' ||
         codeU === 'BOOK' ||
-        codeU === 'SEAL'
+        codeU === 'SEAL' ||
+        codeU === 'BIGNOISE' ||
+        codeU === 'BULL' ||
+        codeU === 'RITUAL' ||
+        codeU === 'SAINT'
       ) {
+        continue;
+      }
+      // DB 由来の opaque 駒コード（PIECE_...）は盤上実体との 1:1 対応が崩れやすく、
+      // ここで減算すると捕獲後の手駒が消えるため補正対象から除外する。
+      if (/^PIECE_[A-Z0-9_]+$/i.test(codeU)) {
         continue;
       }
       if (STANDARD_PIECE_CODES.has(codeU)) continue;

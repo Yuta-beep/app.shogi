@@ -183,11 +183,19 @@ const CAPTURE_CHAR_TO_HAND_CODE: Readonly<Record<string, string>> = {
   書: 'BOOK',
   書物: 'BOOK',
   封: 'SEAL',
+  轟: 'BIGNOISE',
+  犇: 'BULL',
+  礼: 'RITUAL',
+  聖: 'SAINT',
 };
 
 const OPAQUE_CAPTURE_CODE_TO_HAND_CODE: Readonly<Record<string, string>> = {
   PIECE_5D848242A136: 'BOOK',
   PIECE_7000FED9D9D4: 'SEAL',
+  PIECE_D24741D0EF18: 'BIGNOISE',
+  PIECE_1275B5728D1C: 'BULL',
+  PIECE_4FCDDF14D08D: 'RITUAL',
+  PIECE_A3BAB6C13DC7: 'SAINT',
 };
 
 function opaqueCapturedCodeToHandCode(rawCode: string | null): string | null {
@@ -199,8 +207,16 @@ function opaqueCapturedCodeToHandCode(rawCode: string | null): string | null {
   // 文字列揺れ（PIECE_SHOGI_*, 余計な接頭辞など）でも「書」ID なら BOOK に寄せる。
   if (upper.includes('5D848242A136')) return 'BOOK';
   if (upper.includes('7000FED9D9D4')) return 'SEAL';
+  if (upper.includes('D24741D0EF18')) return 'BIGNOISE';
+  if (upper.includes('1275B5728D1C')) return 'BULL';
+  if (upper.includes('4FCDDF14D08D')) return 'RITUAL';
+  if (upper.includes('A3BAB6C13DC7')) return 'SAINT';
   if (upper.includes('BOOK')) return 'BOOK';
   if (upper.includes('SEAL')) return 'SEAL';
+  if (upper.includes('BIGNOISE')) return 'BIGNOISE';
+  if (upper.includes('BULL')) return 'BULL';
+  if (upper.includes('RITUAL')) return 'RITUAL';
+  if (upper.includes('SAINT')) return 'SAINT';
   return null;
 }
 

@@ -43,6 +43,8 @@ const POISON_PIECE_CODES = new Set(['POISON', '毒']);
 const A_PIECE_CODES = new Set(['A', 'あ']);
 const WOOD_PIECE_CODES = new Set(['WOOD', 'MOK', '木']);
 const LEAF_PIECE_CODES = new Set(['LEAF', 'HAA', '葉']);
+const BULL_PIECE_CODES = new Set(['BULL', '犇', '1275B5728D1C']);
+const BIGNOISE_PIECE_CODES = new Set(['BIGNOISE', '轟', 'D24741D0EF18']);
 const DEMON_PIECE_CODES = new Set(['DEMON', 'MAK', '魔']);
 const DARK_PIECE_CODES = new Set(['DARK', 'YAM', '闇']);
 const PEAK_PIECE_CODES = new Set(['PEAK', 'MINE', '峰', '5A24E1332FF7']);
@@ -353,6 +355,44 @@ function pushOrthogonalAdjacentEnemiesToEdge(input: {
   return pushed;
 }
 
+function warpHorizontalAdjacentEnemiesToRandomEmptyCell(input: {
+  pieces: AiBoardPiece[];
+  center: AiBoardPiece;
+  actorSide: Side;
+}): number {
+  const offsets: ReadonlyArray<{ dr: number; dc: number }> = [
+    { dr: 0, dc: -1 },
+    { dr: 0, dc: 1 },
+  ];
+  let warped = 0;
+  for (const offset of offsets) {
+    const row = input.center.row + offset.dr;
+    const col = input.center.col + offset.dc;
+    if (row < 0 || row > 8 || col < 0 || col > 8) continue;
+    const idx = input.pieces.findIndex((piece) => piece.row === row && piece.col === col);
+    if (idx < 0) continue;
+    const target = input.pieces[idx]!;
+    if (target.side === input.actorSide) continue;
+    const emptyCells: Array<{ row: number; col: number }> = [];
+    for (let r = 0; r <= 8; r += 1) {
+      for (let c = 0; c <= 8; c += 1) {
+        if (r === target.row && c === target.col) continue;
+        if (!isCellEmpty(input.pieces, r, c)) continue;
+        emptyCells.push({ row: r, col: c });
+      }
+    }
+    if (emptyCells.length === 0) continue;
+    const picked = emptyCells[Math.floor(Math.random() * emptyCells.length)]!;
+    input.pieces[idx] = {
+      ...target,
+      row: picked.row,
+      col: picked.col,
+    };
+    warped += 1;
+  }
+  return warped;
+}
+
 function moveAdjacentAllySandWithLeader(input: {
   pieces: AiBoardPiece[];
   center: AiBoardPiece;
@@ -509,6 +549,39 @@ function summonRandomAdjacentEmptyPiece(input: {
     imageSignedUrl: null,
   });
   return { summoned: true, row: selected.row, col: selected.col };
+}
+
+function summonOrthogonalAdjacentEmptyPieces(input: {
+  pieces: AiBoardPiece[];
+  center: AiBoardPiece;
+  actorSide: Side;
+  summonCode: string;
+  summonChar: string;
+}): Array<{ row: number; col: number }> {
+  const summoned: Array<{ row: number; col: number }> = [];
+  const directions: ReadonlyArray<{ dr: number; dc: number }> = [
+    { dr: -1, dc: 0 },
+    { dr: 1, dc: 0 },
+    { dr: 0, dc: -1 },
+    { dr: 0, dc: 1 },
+  ];
+  for (const direction of directions) {
+    const row = input.center.row + direction.dr;
+    const col = input.center.col + direction.dc;
+    if (row < 0 || row > 8 || col < 0 || col > 8) continue;
+    if (!isCellEmpty(input.pieces, row, col)) continue;
+    input.pieces.push({
+      side: input.actorSide,
+      row,
+      col,
+      pieceCode: input.summonCode,
+      char: input.summonChar,
+      promoted: false,
+      imageSignedUrl: null,
+    });
+    summoned.push({ row, col });
+  }
+  return summoned;
 }
 
 /** 家スキル: 自陣4行の空マスに民を1体召喚（row 0 が盤の奥＝画面上端、player は手前 row 5–8 が自陣） */
@@ -1018,6 +1091,14 @@ export function applyMoveSkillEffects(input: {
     WOOD_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '木';
   const isLeafMover =
     LEAF_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '葉';
+  const isBullMover =
+    BULL_PIECE_CODES.has(movedCode) ||
+    normalizeSkillPieceCode(input.move.pieceCode) === '犇' ||
+    (movedPiece ? movedPiece.char === '犇' : false);
+  const isBignoiseMover =
+    BIGNOISE_PIECE_CODES.has(movedCode) ||
+    normalizeSkillPieceCode(input.move.pieceCode) === '轟' ||
+    (movedPiece ? movedPiece.char === '轟' : false);
   const isDemonMover =
     DEMON_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '魔';
   const isDarkMover =
@@ -1604,6 +1685,52 @@ export function applyMoveSkillEffects(input: {
       });
     }
   }
+  // 犇: 移動時10%で前後左右4マスの空きマスに犇を召喚。
+  if (isBullMover && input.move.fromRow != null && input.move.fromCol != null && input.movedPiece) {
+    const procChance = 0.1;
+    const roll = Math.random();
+    const triggered = roll <= procChance;
+    const summoned = triggered
+      ? summonOrthogonalAdjacentEmptyPieces({
+          pieces: input.pieces,
+          center: input.movedPiece,
+          actorSide: input.actorSide,
+          summonCode: 'BULL',
+          summonChar: '犇',
+        })
+      : [];
+    console.info('[bull-skill-debug]', {
+      moveCount: input.position.moveCount,
+      turnNumber: input.position.turnNumber,
+      actorSide: input.actorSide,
+      at: [input.movedPiece.row, input.movedPiece.col],
+      procChance,
+      roll,
+      triggered,
+      summonedCount: summoned.length,
+      summoned,
+    });
+  }
+  // 轟: 移動時、左右1マスの敵駒を盤面のランダム空きマスへ飛ばす。
+  if (
+    isBignoiseMover &&
+    input.move.fromRow != null &&
+    input.move.fromCol != null &&
+    input.movedPiece
+  ) {
+    const warped = warpHorizontalAdjacentEnemiesToRandomEmptyCell({
+      pieces: input.pieces,
+      center: input.movedPiece,
+      actorSide: input.actorSide,
+    });
+    console.info('[bignoise-skill-debug]', {
+      moveCount: input.position.moveCount,
+      turnNumber: input.position.turnNumber,
+      actorSide: input.actorSide,
+      at: [input.movedPiece.row, input.movedPiece.col],
+      warpedCount: warped,
+    });
+  }
   // 魔: 移動時10%で周囲8マスの敵駒を最大2体消滅。
   if (
     isDemonMover &&
@@ -1922,7 +2049,7 @@ export function applyMoveSkillEffects(input: {
       });
     }
   }
-  const skipGenericAdjacentSummon = isWoodMover || isLeafMover;
+  const skipGenericAdjacentSummon = isWoodMover || isLeafMover || isBullMover;
   const skipGenericAdjacentRemove = isDemonMover || isTatsuGodMover;
   if (defs.length === 0) {
     writeSkillState(input.position, state);

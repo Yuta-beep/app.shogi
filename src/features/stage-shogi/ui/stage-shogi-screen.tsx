@@ -34,8 +34,11 @@ export function StageShogiScreen() {
   }
 
   const stageNo = Number(stageParam);
+  const forceBlackBackground = Number.isFinite(stageNo) && stageNo === 33;
   const stageBattleBackgroundSource =
-    Number.isFinite(stageNo) && stageNo > 0 ? getNormalDungeonStagePreviewSource(stageNo) : null;
+    Number.isFinite(stageNo) && stageNo > 0 && stageNo !== 33
+      ? getNormalDungeonStagePreviewSource(stageNo)
+      : null;
 
   return (
     <UiScreenShell
@@ -45,6 +48,7 @@ export function StageShogiScreen() {
       plainHeader
       homeButtonTextClassName="text-white"
       fullBleedBackgroundSource={stageBattleBackgroundSource ?? undefined}
+      useBlackBackgroundWhenNoImage={forceBlackBackground}
     >
       <View className="rounded-xl border-2 border-accent bg-[#f3ead3] p-3">
         <Text className="text-sm font-bold text-[#6b4532]">{`TURN ${vm.moveNo}`}</Text>

@@ -85,11 +85,35 @@ function resolveCapturedHandCode(
   if (capturedChar === '封' || rawCapturedCode.includes('7000FED9D9D4')) {
     return 'SEAL';
   }
+  if (capturedChar === '轟' || rawCapturedCode.includes('D24741D0EF18')) {
+    return 'BIGNOISE';
+  }
+  if (capturedChar === '犇' || rawCapturedCode.includes('1275B5728D1C')) {
+    return 'BULL';
+  }
   if (rawCapturedCode.includes('BOOK')) {
     return 'BOOK';
   }
   if (rawCapturedCode.includes('SEAL')) {
     return 'SEAL';
+  }
+  if (rawCapturedCode.includes('BIGNOISE')) {
+    return 'BIGNOISE';
+  }
+  if (rawCapturedCode.includes('BULL')) {
+    return 'BULL';
+  }
+  if (capturedChar === '礼' || rawCapturedCode.includes('4FCDDF14D08D')) {
+    return 'RITUAL';
+  }
+  if (capturedChar === '聖' || rawCapturedCode.includes('A3BAB6C13DC7')) {
+    return 'SAINT';
+  }
+  if (rawCapturedCode.includes('RITUAL')) {
+    return 'RITUAL';
+  }
+  if (rawCapturedCode.includes('SAINT')) {
+    return 'SAINT';
   }
   const fromCaptured = toBasePieceCode(capturedToHandPieceCode(captured));
   if (fromCaptured) return fromCaptured;
@@ -97,6 +121,8 @@ function resolveCapturedHandCode(
   if (!fb) return null;
   if (fb.includes('BOOK') || fb.includes('5D848242A136')) return 'BOOK';
   if (fb.includes('SEAL') || fb.includes('7000FED9D9D4')) return 'SEAL';
+  if (fb.includes('RITUAL') || fb.includes('4FCDDF14D08D')) return 'RITUAL';
+  if (fb.includes('SAINT') || fb.includes('A3BAB6C13DC7')) return 'SAINT';
   // opaque id をそのまま手駒キーにしない（手駒表示不能の原因）。
   if (/^PIECE_[A-Z0-9_]+$/i.test(fb)) return null;
   return fb;
@@ -242,6 +268,47 @@ function isKingPieceForApply(piece: { pieceCode: string | null; char: string }):
   return b === 'OU' || piece.char === '王' || piece.char === '玉';
 }
 
+/** 礼拝者「礼」（嶺の REI コードとは別） */
+function isReiRitualPiece(piece: { pieceCode: string | null; char: string }): boolean {
+  const ch = normKanjiForEngineRules(piece.char);
+  if (ch === '礼') return true;
+  const raw = (piece.pieceCode ?? '').toUpperCase();
+  if (raw.includes('4FCDDF14D08D')) return true;
+  const b = toBasePieceCode(piece.pieceCode);
+  return b === 'RITUAL';
+}
+
+/** 他の味方が取られたとき、盤上に別の「礼」がいれば1体を身代わりで消す */
+function shouldConsumeReiSubstituteAfterAllyCapture(
+  boardWithCaptured: AiBoardPiece[],
+  captured: AiBoardPiece,
+): boolean {
+  if (isKingPieceForApply(captured)) return false;
+  if (isReiRitualPiece(captured)) return false;
+  const side = captured.side;
+  return boardWithCaptured.some(
+    (p) =>
+      p.side === side &&
+      isReiRitualPiece(p) &&
+      !(p.row === captured.row && p.col === captured.col),
+  );
+}
+
+function removeFirstReiRitualFromSide(pieces: AiBoardPiece[], side: Side): AiBoardPiece[] {
+  const idx = pieces.findIndex((p) => p.side === side && isReiRitualPiece(p));
+  if (idx < 0) return pieces;
+  return pieces.filter((_, i) => i !== idx);
+}
+
+/** 「礼」身代わり時は取られた駒を相手ではなく防御側の手駒に戻す */
+function targetHandSideForCapturedPiece(
+  actorSide: Side,
+  defenderSide: Side,
+  consumeReiSubstitute: boolean,
+): Side {
+  return consumeReiSubstitute ? defenderSide : actorSide;
+}
+
 /** 合法手生成の isGunFullyBlockingAllyOnMid と同じ。王・鎧・K博士以外の味方は貫通で除去する。 */
 function isGunFullyBlockingAllyOnMidForApply(mid: AiBoardPiece, actorSide: Side): boolean {
   if (mid.side !== actorSide) return false;
@@ -345,6 +412,7 @@ function applyHostileCaptureAtCell(input: {
     return { nextPieces, hands, didCapture: false, starReturnProcTriggered, rebuffKboss };
   }
 
+  const consumeReiSubstitute = shouldConsumeReiSubstituteAfterAllyCapture(nextPieces, captured);
   nextPieces = nextPieces.filter((piece) => !(piece.row === input.row && piece.col === input.col));
   const isSpiritCaptured = isSpiritPiece(captured);
   const capturedBaseCode = toBasePieceCode(captured.pieceCode);
@@ -362,7 +430,12 @@ function applyHostileCaptureAtCell(input: {
     } else {
       const capturedCode = resolveCapturedHandCode(captured, input.fallbackCapturedCode);
       if (capturedCode) {
-        hands = addHandPiece(hands, input.actorSide, capturedCode, 1);
+        const handSide = targetHandSideForCapturedPiece(
+          input.actorSide,
+          captured.side,
+          consumeReiSubstitute,
+        );
+        hands = addHandPiece(hands, handSide, capturedCode, 1);
       }
       debugLogBookCaptureToHand({
         actorSide: input.actorSide,
@@ -375,7 +448,12 @@ function applyHostileCaptureAtCell(input: {
   } else {
     const capturedCode = resolveCapturedHandCode(captured, input.fallbackCapturedCode);
     if (capturedCode) {
-      hands = addHandPiece(hands, input.actorSide, capturedCode, 1);
+      const handSide = targetHandSideForCapturedPiece(
+        input.actorSide,
+        captured.side,
+        consumeReiSubstitute,
+      );
+      hands = addHandPiece(hands, handSide, capturedCode, 1);
     }
     debugLogBookCaptureToHand({
       actorSide: input.actorSide,
@@ -384,6 +462,10 @@ function applyHostileCaptureAtCell(input: {
       fallbackCapturedCode: input.fallbackCapturedCode,
       hands,
     });
+  }
+
+  if (consumeReiSubstitute) {
+    nextPieces = removeFirstReiRitualFromSide(nextPieces, captured.side);
   }
 
   return { nextPieces, hands, didCapture: true, starReturnProcTriggered, rebuffKboss };
@@ -602,6 +684,10 @@ export function applyMove(input: {
         }
       } else {
         didCapture = true;
+        const consumeReiSubstitute =
+          !captureOwnPiece && captured
+            ? shouldConsumeReiSubstituteAfterAllyCapture(nextPieces, captured)
+            : false;
         nextPieces = nextPieces.filter(
           (piece) => !(piece.row === move.toRow && piece.col === move.toCol),
         );
@@ -630,15 +716,28 @@ export function applyMove(input: {
             } else {
               const capturedCode = resolveCapturedHandCode(captured, fallbackCapturedCode);
               if (capturedCode) {
-                hands = addHandPiece(hands, actorSide, capturedCode, 1);
+                const handSide = targetHandSideForCapturedPiece(
+                  actorSide,
+                  captured.side,
+                  consumeReiSubstitute,
+                );
+                hands = addHandPiece(hands, handSide, capturedCode, 1);
               }
             }
           } else {
             const capturedCode = resolveCapturedHandCode(captured, fallbackCapturedCode);
             if (capturedCode) {
-              hands = addHandPiece(hands, actorSide, capturedCode, 1);
+              const handSide = targetHandSideForCapturedPiece(
+                actorSide,
+                captured.side,
+                consumeReiSubstitute,
+              );
+              hands = addHandPiece(hands, handSide, capturedCode, 1);
             }
           }
+        }
+        if (consumeReiSubstitute && captured) {
+          nextPieces = removeFirstReiRitualFromSide(nextPieces, captured.side);
         }
       }
     }

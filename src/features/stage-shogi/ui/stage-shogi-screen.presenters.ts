@@ -56,12 +56,26 @@ const GUN_SKILL_INSPECT =
 const BOOK_SKILL_INSPECT = 'なし';
 const SEAL_SKILL_INSPECT =
   'この駒の斜め4方向に隣接する敵駒は移動できない。';
+const BIGNOISE_SKILL_INSPECT = '轟音で移動時両隣の敵駒を吹き飛ばす。';
+const RITUAL_SKILL_INSPECT =
+  '他の味方駒が取られたとき、この駒が身代わりとなり消滅し、取られた味方駒は自分の持ち駒に戻る。';
+const SAINT_SKILL_INSPECT =
+  'この駒の前後左右1マスにいる味方駒の移動範囲を、各方向1マスずつ増やす。';
 
-function isBookOrSealByCode(pieceCode?: string | null): { book: boolean; seal: boolean } {
+function inspectPieceFlagsByCode(pieceCode?: string | null): {
+  book: boolean;
+  seal: boolean;
+  bignoise: boolean;
+  ritual: boolean;
+  saint: boolean;
+} {
   const code = (pieceCode ?? '').toUpperCase();
   return {
     book: code === 'BOOK',
     seal: code === 'SEAL',
+    bignoise: code === 'BIGNOISE',
+    ritual: code === 'RITUAL' || code.includes('4FCDDF14D08D'),
+    saint: code === 'SAINT' || code.includes('A3BAB6C13DC7'),
   };
 }
 
@@ -70,11 +84,14 @@ export function resolveInspectSkillDescription(
   desc: string | undefined,
   pieceCode?: string | null,
 ): string {
-  const byCode = isBookOrSealByCode(pieceCode);
+  const byCode = inspectPieceFlagsByCode(pieceCode);
   if (char === '刀') return KATANA_SKILL_INSPECT;
   if (char === '銃') return GUN_SKILL_INSPECT;
   if (char === '書' || byCode.book) return BOOK_SKILL_INSPECT;
   if (char === '封' || byCode.seal) return SEAL_SKILL_INSPECT;
+  if (char === '轟' || byCode.bignoise) return BIGNOISE_SKILL_INSPECT;
+  if (char === '礼' || byCode.ritual) return RITUAL_SKILL_INSPECT;
+  if (char === '聖' || byCode.saint) return SAINT_SKILL_INSPECT;
   if (char === '葉') return LEAF_SKILL_DESCRIPTION;
   if (char === '電') return ELECTRIC_SKILL_DESCRIPTION;
   if (char === '氷') return ICE_SKILL_DESCRIPTION;
@@ -104,11 +121,12 @@ export function resolveInspectMoveDescription(
   move: string | undefined,
   pieceCode?: string | null,
 ): string {
-  const byCode = isBookOrSealByCode(pieceCode);
+  const byCode = inspectPieceFlagsByCode(pieceCode);
   if (char === '刀') return '前方1マス。';
   if (char === '銃') return '前1～2マス、または斜め後ろ2マス。';
   if (char === '書' || byCode.book) return '周囲8マスの味方駒が動ける範囲の和集合。';
   if (char === '封' || byCode.seal) return '通常移動 + 斜め4方向に移動不能オーラ。';
+  if (char === '聖' || byCode.saint) return '全方向に1マス。';
   if (char === '闇') return '全方向に1マス';
   if (char === '月') {
     return 'TURN数を4で割った余りが0または1のときは全方位に1マス、余りが2または3のときは全方位に2マスまで移動できる。';

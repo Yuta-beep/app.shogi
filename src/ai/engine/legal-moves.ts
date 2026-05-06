@@ -108,6 +108,41 @@ function isBookPiece(piece: AiBoardPiece): boolean {
   return code === 'BOOK';
 }
 
+/** 聖者「聖」— 嶺(REI) とは別物 */
+function isSaintPieceForLegal(piece: AiBoardPiece): boolean {
+  if (normKanjiForEngineRules(piece.char) === '聖') return true;
+  const raw = (piece.pieceCode ?? '').toUpperCase();
+  if (raw.includes('A3BAB6C13DC7')) return true;
+  const code = toBasePieceCode(piece.pieceCode);
+  return code === 'SAINT';
+}
+
+/** この駒が前後左右に味方の「聖」と隣接しているとき、移動ベクトル各方向の maxStep を +1 */
+function hasOrthogonalAdjacentAllySaint(pieces: AiBoardPiece[], piece: AiBoardPiece): boolean {
+  const ortho: ReadonlyArray<{ dr: number; dc: number }> = [
+    { dr: -1, dc: 0 },
+    { dr: 1, dc: 0 },
+    { dr: 0, dc: -1 },
+    { dr: 0, dc: 1 },
+  ];
+  for (const { dr, dc } of ortho) {
+    const r = piece.row + dr;
+    const c = piece.col + dc;
+    const ally = pieces.find((p) => p.row === r && p.col === c && p.side === piece.side);
+    if (ally && isSaintPieceForLegal(ally)) return true;
+  }
+  return false;
+}
+
+function applySaintAdjacentMoveRangeBuff(
+  vectors: AiPieceDefinition['moveVectors'],
+): AiPieceDefinition['moveVectors'] {
+  return vectors.map((v) => ({
+    ...v,
+    maxStep: Math.max(1, (Number(v.maxStep) || 1) + 1),
+  }));
+}
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== 'object') return null;
   return value as Record<string, unknown>;
@@ -1075,6 +1110,10 @@ function generateBoardPieceMoves(input: {
         effectiveCanJump = selectedDef.canJump === true;
       }
     }
+  }
+
+  if (hasOrthogonalAdjacentAllySaint(input.pieces, input.piece)) {
+    effectiveVectors = applySaintAdjacentMoveRangeBuff(effectiveVectors);
   }
 
   const leapVectors = effectiveVectors.filter((v) => isLeapOverOneMode(v.captureMode));
