@@ -29,6 +29,7 @@ export function computeAiMove(input: {
     return {
       selectedMove: null,
       skillTriggered: false,
+      turnConsumed: true,
       meta: null,
       position: input.position,
       game: { status: 'finished', result: 'player_win', winnerSide: 'player' as const },
@@ -60,6 +61,7 @@ export function computeAiMove(input: {
   return {
     selectedMove: committed.move,
     skillTriggered: committed.skillTriggered,
+    turnConsumed: committed.turnConsumed,
     meta: {
       engineVersion: 'local-ts',
       thinkMs: Date.now() - startedAt,

@@ -34,6 +34,8 @@ export type BattleCommittedMove = {
   actorSide: 'player' | 'enemy';
   move: BattleMove;
   skillTriggered: boolean;
+  /** false のとき着手後も手数・手番が進んでいない。クライアントエンジンでは通常 true（盾で取りが無効化されても攻撃側の手番は終了する）。 */
+  turnConsumed: boolean;
   position: BattleCanonicalPosition;
   game: BattleGameStatus;
 };
@@ -41,6 +43,7 @@ export type BattleCommittedMove = {
 export type BattleAiTurn = {
   selectedMove: BattleMove | null;
   skillTriggered: boolean;
+  turnConsumed: boolean;
   meta: {
     engineVersion: string;
     thinkMs: number;
@@ -181,11 +184,14 @@ export function parseBattleCommittedMove(raw: unknown): BattleCommittedMove {
     throw new Error('moveNo is invalid');
   }
 
+  const turnConsumedRaw = asBoolean(obj.turnConsumed ?? obj.turn_consumed);
+
   return {
     moveNo,
     actorSide,
     move: parseMove(obj.move),
     skillTriggered: parseSkillTriggered(obj.skillTriggered ?? obj.skill_triggered, obj.move),
+    turnConsumed: turnConsumedRaw !== false,
     position: parsePosition(obj.position),
     game: parseGame(obj.game),
   };
@@ -199,9 +205,11 @@ export function parseBattleAiTurn(raw: unknown): BattleAiTurn {
   const meta = asRecord(obj.meta) ?? null;
 
   const rawMove = obj.selectedMove ?? obj.selected_move;
+  const turnConsumedRaw = asBoolean(obj.turnConsumed ?? obj.turn_consumed);
   return {
     selectedMove: rawMove != null ? parseMove(rawMove) : null,
     skillTriggered: parseSkillTriggered(obj.skillTriggered ?? obj.skill_triggered, rawMove),
+    turnConsumed: turnConsumedRaw !== false,
     meta: meta
       ? {
           engineVersion: asString(meta.engineVersion ?? meta.engine_version) ?? '',

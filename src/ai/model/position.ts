@@ -26,8 +26,16 @@ function isOpaquePieceInstanceId(value: string | null | undefined): boolean {
   return /^piece_[a-z0-9]+$/i.test(value.trim());
 }
 
+function isHolySwordOpaqueId(value: string | null | undefined): boolean {
+  if (!value) return false;
+  const v = value.trim().toLowerCase();
+  // 聖剣「剣」の opaque id（lib/piece-image-registry.ts と同根）
+  return v.includes('0f14abcc6e5e');
+}
+
 function charFromCanonicalCode(code: string | null): string | null {
   if (!code) return null;
+  if (code === 'HOLY_SWORD') return '剣';
   if (code === 'SWORD' || code === 'KATANA') return '刀';
   if (code === 'GUN') return '銃';
   if (code === 'ARMOR') return '鎧';
@@ -110,10 +118,14 @@ export function piecesFromBoardState(position: AiBattlePosition): AiBoardPiece[]
     const promoted = Boolean(obj.promoted ?? rawPiece?.promoted ?? false);
     const rawChar = String(obj.char ?? rawPiece?.char ?? '?') || (pieceCode ? pieceCode : '?');
     const baseCode = toBasePieceCode(pieceCode);
-    const char =
-      isOpaquePieceInstanceId(rawChar) || rawChar === pieceCode
-        ? (charFromCanonicalCode(baseCode) ?? rawChar)
-        : rawChar;
+    const char = (() => {
+      // board_state の char が opaque id に潰れている場合でも、聖剣だけは表示/ロジック上「剣」に戻す。
+      if (isHolySwordOpaqueId(rawChar) || isHolySwordOpaqueId(pieceCode)) return '剣';
+      if (isOpaquePieceInstanceId(rawChar) || rawChar === pieceCode) {
+        return charFromCanonicalCode(baseCode) ?? rawChar;
+      }
+      return rawChar;
+    })();
 
     const livesRaw = obj.kbossLivesRemaining ?? obj.kboss_lives_remaining;
     const kbossLivesRemaining =

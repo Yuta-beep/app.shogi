@@ -176,7 +176,8 @@ export function addHandPiece(
 /** pieceCode が欠けた盤面でも手駒キーに落とせるよう、漢字から canonical を補う（piece-conversion と値を揃える）。 */
 const CAPTURE_CHAR_TO_HAND_CODE: Readonly<Record<string, string>> = {
   刀: 'SWORD',
-  剣: 'SWORD',
+  /** 名刀「刀」の SWORD と手駒表示を分ける（`piece-conversion` の CODE_TO_CHAR と整合）。 */
+  剣: 'HOLY_SWORD',
   銃: 'GUN',
   鎧: 'ARMOR',
   盾: 'SHIELD',
@@ -190,6 +191,8 @@ const CAPTURE_CHAR_TO_HAND_CODE: Readonly<Record<string, string>> = {
 };
 
 const OPAQUE_CAPTURE_CODE_TO_HAND_CODE: Readonly<Record<string, string>> = {
+  /** 聖剣「剣」（lib/piece-image-registry の piece_0f14abcc6e5e と一致） */
+  PIECE_0F14ABCC6E5E: 'HOLY_SWORD',
   PIECE_5D848242A136: 'BOOK',
   PIECE_7000FED9D9D4: 'SEAL',
   PIECE_D24741D0EF18: 'BIGNOISE',
@@ -217,6 +220,7 @@ function opaqueCapturedCodeToHandCode(rawCode: string | null): string | null {
   if (upper.includes('BULL')) return 'BULL';
   if (upper.includes('RITUAL')) return 'RITUAL';
   if (upper.includes('SAINT')) return 'SAINT';
+  if (upper.includes('0F14ABCC6E5E')) return 'HOLY_SWORD';
   return null;
 }
 
@@ -260,6 +264,9 @@ export function capturedToHandPieceCode(piece: BoardPiece) {
       return piece.char ?? '';
     }
   })();
+  if (normalizedChar === '剣') {
+    return 'HOLY_SWORD';
+  }
   const codeFromChar =
     normalizedChar === '牢'
       ? 'PRISON'
@@ -283,6 +290,10 @@ export function capturedToHandPieceCode(piece: BoardPiece) {
       : (codeFromChar ?? mappedOpaque);
   if (!code) return null;
   if (KING_CODES.has(code)) return null;
+  if ((code === 'SWORD' || code === 'KATANA') && normalizedChar !== '刀') {
+    const rawUp = (piece.pieceCode ?? '').toUpperCase();
+    if (rawUp.includes('0F14ABCC6E5E')) return 'HOLY_SWORD';
+  }
   return code;
 }
 

@@ -156,6 +156,8 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
   const [poisonHazardCells, setPoisonHazardCells] = useState<BoardCell[]>([]);
   const [rockObstacleCells, setRockObstacleCells] = useState<BoardCell[]>([]);
   const [isLoadingPlayerLegalMoves, setIsLoadingPlayerLegalMoves] = useState(false);
+  /** syncFromCanonical のたびに増やし、手番・moveNo が不変でも合法手を再取得する（盾で着手無効化など）。 */
+  const [boardSyncEpoch, setBoardSyncEpoch] = useState(0);
   const [hands, setHands] = useState<HandsState>(createEmptyHandsState());
   const [pendingPromotion, setPendingPromotion] = useState<PendingPromotion | null>(null);
   const [pendingTimeActionCell, setPendingTimeActionCell] = useState<BoardCell | null>(null);
@@ -378,6 +380,7 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
     }
 
     setWinner(null);
+    setBoardSyncEpoch((e) => e + 1);
     return null;
   }
 
@@ -579,7 +582,7 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
     return () => {
       active = false;
     };
-  }, [gameId, isCreatingGame, isFinished, loadGameLegalMovesUseCase, moveNo, sideToMove]);
+  }, [boardSyncEpoch, gameId, isCreatingGame, isFinished, loadGameLegalMovesUseCase, moveNo, sideToMove]);
 
   useEffect(() => {
     if (Object.keys(failedImageKeys).length === 0) {
@@ -713,172 +716,202 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
     setAiError(null);
 
     try {
-      const response = await requestAiMoveUseCase.execute({
-        gameId,
-        moveNo: nextMoveNo,
-        stateHash: stateHashRef.current,
-        engineConfig: {},
-      });
+      const maxSameTurnAiRetries = 14;
+      let nextWinner: Side | null = null;
+      let aiSequenceFinished = false;
 
-      if (response.skillTriggered && response.selectedMove) {
-        showSkillActivation('enemy', response.selectedMove);
-      }
-      const patchedAiPosition = patchHandsForStarReturnSkill(
-        response.position,
-        'enemy',
-        response.selectedMove,
-        response.skillTriggered,
-        handsRef.current,
-      );
+      for (let attempt = 0; attempt <= maxSameTurnAiRetries; attempt++) {
+        const response = await requestAiMoveUseCase.execute({
+          gameId,
+          moveNo: nextMoveNo,
+          stateHash: stateHashRef.current,
+          engineConfig: {},
+        });
 
-      let preservedMovedPiece: PreservedMovedPiece | undefined;
-      let optimisticBaseline: BoardPiece[] | undefined;
-      const selectedMove = response.selectedMove;
-      const invalidSelfCaptureResolved =
-        selectedMove &&
-        isSelfCaptureLikeMove(
-          piecesRef.current,
-          selectedMove,
+        if (attempt === 0 && response.skillTriggered && response.selectedMove) {
+          showSkillActivation('enemy', response.selectedMove);
+        }
+        const patchedAiPosition = patchHandsForStarReturnSkill(
+          response.position,
           'enemy',
-          persistentHazardsRef.current,
-        )
-          ? resolveBattleMovePlacements(piecesRef.current, selectedMove)
-          : null;
-      if (invalidSelfCaptureResolved) {
-        setAiError('CPU の着手候補が不正なため、盤面同期のみ行いました。');
-      }
-      const selectedMoveForApply = invalidSelfCaptureResolved ? null : selectedMove;
-      if (selectedMoveForApply?.fromRow != null && selectedMoveForApply?.fromCol != null) {
-        const moved = findPieceAt(
-          piecesRef.current,
-          selectedMoveForApply.fromRow,
-          selectedMoveForApply.fromCol,
+          response.selectedMove,
+          response.skillTriggered,
+          handsRef.current,
         );
-        if (moved && moved.side === 'enemy') {
-          const resolvedPieceCode = pieceCodeFromPlacement(
-            moved.pieceCode ?? null,
-            moved.char,
-            pieceDefsByChar,
-          );
-          const codeKey = (resolvedPieceCode ?? moved.pieceCode ?? '').toUpperCase();
-          const promoted = selectedMoveForApply.promote ? true : (moved.promoted ?? false);
-          const promotedDef = selectedMoveForApply.promote
-            ? promotedPieceDefsByCode[codeKey]
+
+        let preservedMovedPiece: PreservedMovedPiece | undefined;
+        let optimisticBaseline: BoardPiece[] | undefined;
+        const selectedMove = response.selectedMove;
+        const invalidSelfCaptureResolved =
+          selectedMove &&
+          isSelfCaptureLikeMove(
+            piecesRef.current,
+            selectedMove,
+            'enemy',
+            persistentHazardsRef.current,
+          )
+            ? resolveBattleMovePlacements(piecesRef.current, selectedMove)
             : null;
-          const imageSignedUrl = promotedDef?.imageSignedUrl ?? moved.imageSignedUrl;
-          const resolvedChar = resolvedPieceCode
-            ? pieceCharFromCode(resolvedPieceCode, moved.side, promoted)
-            : moved.char;
-          const char =
-            resolvedChar === '?' ||
-            (resolvedPieceCode != null && resolvedChar === resolvedPieceCode)
-              ? moved.char
-              : resolvedChar;
-          preservedMovedPiece = {
-            side: moved.side,
-            toRow: selectedMoveForApply.toRow,
-            toCol: selectedMoveForApply.toCol,
-            pieceCode: resolvedPieceCode ?? moved.pieceCode ?? null,
-            char,
-            imageSignedUrl,
-            promoted,
+        if (attempt === 0 && invalidSelfCaptureResolved) {
+          setAiError('CPU の着手候補が不正なため、盤面同期のみ行いました。');
+        }
+        const selectedMoveForApply = invalidSelfCaptureResolved ? null : selectedMove;
+        if (selectedMoveForApply?.fromRow != null && selectedMoveForApply?.fromCol != null) {
+          const moved = findPieceAt(
+            piecesRef.current,
+            selectedMoveForApply.fromRow,
+            selectedMoveForApply.fromCol,
+          );
+          if (moved && moved.side === 'enemy') {
+            const resolvedPieceCode = pieceCodeFromPlacement(
+              moved.pieceCode ?? null,
+              moved.char,
+              pieceDefsByChar,
+            );
+            const codeKey = (resolvedPieceCode ?? moved.pieceCode ?? '').toUpperCase();
+            const promoted = selectedMoveForApply.promote ? true : (moved.promoted ?? false);
+            const promotedDef = selectedMoveForApply.promote
+              ? promotedPieceDefsByCode[codeKey]
+              : null;
+            const imageSignedUrl = promotedDef?.imageSignedUrl ?? moved.imageSignedUrl;
+            const resolvedChar = resolvedPieceCode
+              ? pieceCharFromCode(resolvedPieceCode, moved.side, promoted)
+              : moved.char;
+            const char =
+              resolvedChar === '?' ||
+              (resolvedPieceCode != null && resolvedChar === resolvedPieceCode)
+                ? moved.char
+                : resolvedChar;
+            preservedMovedPiece = {
+              side: moved.side,
+              toRow: selectedMoveForApply.toRow,
+              toCol: selectedMoveForApply.toCol,
+              pieceCode: resolvedPieceCode ?? moved.pieceCode ?? null,
+              char,
+              imageSignedUrl,
+              promoted,
+            };
+          }
+        }
+
+        const showCpuMoveAnimation = attempt === 0 && Boolean(selectedMoveForApply);
+        if (showCpuMoveAnimation && selectedMoveForApply) {
+          optimisticBaseline = computePiecesAfterOptimisticMove(
+            piecesRef.current,
+            'enemy',
+            selectedMoveForApply,
+            pieceDefsByCode,
+            pieceDefsByChar,
+            promotedPieceDefsByCode,
+          );
+          setAiPreviewTarget({ row: selectedMoveForApply.toRow, col: selectedMoveForApply.toCol });
+          await new Promise<void>((resolve) => {
+            setTimeout(resolve, 1000);
+          });
+          setAiPreviewTarget(null);
+          applyOptimisticMove('enemy', selectedMoveForApply);
+          await waitForAiMoveVisualCommit();
+        }
+
+        if (selectedMoveForApply) {
+          const board = (patchedAiPosition.boardState ?? {}) as Record<string, unknown>;
+          const skillStateRaw =
+            (board.skill_state as Record<string, unknown> | undefined) ??
+            (board.skillState as Record<string, unknown> | undefined) ??
+            {};
+          const skillState = { ...skillStateRaw };
+          const movedBefore =
+            selectedMoveForApply.fromRow != null && selectedMoveForApply.fromCol != null
+              ? findPieceAt(
+                  piecesRef.current,
+                  selectedMoveForApply.fromRow,
+                  selectedMoveForApply.fromCol,
+                )
+              : null;
+          const movedNow = findPieceAt(
+            piecesRef.current,
+            selectedMoveForApply.toRow,
+            selectedMoveForApply.toCol,
+          );
+          const movedCodeFromBoard = movedBefore
+            ? pieceCodeFromPlacement(movedBefore.pieceCode ?? null, movedBefore.char, pieceDefsByChar)
+            : movedNow
+              ? pieceCodeFromPlacement(movedNow.pieceCode ?? null, movedNow.char, pieceDefsByChar)
+            : null;
+          const rawMovedCode =
+            (movedCodeFromBoard ?? selectedMoveForApply.pieceCode ?? '').toUpperCase() || null;
+          const movedCodeFromChar = movedBefore?.char
+            ? toAiBasePieceCode(CHAR_TO_CODE[movedBefore.char] ?? null)
+            : movedNow?.char
+              ? toAiBasePieceCode(CHAR_TO_CODE[movedNow.char] ?? null)
+            : null;
+          const movedCode =
+            (rawMovedCode && !/^PIECE_[A-Z0-9_]+$/i.test(rawMovedCode)
+              ? rawMovedCode
+              : movedCodeFromChar ?? rawMovedCode) || null;
+          const movedCharRaw =
+            movedBefore?.char && !/^piece_[a-z0-9]+$/i.test(movedBefore.char)
+              ? movedBefore.char
+              : movedNow?.char && !/^piece_[a-z0-9]+$/i.test(movedNow.char)
+                ? movedNow.char
+              : movedCode
+                ? pieceCharFromCode(movedCode, 'enemy', selectedMoveForApply.promote === true)
+                : '?';
+          const movedChar =
+            movedCharRaw && movedCharRaw !== '?' && movedCharRaw !== movedCode ? movedCharRaw : null;
+          const movedDef =
+            (movedCode ? pieceDefsByCode[movedCode] : undefined) ??
+            (movedChar ? pieceDefsByChar[movedChar] : undefined);
+          const copiedMoveVectors = Array.isArray(movedDef?.moveVectors)
+            ? movedDef.moveVectors.map((v) => ({
+                dx: v.dx,
+                dy: v.dy,
+                maxStep: v.maxStep,
+                ...(v.captureMode ? { captureMode: v.captureMode } : {}),
+              }))
+            : [];
+          skillState.last_enemy_moved_piece = {
+            side: 'enemy',
+            row: selectedMoveForApply.toRow,
+            col: selectedMoveForApply.toCol,
+            pieceCode: movedCode,
+            char: movedChar,
+            promoted: selectedMoveForApply.promote === true,
+            copiedMoveVectors,
           };
+          board.skill_state = skillState;
+          patchedAiPosition.boardState = board;
+        }
+
+        nextWinner = syncFromCanonicalPosition(
+          patchedAiPosition,
+          response.game,
+          preservedMovedPiece,
+          optimisticBaseline,
+        );
+
+        if (nextWinner === 'player') {
+          lastSuccessfulAiKeyRef.current = requestKey;
+          aiSequenceFinished = true;
+          void claimStageClearRewardIfNeeded();
+          break;
+        }
+
+        const stopCpuRetry =
+          response.game.status === 'finished' ||
+          response.position.sideToMove === 'player' ||
+          response.turnConsumed !== false;
+
+        if (stopCpuRetry) {
+          lastSuccessfulAiKeyRef.current = requestKey;
+          aiSequenceFinished = true;
+          break;
         }
       }
 
-      if (selectedMoveForApply) {
-        optimisticBaseline = computePiecesAfterOptimisticMove(
-          piecesRef.current,
-          'enemy',
-          selectedMoveForApply,
-          pieceDefsByCode,
-          pieceDefsByChar,
-          promotedPieceDefsByCode,
-        );
-        setAiPreviewTarget({ row: selectedMoveForApply.toRow, col: selectedMoveForApply.toCol });
-        await new Promise<void>((resolve) => {
-          setTimeout(resolve, 1000);
-        });
-        setAiPreviewTarget(null);
-        applyOptimisticMove('enemy', selectedMoveForApply);
-        await waitForAiMoveVisualCommit();
-      }
-
-      if (selectedMoveForApply) {
-        const board = (patchedAiPosition.boardState ?? {}) as Record<string, unknown>;
-        const skillStateRaw =
-          (board.skill_state as Record<string, unknown> | undefined) ??
-          (board.skillState as Record<string, unknown> | undefined) ??
-          {};
-        const skillState = { ...skillStateRaw };
-        const movedBefore =
-          selectedMoveForApply.fromRow != null && selectedMoveForApply.fromCol != null
-            ? findPieceAt(piecesRef.current, selectedMoveForApply.fromRow, selectedMoveForApply.fromCol)
-            : null;
-        const movedNow = findPieceAt(
-          piecesRef.current,
-          selectedMoveForApply.toRow,
-          selectedMoveForApply.toCol,
-        );
-        const movedCodeFromBoard = movedBefore
-          ? pieceCodeFromPlacement(movedBefore.pieceCode ?? null, movedBefore.char, pieceDefsByChar)
-          : movedNow
-            ? pieceCodeFromPlacement(movedNow.pieceCode ?? null, movedNow.char, pieceDefsByChar)
-          : null;
-        const rawMovedCode =
-          (movedCodeFromBoard ?? selectedMoveForApply.pieceCode ?? '').toUpperCase() || null;
-        const movedCodeFromChar = movedBefore?.char
-          ? toAiBasePieceCode(CHAR_TO_CODE[movedBefore.char] ?? null)
-          : movedNow?.char
-            ? toAiBasePieceCode(CHAR_TO_CODE[movedNow.char] ?? null)
-            : null;
-        const movedCode =
-          (rawMovedCode && !/^PIECE_[A-Z0-9_]+$/i.test(rawMovedCode)
-            ? rawMovedCode
-            : movedCodeFromChar ?? rawMovedCode) || null;
-        const movedCharRaw =
-          movedBefore?.char && !/^piece_[a-z0-9]+$/i.test(movedBefore.char)
-            ? movedBefore.char
-            : movedNow?.char && !/^piece_[a-z0-9]+$/i.test(movedNow.char)
-              ? movedNow.char
-            : movedCode
-              ? pieceCharFromCode(movedCode, 'enemy', selectedMoveForApply.promote === true)
-              : '?';
-        const movedChar =
-          movedCharRaw && movedCharRaw !== '?' && movedCharRaw !== movedCode ? movedCharRaw : null;
-        const movedDef =
-          (movedCode ? pieceDefsByCode[movedCode] : undefined) ??
-          (movedChar ? pieceDefsByChar[movedChar] : undefined);
-        const copiedMoveVectors = Array.isArray(movedDef?.moveVectors)
-          ? movedDef.moveVectors.map((v) => ({
-              dx: v.dx,
-              dy: v.dy,
-              maxStep: v.maxStep,
-              ...(v.captureMode ? { captureMode: v.captureMode } : {}),
-            }))
-          : [];
-        skillState.last_enemy_moved_piece = {
-          side: 'enemy',
-          row: selectedMoveForApply.toRow,
-          col: selectedMoveForApply.toCol,
-          pieceCode: movedCode,
-          char: movedChar,
-          promoted: selectedMoveForApply.promote === true,
-          copiedMoveVectors,
-        };
-        board.skill_state = skillState;
-        patchedAiPosition.boardState = board;
-      }
-
-      const nextWinner = syncFromCanonicalPosition(
-        patchedAiPosition,
-        response.game,
-        preservedMovedPiece,
-        optimisticBaseline,
-      );
-      lastSuccessfulAiKeyRef.current = requestKey;
-      if (nextWinner === 'player') {
-        void claimStageClearRewardIfNeeded();
+      if (!aiSequenceFinished) {
+        lastSuccessfulAiKeyRef.current = requestKey;
+        setAiError('CPU の着手が盾などで繰り返し無効化されました。盤面を確認してください。');
       }
     } catch (error: unknown) {
       if (isGameAlreadyFinishedError(error)) {

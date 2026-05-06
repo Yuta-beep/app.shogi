@@ -170,6 +170,7 @@ async function renderReadyHook(options: {
   mockRequestAiMoveExecute.mockResolvedValue({
     selectedMove: null,
     skillTriggered: false,
+    turnConsumed: true,
     meta: null,
     position: createPosition(
       options.legalMoves.moveNo === 1 ? '9/9/9/9/9/9/9/9/9' : '9/9/9/9/9/9/9/9/9',
@@ -237,6 +238,7 @@ describe('useStageShogiScreen', () => {
       actorSide: 'player',
       move: legalMoves.legalMoves[1],
       skillTriggered: false,
+      turnConsumed: true,
       position: createPosition('+P8/9/9/9/9/9/9/9/9', {
         sideToMove: 'enemy',
         turnNumber: 2,
@@ -333,6 +335,7 @@ describe('useStageShogiScreen', () => {
       actorSide: 'player',
       move: legalMoves.legalMoves[0],
       skillTriggered: false,
+      turnConsumed: true,
       position: createPosition('9/9/9/9/9/9/9/9/9', {
         sideToMove: 'enemy',
         turnNumber: 2,
@@ -433,6 +436,7 @@ describe('useStageShogiScreen', () => {
       actorSide: 'player',
       move: legalMoves.legalMoves[0],
       skillTriggered: false,
+      turnConsumed: true,
       position: createPosition('9/9/9/9/9/9/9/9/9', {
         sideToMove: 'enemy',
         turnNumber: 2,

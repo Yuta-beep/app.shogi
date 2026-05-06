@@ -84,6 +84,7 @@ function isOpaquePieceInstanceId(value: string | null | undefined): boolean {
 
 /** 「刀」名刀のみ。聖剣「剣」は従来の sword パターンのまま。 */
 function isKatanaPiece(piece: AiBoardPiece): boolean {
+  if (normKanjiForEngineRules(piece.char) === '剣') return false;
   if (normKanjiForEngineRules(piece.char) === '刀') return true;
   const code = toBasePieceCode(piece.pieceCode);
   return code === 'SWORD' || code === 'KATANA';
@@ -181,19 +182,29 @@ function lastMovedPieceForBook(
 
 /** `CHAR_TO_CODE` に無い幻駒は、カタログの漢字→pieceCode で着手の pieceCode を決める（刀が歩になる不具合の防止）。 */
 function resolvePieceCodeForLegalMove(piece: AiBoardPiece, lookups: AiPieceLookups): string {
+  const ch = normKanjiForEngineRules(piece.char);
+  if (ch === '剣') return 'HOLY_SWORD';
+  if (ch === '刀') return 'SWORD';
   const direct = toBasePieceCode(piece.pieceCode);
   if (direct && !isOpaquePieceInstanceId(direct)) return direct;
-  const ch = normKanjiForEngineRules(piece.char);
   const def = lookups.pieceDefsByChar[piece.char] ?? lookups.pieceDefsByChar[ch];
   const fromCatalog = toBasePieceCode(def?.pieceCode ?? null);
   if (fromCatalog && !isOpaquePieceInstanceId(fromCatalog)) return fromCatalog;
-  if (ch === '刀') return 'SWORD';
   if (ch === '銃') return 'GUN';
   if (ch === '書') return 'BOOK';
   if (ch === '封') return 'SEAL';
   const legacy = toBasePieceCode(CHAR_TO_CODE[piece.char]);
   if (legacy) return legacy;
   return 'FU';
+}
+
+function resolveCapturedPieceCodeForLegalMove(piece: AiBoardPiece | null | undefined): string | null {
+  if (!piece) return null;
+  const ch = normKanjiForEngineRules(piece.char);
+  if (ch === '剣') return 'HOLY_SWORD';
+  if (ch === '刀') return 'SWORD';
+  if (ch === '盾') return 'SHIELD';
+  return toBasePieceCode(capturedToHandPieceCode(piece)) ?? toBasePieceCode(piece.pieceCode ?? null);
 }
 
 function resolvePieceDefForBookCopy(
@@ -1048,7 +1059,9 @@ function generateBoardPieceMoves(input: {
         to,
         pieceCode,
         promote: false,
-        capturedPieceCode: toBasePieceCode(findPieceAtFast(input.occupancy, to.row, to.col)?.pieceCode ?? null),
+        capturedPieceCode: resolveCapturedPieceCodeForLegalMove(
+          findPieceAtFast(input.occupancy, to.row, to.col),
+        ),
       }),
     );
   }
@@ -1240,10 +1253,7 @@ function generateBoardPieceMoves(input: {
 
   const moves = boatFilteredTargets.flatMap((target) => {
     const captured = findPieceAtFast(input.occupancy, target.row, target.col);
-    const capturedPieceCode = captured
-      ? (toBasePieceCode(capturedToHandPieceCode(captured)) ??
-        toBasePieceCode(captured?.pieceCode ?? null))
-      : null;
+    const capturedPieceCode = resolveCapturedPieceCodeForLegalMove(captured);
     const transformedByA = isATransformedPawn(input.skillView, input.piece);
     const promote = transformedByA ? false : canPromoteByMove(input.piece, from, target, 9);
     const mustPromote = transformedByA ? false : mustPromoteByMove(input.piece, target, 9);

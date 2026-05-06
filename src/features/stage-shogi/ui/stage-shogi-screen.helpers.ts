@@ -270,6 +270,7 @@ export function pieceCodeFromPlacement(
   }
   if (catalogItem && isOpaquePieceInstanceId(catalogItem.pieceCode)) {
     if (char === '刀') return 'SWORD';
+    if (char === '剣') return 'HOLY_SWORD';
     if (char === '銃') return 'GUN';
     if (char === '鎧') return 'ARMOR';
     if (char === '盾') return 'SHIELD';

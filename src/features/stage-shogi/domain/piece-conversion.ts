@@ -321,6 +321,32 @@ export function createPieceSfenMapping(items: PieceCatalogItem[]): PieceSfenMapp
   aliasSfenTokensToCanonicalPieceCodesForOpaqueRows(items, codeToSfen, sfenToCodeUnpromoted);
   syncOuKingSfenTokenFromCatalog(items, codeToSfen, sfenToCodeUnpromoted);
 
+  if (!codeToSfen.HOLY_SWORD) {
+    const fromKen = items.find((i) => {
+      try {
+        return (i.char ?? '').normalize('NFKC') === '剣';
+      } catch {
+        return i.char === '剣';
+      }
+    });
+    const peer =
+      (fromKen?.pieceCode && codeToSfen[fromKen.pieceCode.toUpperCase()]) ?? codeToSfen.SWORD;
+    if (peer) {
+      codeToSfen.HOLY_SWORD = peer;
+    }
+  }
+
+  /** 名刀と同一 SFEN だと parse / merge で手駒が SWORD（刀）に潰れるため聖剣は別トークンにする。 */
+  const holySfenToken = 'ZHK';
+  if (codeToSfen.HOLY_SWORD) {
+    const swordTok = (codeToSfen.SWORD ?? '').replace(/^\+/, '').toUpperCase();
+    const holyTok = codeToSfen.HOLY_SWORD.replace(/^\+/, '').toUpperCase();
+    if (!swordTok || holyTok === swordTok) {
+      codeToSfen.HOLY_SWORD = holySfenToken;
+      sfenToCodeUnpromoted[holySfenToken] = 'HOLY_SWORD';
+    }
+  }
+
   const customHandCodes = Object.entries(codeToSfen)
     .filter(([code]) => !LEGACY_STANDARD_HAND_ORDER.includes(code))
     .sort((lhs, rhs) => codeToSfen[lhs[0]].localeCompare(codeToSfen[rhs[0]]))
@@ -431,6 +457,8 @@ export const CODE_TO_CHAR: Readonly<Record<string, string>> = {
   BULL: '犇',
   RITUAL: '礼',
   SAINT: '聖',
+  /** 聖剣「剣」。名刀 SWORD/KATANA とは別手駒キー。 */
+  HOLY_SWORD: '剣',
 };
 
 export const PROMOTED_CODE_TO_CHAR: Readonly<Record<string, string>> = {
@@ -721,6 +749,11 @@ function buildHandsPatterns(mapping: PieceSfenMapping): HandsPattern[] {
     const enemyUpper = toEnemySfenAlias(upper);
     if (enemyUpper !== upper) {
       patterns.push({ code, upper: enemyUpper, len: enemyUpper.length });
+    } else if (upper.length > 1) {
+      const lowerAll = upper.toLowerCase();
+      if (lowerAll !== upper) {
+        patterns.push({ code, upper: lowerAll, len: lowerAll.length });
+      }
     }
   }
   for (const [sfenLetter, code] of Object.entries(mapping.sfenToCode.promoted)) {
@@ -845,8 +878,21 @@ function mergeStandardFromJsonExtendedFromSfen(
     if (STANDARD_HAND_PIECE_CODES.has(code)) {
       const c = jp.get(code) ?? 0;
       if (c > 0) player[code] = c;
+    } else if (code === 'HOLY_SWORD') {
+      const c = jp.get(code) ?? sp.get(code) ?? 0;
+      if (c > 0) player[code] = c;
     } else {
-      const c = sp.get(code) ?? 0;
+      let c = sp.get(code) ?? 0;
+      if (
+        (code === 'SWORD' || code === 'KATANA') &&
+        c > 0 &&
+        (jp.get('HOLY_SWORD') ?? 0) > 0 &&
+        (jp.get('SWORD') ?? 0) === 0 &&
+        (jp.get('KATANA') ?? 0) === 0 &&
+        c === (jp.get('HOLY_SWORD') ?? 0)
+      ) {
+        c = 0;
+      }
       if (c > 0) player[code] = c;
     }
   }
@@ -854,8 +900,21 @@ function mergeStandardFromJsonExtendedFromSfen(
     if (STANDARD_HAND_PIECE_CODES.has(code)) {
       const c = je.get(code) ?? 0;
       if (c > 0) enemy[code] = c;
+    } else if (code === 'HOLY_SWORD') {
+      const c = je.get(code) ?? se.get(code) ?? 0;
+      if (c > 0) enemy[code] = c;
     } else {
-      const c = se.get(code) ?? 0;
+      let c = se.get(code) ?? 0;
+      if (
+        (code === 'SWORD' || code === 'KATANA') &&
+        c > 0 &&
+        (je.get('HOLY_SWORD') ?? 0) > 0 &&
+        (je.get('SWORD') ?? 0) === 0 &&
+        (je.get('KATANA') ?? 0) === 0 &&
+        c === (je.get('HOLY_SWORD') ?? 0)
+      ) {
+        c = 0;
+      }
       if (c > 0) enemy[code] = c;
     }
   }

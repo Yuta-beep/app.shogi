@@ -74,9 +74,9 @@ export function StageShogiHandsRow(props: {
         const handImageSource = getPieceImageSource({
           pieceCode: codeKey,
           char:
+            CODE_TO_CHAR[codeKey] ??
             pieceDefsByCode[codeKey]?.char ??
             pieceDefsByCode[entry.code]?.char ??
-            CODE_TO_CHAR[codeKey] ??
             null,
           imageSignedUrl:
             pieceDefsByCode[codeKey]?.imageSignedUrl ??

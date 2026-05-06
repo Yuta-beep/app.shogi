@@ -772,6 +772,7 @@ if (yamaSource != null && !pieceImageByChar.has('山') && !pieceImageByCode.has(
 const aliasCodeToChar: Readonly<Record<string, string>> = {
   SWORD: '刀',
   KATANA: '刀',
+  HOLY_SWORD: '剣',
   GUN: '銃',
   ARMOR: '鎧',
   SHIELD: '盾',
