@@ -190,6 +190,9 @@ const CAPTURE_CHAR_TO_HAND_CODE: Readonly<Record<string, string>> = {
   聖: 'SAINT',
   病: 'DISEASE',
   薬: 'MEDICINE',
+  滝: 'WATERFALL',
+  穴: 'HOLE',
+  淵: 'ABYSS',
 };
 
 const OPAQUE_CAPTURE_CODE_TO_HAND_CODE: Readonly<Record<string, string>> = {
@@ -203,6 +206,9 @@ const OPAQUE_CAPTURE_CODE_TO_HAND_CODE: Readonly<Record<string, string>> = {
   PIECE_A3BAB6C13DC7: 'SAINT',
   PIECE_151646512B2F: 'DISEASE',
   PIECE_3E3EF463EADC: 'MEDICINE',
+  PIECE_8CC9287B7E93: 'WATERFALL',
+  PIECE_E381DFA07A3D: 'HOLE',
+  PIECE_31CB39CC0FA8: 'ABYSS',
 };
 
 function opaqueCapturedCodeToHandCode(rawCode: string | null): string | null {
@@ -220,6 +226,9 @@ function opaqueCapturedCodeToHandCode(rawCode: string | null): string | null {
   if (upper.includes('A3BAB6C13DC7')) return 'SAINT';
   if (upper.includes('151646512B2F')) return 'DISEASE';
   if (upper.includes('3E3EF463EADC')) return 'MEDICINE';
+  if (upper.includes('8CC9287B7E93')) return 'WATERFALL';
+  if (upper.includes('E381DFA07A3D')) return 'HOLE';
+  if (upper.includes('31CB39CC0FA8')) return 'ABYSS';
   if (upper.includes('BOOK')) return 'BOOK';
   if (upper.includes('SEAL')) return 'SEAL';
   if (upper.includes('BIGNOISE')) return 'BIGNOISE';
@@ -228,6 +237,9 @@ function opaqueCapturedCodeToHandCode(rawCode: string | null): string | null {
   if (upper.includes('SAINT')) return 'SAINT';
   if (upper.includes('DISEASE')) return 'DISEASE';
   if (upper.includes('MEDICINE')) return 'MEDICINE';
+  if (upper.includes('WATERFALL')) return 'WATERFALL';
+  if (upper.includes('HOLE')) return 'HOLE';
+  if (upper.includes('ABYSS')) return 'ABYSS';
   if (upper.includes('0F14ABCC6E5E')) return 'HOLY_SWORD';
   return null;
 }

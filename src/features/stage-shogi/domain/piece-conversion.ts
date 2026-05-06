@@ -461,6 +461,9 @@ export const CODE_TO_CHAR: Readonly<Record<string, string>> = {
   HOLY_SWORD: '剣',
   DISEASE: '病',
   MEDICINE: '薬',
+  WATERFALL: '滝',
+  HOLE: '穴',
+  ABYSS: '淵',
 };
 
 export const PROMOTED_CODE_TO_CHAR: Readonly<Record<string, string>> = {

@@ -40,6 +40,7 @@ const MOSS_PIECE_CODES = new Set(['MOSS', '苔']);
 const RAINBOW_PIECE_CODES = new Set(['RAINBOW', '虹']);
 const SWAMP_PIECE_CODES = new Set(['SWAMP', '沼']);
 const POISON_PIECE_CODES = new Set(['POISON', '毒']);
+const WATERFALL_PIECE_CODES = new Set(['WATERFALL', '滝', '8CC9287B7E93']);
 const A_PIECE_CODES = new Set(['A', 'あ']);
 const WOOD_PIECE_CODES = new Set(['WOOD', 'MOK', '木']);
 const LEAF_PIECE_CODES = new Set(['LEAF', 'HAA', '葉']);
@@ -272,6 +273,40 @@ function removeUpToRandomAdjacentEnemyPieces(input: {
       }));
   }
   return removed;
+}
+
+function waterfallSkillDebugLog(payload: Record<string, unknown>): void {
+  if (typeof __DEV__ !== 'undefined' && __DEV__) {
+    console.info('[waterfall-skill-debug]', payload);
+  }
+}
+
+function sendAllAdjacentEnemiesToOwnerHands(input: {
+  position: AiBattlePosition;
+  pieces: AiBoardPiece[];
+  center: AiBoardPiece;
+  actorSide: Side;
+}): Array<{ row: number; col: number; side: Side; char: string; handCode: string }> {
+  const moved: Array<{ row: number; col: number; side: Side; char: string; handCode: string }> = [];
+  const targets = input.pieces.filter((piece) => {
+    if (piece.side === input.actorSide) return false;
+    const dr = Math.abs(piece.row - input.center.row);
+    const dc = Math.abs(piece.col - input.center.col);
+    return (dr !== 0 || dc !== 0) && dr <= 1 && dc <= 1;
+  });
+  for (const target of targets) {
+    const handCode = toBasePieceCode(capturedToHandPieceCode(target));
+    if (!handCode) continue;
+    const idx = input.pieces.findIndex(
+      (p) => p.side === target.side && p.row === target.row && p.col === target.col,
+    );
+    if (idx < 0) continue;
+    input.pieces.splice(idx, 1);
+    // 仕様: 取られた駒は「相手（対象駒の所有者）」の手駒へ移動。
+    incrementHand(input.position, target.side, handCode, 1);
+    moved.push({ row: target.row, col: target.col, side: target.side, char: target.char, handCode });
+  }
+  return moved;
 }
 
 function pushAdjacentEnemyPiecesOneStep(input: {
@@ -810,6 +845,7 @@ export function createSkillRuntimeView(position: AiBattlePosition): SkillRuntime
     const key = cellKey(side, row, col);
     if (
       statusType === 'stun' ||
+      statusType === 'abyss_stun' ||
       statusType === 'time_stop' ||
       statusType === 'dark_blind' ||
       statusType === 'prison_fence_stun' ||
@@ -862,7 +898,7 @@ export function createSkillRuntimeView(position: AiBattlePosition): SkillRuntime
     const row = asNumber(entry.row);
     const col = asNumber(entry.col);
     const remaining = asNumber(entry.remaining_turns ?? entry.remainingTurns) ?? 0;
-    if (type !== 'rock_obstacle') continue;
+    if (type !== 'rock_obstacle' && type !== 'pit_cell') continue;
     if (row == null || col == null || remaining <= 0) continue;
     rockObstacleCells.add(`${row}:${col}`);
   }
@@ -1083,6 +1119,12 @@ export function applyMoveSkillEffects(input: {
     SWAMP_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '沼';
   const isPoisonMover =
     POISON_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '毒';
+  const isWaterfallMover =
+    WATERFALL_PIECE_CODES.has(movedCode) ||
+    normalizeSkillPieceCode(input.move.pieceCode) === '滝' ||
+    (movedPiece
+      ? WATERFALL_PIECE_CODES.has(normalizeSkillPieceCode(movedPiece.pieceCode))
+      : false);
   const isAMover =
     A_PIECE_CODES.has(movedCode) ||
     normalizeSkillPieceCode(input.move.pieceCode) === 'あ' ||
@@ -1383,6 +1425,43 @@ export function applyMoveSkillEffects(input: {
       affects_side: sideOpposite(input.actorSide),
       remaining_turns: durationTurns,
     });
+  }
+  // 滝: 移動時20%で周囲8マスの敵駒をすべて相手の手駒へ移動する。
+  if (
+    isWaterfallMover &&
+    input.move.fromRow != null &&
+    input.move.fromCol != null &&
+    input.movedPiece
+  ) {
+    const procChance = 0.2;
+    const roll = Math.random();
+    const triggered = roll <= procChance;
+    waterfallSkillDebugLog({
+      phase: 'proc-roll',
+      moveCount: input.position.moveCount,
+      turnNumber: input.position.turnNumber,
+      actorSide: input.actorSide,
+      from: [input.move.fromRow, input.move.fromCol],
+      to: [input.move.toRow, input.move.toCol],
+      procChance,
+      roll,
+      triggered,
+    });
+    if (triggered) {
+      const movedToHands = sendAllAdjacentEnemiesToOwnerHands({
+        position: input.position,
+        pieces: input.pieces,
+        center: input.movedPiece,
+        actorSide: input.actorSide,
+      });
+      waterfallSkillDebugLog({
+        phase: 'resolved',
+        actorSide: input.actorSide,
+        center: [input.movedPiece.row, input.movedPiece.col],
+        movedCount: movedToHands.length,
+        movedPieces: movedToHands,
+      });
+    }
   }
   // あ: 周囲8マスの敵駒を「歩」に変化させる（王/玉は除外）。
   // - あ駒自身が移動したとき

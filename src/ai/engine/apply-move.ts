@@ -67,6 +67,14 @@ function isVanishOnCapturePiece(piece: { pieceCode: string | null; char: string 
   return false;
 }
 
+function isHolePieceForApply(piece: { pieceCode: string | null; char: string }): boolean {
+  if (normKanjiForEngineRules(piece.char) === '穴') return true;
+  const base = toBasePieceCode(piece.pieceCode);
+  if (base === 'HOLE') return true;
+  const raw = (piece.pieceCode ?? '').toUpperCase();
+  return raw.includes('E381DFA07A3D');
+}
+
 function resolveCapturedHandCode(
   captured: AiBoardPiece,
   fallbackCapturedCode: string | null,
@@ -115,6 +123,18 @@ function resolveCapturedHandCode(
   if (rawCapturedCode.includes('SAINT')) {
     return 'SAINT';
   }
+  if (capturedChar === '穴' || rawCapturedCode.includes('E381DFA07A3D')) {
+    return 'HOLE';
+  }
+  if (capturedChar === '淵' || rawCapturedCode.includes('31CB39CC0FA8')) {
+    return 'ABYSS';
+  }
+  if (rawCapturedCode.includes('HOLE')) {
+    return 'HOLE';
+  }
+  if (rawCapturedCode.includes('ABYSS')) {
+    return 'ABYSS';
+  }
   const fromCaptured = toBasePieceCode(capturedToHandPieceCode(captured));
   if (fromCaptured) return fromCaptured;
   const fb = toBasePieceCode(fallbackCapturedCode);
@@ -123,6 +143,8 @@ function resolveCapturedHandCode(
   if (fb.includes('SEAL') || fb.includes('7000FED9D9D4')) return 'SEAL';
   if (fb.includes('RITUAL') || fb.includes('4FCDDF14D08D')) return 'RITUAL';
   if (fb.includes('SAINT') || fb.includes('A3BAB6C13DC7')) return 'SAINT';
+  if (fb.includes('HOLE') || fb.includes('E381DFA07A3D')) return 'HOLE';
+  if (fb.includes('ABYSS') || fb.includes('31CB39CC0FA8')) return 'ABYSS';
   // opaque id をそのまま手駒キーにしない（手駒表示不能の原因）。
   if (/^PIECE_[A-Z0-9_]+$/i.test(fb)) return null;
   return fb;
@@ -605,6 +627,8 @@ export function applyMove(input: {
   let movedPieceAfterApply: (typeof nextPieces)[number] | null = null;
   let didCapture = false;
   let diseaseCapturedByActor = false;
+  let abyssCapturedByActor = false;
+  const capturedHoleCellsByActor: Array<{ row: number; col: number }> = [];
   let starReturnProcTriggered = false;
   /** 刀の隣取り・銃の貫通取りなど、エンジン内在スキル（skill_definitions_v2 の 52/54 非依存）。 */
   let intrinsicCombatSkillTriggered = false;
@@ -709,6 +733,9 @@ export function applyMove(input: {
         if (midRes.didCapture) {
           didCapture = true;
           intrinsicCombatSkillTriggered = true;
+          if (isHolePieceForApply(midForGun)) {
+            capturedHoleCellsByActor.push({ row: gunPen.midRow, col: gunPen.midCol });
+          }
         }
         if (midRes.starReturnProcTriggered) starReturnProcTriggered = true;
       }
@@ -817,6 +844,12 @@ export function applyMove(input: {
           const rawCode = (captured.pieceCode ?? '').toUpperCase();
           if (!captureOwnPiece && (capturedChar === '病' || rawCode.includes('151646512B2F'))) {
             diseaseCapturedByActor = true;
+          }
+          if (!captureOwnPiece && (capturedChar === '淵' || rawCode.includes('31CB39CC0FA8'))) {
+            abyssCapturedByActor = true;
+          }
+          if (!captureOwnPiece && isHolePieceForApply(captured)) {
+            capturedHoleCellsByActor.push({ row: move.toRow, col: move.toCol });
           }
         }
         const consumeReiSubstitute =
@@ -1054,6 +1087,57 @@ export function applyMove(input: {
       remaining_turns: 3,
     });
     (skillState as Record<string, unknown>).piece_statuses = arr;
+  }
+  // 淵: 取った駒（攻撃側）を 3 ターン行動不能にする（紫オーラ表示は UI 側で abyss_stun を参照）。
+  if (turnAdvanced && applyLandingDerivedEffects && abyssCapturedByActor && movedPieceAfterApply) {
+    const prev = (skillState.piece_statuses ?? skillState.pieceStatuses) as unknown;
+    const arr = Array.isArray(prev) ? [...prev] : [];
+    arr.push({
+      row: movedPieceAfterApply.row,
+      col: movedPieceAfterApply.col,
+      side: actorSide,
+      status_type: 'abyss_stun',
+      remaining_turns: 3,
+    });
+    (skillState as Record<string, unknown>).piece_statuses = arr;
+  }
+  // 穴: 取られたとき、その位置の周囲8マスの空きマスを4ターン侵入不可（バツマス）にする。
+  if (
+    turnAdvanced &&
+    applyLandingDerivedEffects &&
+    capturedHoleCellsByActor.length > 0
+  ) {
+    const hazardsRaw = (skillState.board_hazards ?? skillState.boardHazards) as unknown;
+    const hazards = Array.isArray(hazardsRaw) ? [...hazardsRaw] : [];
+    const occupied = new Set(nextPieces.map((p) => `${p.row}:${p.col}`));
+    for (const center of capturedHoleCellsByActor) {
+      for (let dr = -1; dr <= 1; dr += 1) {
+        for (let dc = -1; dc <= 1; dc += 1) {
+          if (dr === 0 && dc === 0) continue;
+          const row = center.row + dr;
+          const col = center.col + dc;
+          if (row < 0 || row > 8 || col < 0 || col > 8) continue;
+          if (occupied.has(`${row}:${col}`)) continue;
+          for (let i = hazards.length - 1; i >= 0; i -= 1) {
+            const raw = hazards[i] as Record<string, unknown>;
+            const type = String(raw.hazard_type ?? raw.hazardType ?? '');
+            const hRow = Number(raw.row);
+            const hCol = Number(raw.col);
+            if (type === 'pit_cell' && hRow === row && hCol === col) {
+              hazards.splice(i, 1);
+            }
+          }
+          hazards.push({
+            row,
+            col,
+            hazard_type: 'pit_cell',
+            affects_side: 'both',
+            remaining_turns: 4,
+          });
+        }
+      }
+    }
+    (skillState as Record<string, unknown>).board_hazards = hazards;
   }
   if (turnAdvanced && applyLandingDerivedEffects && movedPieceAfterApply) {
     const key = actorSide === 'player' ? 'last_player_moved_piece' : 'last_enemy_moved_piece';

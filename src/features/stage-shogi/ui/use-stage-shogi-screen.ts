@@ -156,6 +156,7 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
   const [enemyPreviewTargets, setEnemyPreviewTargets] = useState<BoardCell[]>([]);
   const [poisonHazardCells, setPoisonHazardCells] = useState<BoardCell[]>([]);
   const [rockObstacleCells, setRockObstacleCells] = useState<BoardCell[]>([]);
+  const [batsuHazardCells, setBatsuHazardCells] = useState<BoardCell[]>([]);
   const [isLoadingPlayerLegalMoves, setIsLoadingPlayerLegalMoves] = useState(false);
   /** syncFromCanonical のたびに増やし、手番・moveNo が不変でも合法手を再取得する（盾で着手無効化など）。 */
   const [boardSyncEpoch, setBoardSyncEpoch] = useState(0);
@@ -356,6 +357,7 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
     persistentHazardsRef.current = synced.persistentHazards;
     setPoisonHazardCells(synced.poisonHazardCells);
     setRockObstacleCells(synced.rockObstacleCells);
+    setBatsuHazardCells(synced.batsuHazardCells);
     setHands(synced.hands);
     setSideToMove(synced.sideToMove);
     setMoveNo(synced.moveNo);
@@ -1833,6 +1835,7 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
     enemyPreviewTargets,
     poisonHazardCells,
     rockObstacleCells,
+    batsuHazardCells,
     hands,
     pendingPromotion,
     pendingTimeActionCell,

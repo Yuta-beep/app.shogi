@@ -41,6 +41,8 @@ export const BOARD_PIECE_SIZE_OVERRIDES: Partial<Record<string, number>> = {
 export const POISON_CELL_IMAGE_SOURCE = require('../../../../assets/cells/毒マス.png');
 /** 牢・柵スキルで行動不能になった駒の上に重ねる */
 export const PRISON_CHAIN_IMAGE_SOURCE = require('../../../../assets/cells/鎖.png');
+/** 穴スキルの侵入不可セル表示 */
+export const BATSU_CELL_IMAGE_SOURCE = require('../../../../assets/cells/バツマス.png');
 /** 岩スキルの障害物セル表示 */
 export const ROCK_OBSTACLE_IMAGE_SOURCE = require('../../../../assets/pieces/岩の障害物.png');
 
@@ -126,6 +128,8 @@ export type BoardPiece = {
   prisonChained?: boolean;
   /** 行動不能（stun）由来の緑オーラ */
   stunnedAura?: boolean;
+  /** 行動不能（abyss_stun）由来の紫オーラ */
+  abyssAura?: boolean;
 };
 
 export type PreservedMovedPiece = {
@@ -656,7 +660,9 @@ export function reconcileExtendedPieceHandsAgainstBoard(
         codeU === 'BIGNOISE' ||
         codeU === 'BULL' ||
         codeU === 'RITUAL' ||
-        codeU === 'SAINT'
+        codeU === 'SAINT' ||
+        codeU === 'HOLE' ||
+        codeU === 'ABYSS'
       ) {
         continue;
       }
@@ -844,6 +850,44 @@ export function applyStunAuraEffectToPieces(
   }));
 }
 
+function abyssAuraDisplayKeysFromCanonical(position: BattleCanonicalPosition): Set<string> {
+  const keys = new Set<string>();
+  const boardState = asRecord(position.boardState);
+  if (!boardState) return keys;
+  const skillState = asRecord(boardState.skill_state ?? boardState.skillState);
+  const rawList = (skillState?.piece_statuses ??
+    skillState?.pieceStatuses ??
+    boardState.piece_statuses ??
+    boardState.pieceStatuses) as unknown;
+  if (!Array.isArray(rawList)) return keys;
+  for (const raw of rawList) {
+    const st = asRecord(raw);
+    if (!st) continue;
+    const statusType = asString(st.status_type ?? st.statusType) ?? '';
+    if (statusType !== 'abyss_stun') continue;
+    const turns = Number(st.remaining_turns ?? st.remainingTurns ?? 1);
+    if (!Number.isFinite(turns) || turns <= 0) continue;
+    const row = normalizeCellIndex(Number(st.row));
+    const col = normalizeCellIndex(Number(st.col));
+    if (row === null || col === null) continue;
+    const side = normalizeSide(asString(st.side) ?? 'player');
+    keys.add(`${side}:${row}:${col}`);
+  }
+  return keys;
+}
+
+export function applyAbyssAuraEffectToPieces(
+  pieces: BoardPiece[],
+  position: BattleCanonicalPosition,
+): BoardPiece[] {
+  const keys = abyssAuraDisplayKeysFromCanonical(position);
+  if (keys.size === 0) return pieces.map((p) => ({ ...p, abyssAura: false }));
+  return pieces.map((p) => ({
+    ...p,
+    abyssAura: keys.has(`${p.side}:${p.row}:${p.col}`),
+  }));
+}
+
 export function poisonHazardCellsForDisplay(position: BattleCanonicalPosition): BoardCell[] {
   const boardState = asRecord(position.boardState);
   if (!boardState) return [];
@@ -904,6 +948,36 @@ export function rockObstacleCellsForDisplay(position: BattleCanonicalPosition): 
   return out;
 }
 
+export function batsuHazardCellsForDisplay(position: BattleCanonicalPosition): BoardCell[] {
+  const boardState = asRecord(position.boardState);
+  if (!boardState) return [];
+  const skillState = asRecord(boardState.skill_state ?? boardState.skillState);
+  const rawList = (skillState?.board_hazards ??
+    skillState?.boardHazards ??
+    boardState.board_hazards ??
+    boardState.boardHazards) as unknown;
+  if (!Array.isArray(rawList)) return [];
+
+  const out: BoardCell[] = [];
+  const seen = new Set<string>();
+  for (const raw of rawList) {
+    const hazard = asRecord(raw);
+    if (!hazard) continue;
+    const hazardType = asString(hazard.hazard_type ?? hazard.hazardType) ?? '';
+    const remaining = Number(hazard.remaining_turns ?? hazard.remainingTurns ?? 1);
+    const row = normalizeCellIndex(Number(hazard.row));
+    const col = normalizeCellIndex(Number(hazard.col));
+    if (hazardType !== 'pit_cell') continue;
+    if (!Number.isFinite(remaining) || remaining <= 0) continue;
+    if (row === null || col === null) continue;
+    const key = `${row}:${col}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ row, col });
+  }
+  return out;
+}
+
 export function movementRuleByCellFromCanonical(position: BattleCanonicalPosition) {
   const out = new Map<string, string>();
   const boardState = asRecord(position.boardState);
@@ -947,6 +1021,7 @@ export function immobilizedKeysFromCanonical(position: BattleCanonicalPosition) 
     const statusType = asString(entry.status_type ?? entry.statusType) ?? '';
     if (
       statusType !== 'stun' &&
+      statusType !== 'abyss_stun' &&
       statusType !== 'time_stop' &&
       statusType !== 'dark_blind' &&
       statusType !== 'prison_fence_stun' &&
@@ -1921,8 +1996,10 @@ export function syncCanonicalState(params: {
   const withATransformEffect = applyATransformEffectToPieces(withDarkVeil, position);
   const withPrisonChain = applyPrisonChainEffectToPieces(withATransformEffect, position);
   const withStunAura = applyStunAuraEffectToPieces(withPrisonChain, position);
+  const withAbyssAura = applyAbyssAuraEffectToPieces(withStunAura, position);
   const poisonHazardCells = poisonHazardCellsForDisplay(position);
   const rockObstacleCells = rockObstacleCellsForDisplay(position);
+  const batsuHazardCells = batsuHazardCellsForDisplay(position);
   const movementRuleByCell = movementRuleByCellFromCanonical(position);
   const immobilizedKeys = immobilizedKeysFromCanonical(position);
   const nextHands = remapHandsStateToDisplayPieceCodes(
@@ -1930,7 +2007,7 @@ export function syncCanonicalState(params: {
     pieceCatalog,
   );
   const reconciledHands = reconcileExtendedPieceHandsAgainstBoard(nextHands, withPromotionOverlay);
-  const stabilizedPieces = enforcePersistentHazardCells(withStunAura, persistentHazards);
+  const stabilizedPieces = enforcePersistentHazardCells(withAbyssAura, persistentHazards);
   const pieceDefsByChar = Object.fromEntries(
     pieceCatalog.filter((it) => it.char).map((item) => [item.char, item]),
   ) as Partial<Record<string, PieceCatalogItem>>;
@@ -1947,6 +2024,7 @@ export function syncCanonicalState(params: {
     persistentHazards: nextPersistentHazards,
     poisonHazardCells,
     rockObstacleCells,
+    batsuHazardCells,
     hands: reconciledHands,
     sideToMove: position.sideToMove,
     moveNo: position.turnNumber,
