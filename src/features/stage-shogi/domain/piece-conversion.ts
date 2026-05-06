@@ -459,6 +459,8 @@ export const CODE_TO_CHAR: Readonly<Record<string, string>> = {
   SAINT: '聖',
   /** 聖剣「剣」。名刀 SWORD/KATANA とは別手駒キー。 */
   HOLY_SWORD: '剣',
+  DISEASE: '病',
+  MEDICINE: '薬',
 };
 
 export const PROMOTED_CODE_TO_CHAR: Readonly<Record<string, string>> = {

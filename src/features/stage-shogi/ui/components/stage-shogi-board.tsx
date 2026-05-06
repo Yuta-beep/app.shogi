@@ -49,6 +49,7 @@ type BoardPieceSpriteProps = {
   darkVeiled?: boolean;
   aTransformed?: boolean;
   prisonChained?: boolean;
+  stunnedAura?: boolean;
 };
 
 const BoardPieceSprite = memo(function BoardPieceSprite({
@@ -60,6 +61,7 @@ const BoardPieceSprite = memo(function BoardPieceSprite({
   darkVeiled = false,
   aTransformed = false,
   prisonChained = false,
+  stunnedAura = false,
 }: BoardPieceSpriteProps) {
   const rowIndex = normalizeCellIndex(piece.row);
   const colIndex = normalizeCellIndex(piece.col);
@@ -206,6 +208,23 @@ const BoardPieceSprite = memo(function BoardPieceSprite({
                 style={{ width: '100%', height: '100%' }}
               />
             </View>
+          ) : null}
+          {stunnedAura && !darkVeiled ? (
+            <View
+              pointerEvents="none"
+              style={{
+                position: 'absolute',
+                left: '10%',
+                right: '10%',
+                top: '10%',
+                bottom: '10%',
+                borderRadius: 999,
+                borderWidth: 2,
+                borderColor: 'rgba(34, 197, 94, 0.95)',
+                backgroundColor: 'rgba(34, 197, 94, 0.16)',
+                opacity: 0.95,
+              }}
+            />
           ) : null}
         </View>
       </View>
@@ -463,6 +482,7 @@ const BoardPiecesLayer = memo(function BoardPiecesLayer({
             darkVeiled={Boolean(placement.darkVeiled)}
             aTransformed={Boolean(placement.aTransformed)}
             prisonChained={Boolean(placement.prisonChained)}
+            stunnedAura={Boolean((placement as any).stunnedAura)}
           />
         );
       })}

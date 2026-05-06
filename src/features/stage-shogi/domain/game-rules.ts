@@ -188,6 +188,8 @@ const CAPTURE_CHAR_TO_HAND_CODE: Readonly<Record<string, string>> = {
   犇: 'BULL',
   礼: 'RITUAL',
   聖: 'SAINT',
+  病: 'DISEASE',
+  薬: 'MEDICINE',
 };
 
 const OPAQUE_CAPTURE_CODE_TO_HAND_CODE: Readonly<Record<string, string>> = {
@@ -199,6 +201,8 @@ const OPAQUE_CAPTURE_CODE_TO_HAND_CODE: Readonly<Record<string, string>> = {
   PIECE_1275B5728D1C: 'BULL',
   PIECE_4FCDDF14D08D: 'RITUAL',
   PIECE_A3BAB6C13DC7: 'SAINT',
+  PIECE_151646512B2F: 'DISEASE',
+  PIECE_3E3EF463EADC: 'MEDICINE',
 };
 
 function opaqueCapturedCodeToHandCode(rawCode: string | null): string | null {
@@ -214,12 +218,16 @@ function opaqueCapturedCodeToHandCode(rawCode: string | null): string | null {
   if (upper.includes('1275B5728D1C')) return 'BULL';
   if (upper.includes('4FCDDF14D08D')) return 'RITUAL';
   if (upper.includes('A3BAB6C13DC7')) return 'SAINT';
+  if (upper.includes('151646512B2F')) return 'DISEASE';
+  if (upper.includes('3E3EF463EADC')) return 'MEDICINE';
   if (upper.includes('BOOK')) return 'BOOK';
   if (upper.includes('SEAL')) return 'SEAL';
   if (upper.includes('BIGNOISE')) return 'BIGNOISE';
   if (upper.includes('BULL')) return 'BULL';
   if (upper.includes('RITUAL')) return 'RITUAL';
   if (upper.includes('SAINT')) return 'SAINT';
+  if (upper.includes('DISEASE')) return 'DISEASE';
+  if (upper.includes('MEDICINE')) return 'MEDICINE';
   if (upper.includes('0F14ABCC6E5E')) return 'HOLY_SWORD';
   return null;
 }

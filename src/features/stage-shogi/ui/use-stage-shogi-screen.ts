@@ -54,6 +54,7 @@ import {
   legalMovesToTarget,
   localPromotedModuleFromBaseCodeCandidates,
   mergePeopleFieldDiagonalMoveVectors,
+  applyAdjacentMedicineMoveRangeBuff,
   patchHandsForStarReturnSkill,
   pieceCodeFromPlacement,
   pieceCharFromCode,
@@ -1560,9 +1561,14 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
             : ((piece.pieceCode ? pieceDefsByCode[piece.pieceCode] : null) ??
               pieceDefsByChar[piece.char] ??
               null);
-        const previewVectors = mergePeopleFieldDiagonalMoveVectors(
+        const previewVectorsWithField = mergePeopleFieldDiagonalMoveVectors(
           piece,
           enemyPieceDef?.moveVectors ?? [],
+          pieces,
+        );
+        const previewVectors = applyAdjacentMedicineMoveRangeBuff(
+          piece,
+          previewVectorsWithField,
           pieces,
         );
         const rawTargets = previewVectors.length

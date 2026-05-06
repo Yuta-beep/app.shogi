@@ -124,6 +124,8 @@ export type BoardPiece = {
   aTransformed?: boolean;
   /** 牢・柵スキル由来の行動不能（鎖.png） */
   prisonChained?: boolean;
+  /** 行動不能（stun）由来の緑オーラ */
+  stunnedAura?: boolean;
 };
 
 export type PreservedMovedPiece = {
@@ -195,6 +197,33 @@ export function mergePeopleFieldDiagonalMoveVectors(
   );
   if (!hasAllyField) return [...baseVectors];
   return [...baseVectors, ...PEOPLE_FIELD_DIAGONAL_BUFF_VECTORS];
+}
+
+function isMedicinePieceForMovePreview(piece: BoardPiece): boolean {
+  const code = toBasePieceCode(piece.pieceCode ?? null);
+  if (code === 'MEDICINE') return true;
+  if (piece.char === '薬') return true;
+  return CHAR_TO_CODE[piece.char] === 'MEDICINE';
+}
+
+/** 敵駒タップ時の移動範囲表示：周囲8マスに味方の薬がいる駒は各方向の maxStep を +1 する。 */
+export function applyAdjacentMedicineMoveRangeBuff(
+  piece: BoardPiece,
+  baseVectors: readonly MoveVector[],
+  allPieces: BoardPiece[],
+): MoveVector[] {
+  const hasAdjacentAllyMedicine = allPieces.some((p) => {
+    if (p.side !== piece.side) return false;
+    if (!isMedicinePieceForMovePreview(p)) return false;
+    const dr = Math.abs(p.row - piece.row);
+    const dc = Math.abs(p.col - piece.col);
+    return (dr !== 0 || dc !== 0) && dr <= 1 && dc <= 1;
+  });
+  if (!hasAdjacentAllyMedicine) return [...baseVectors];
+  return baseVectors.map((v) => ({
+    ...v,
+    maxStep: Math.max(1, (Number(v.maxStep) || 1) + 1),
+  }));
 }
 
 export function isEnemySide(side: string) {
@@ -774,6 +803,44 @@ export function applyPrisonChainEffectToPieces(
   return pieces.map((p) => ({
     ...p,
     prisonChained: keys.has(`${p.side}:${p.row}:${p.col}`),
+  }));
+}
+
+function stunAuraDisplayKeysFromCanonical(position: BattleCanonicalPosition): Set<string> {
+  const keys = new Set<string>();
+  const boardState = asRecord(position.boardState);
+  if (!boardState) return keys;
+  const skillState = asRecord(boardState.skill_state ?? boardState.skillState);
+  const rawList = (skillState?.piece_statuses ??
+    skillState?.pieceStatuses ??
+    boardState.piece_statuses ??
+    boardState.pieceStatuses) as unknown;
+  if (!Array.isArray(rawList)) return keys;
+  for (const raw of rawList) {
+    const st = asRecord(raw);
+    if (!st) continue;
+    const statusType = asString(st.status_type ?? st.statusType) ?? '';
+    if (statusType !== 'stun') continue;
+    const turns = Number(st.remaining_turns ?? st.remainingTurns ?? 1);
+    if (!Number.isFinite(turns) || turns <= 0) continue;
+    const row = normalizeCellIndex(Number(st.row));
+    const col = normalizeCellIndex(Number(st.col));
+    if (row === null || col === null) continue;
+    const side = normalizeSide(asString(st.side) ?? 'player');
+    keys.add(`${side}:${row}:${col}`);
+  }
+  return keys;
+}
+
+export function applyStunAuraEffectToPieces(
+  pieces: BoardPiece[],
+  position: BattleCanonicalPosition,
+): BoardPiece[] {
+  const keys = stunAuraDisplayKeysFromCanonical(position);
+  if (keys.size === 0) return pieces.map((p) => ({ ...p, stunnedAura: false }));
+  return pieces.map((p) => ({
+    ...p,
+    stunnedAura: keys.has(`${p.side}:${p.row}:${p.col}`),
   }));
 }
 
@@ -1853,6 +1920,7 @@ export function syncCanonicalState(params: {
   const withDarkVeil = applyDarkVeilFromSkillStateToPieces(withPersistentCells, position);
   const withATransformEffect = applyATransformEffectToPieces(withDarkVeil, position);
   const withPrisonChain = applyPrisonChainEffectToPieces(withATransformEffect, position);
+  const withStunAura = applyStunAuraEffectToPieces(withPrisonChain, position);
   const poisonHazardCells = poisonHazardCellsForDisplay(position);
   const rockObstacleCells = rockObstacleCellsForDisplay(position);
   const movementRuleByCell = movementRuleByCellFromCanonical(position);
@@ -1862,12 +1930,12 @@ export function syncCanonicalState(params: {
     pieceCatalog,
   );
   const reconciledHands = reconcileExtendedPieceHandsAgainstBoard(nextHands, withPromotionOverlay);
-  const stabilizedPieces = enforcePersistentHazardCells(withPrisonChain, persistentHazards);
+  const stabilizedPieces = enforcePersistentHazardCells(withStunAura, persistentHazards);
   const pieceDefsByChar = Object.fromEntries(
     pieceCatalog.filter((it) => it.char).map((item) => [item.char, item]),
   ) as Partial<Record<string, PieceCatalogItem>>;
   const withSpringDragonAwakening = mapPiecesForSpringDragonAwakeningDisplay(
-    stabilizedPieces,
+    stabilizedPieces.map((p) => p),
     pieceDefsByChar,
   );
   const nextPersistentHazards = withSpringDragonAwakening.filter((p) =>

@@ -118,6 +118,15 @@ function isSaintPieceForLegal(piece: AiBoardPiece): boolean {
   return code === 'SAINT';
 }
 
+function isMedicinePieceForLegal(piece: AiBoardPiece): boolean {
+  if (normKanjiForEngineRules(piece.char) === '薬') return true;
+  const raw = (piece.pieceCode ?? '').toUpperCase();
+  // piece-image-registry の piece_3e3ef463eadc（薬）
+  if (raw.includes('3E3EF463EADC')) return true;
+  const code = toBasePieceCode(piece.pieceCode);
+  return code === 'MEDICINE';
+}
+
 /** この駒が前後左右に味方の「聖」と隣接しているとき、移動ベクトル各方向の maxStep を +1 */
 function hasOrthogonalAdjacentAllySaint(pieces: AiBoardPiece[], piece: AiBoardPiece): boolean {
   const ortho: ReadonlyArray<{ dr: number; dc: number }> = [
@@ -135,7 +144,30 @@ function hasOrthogonalAdjacentAllySaint(pieces: AiBoardPiece[], piece: AiBoardPi
   return false;
 }
 
+/** この駒が周囲 8 マスに味方の「薬」と隣接しているとき、移動ベクトル各方向の maxStep を +1 */
+function hasAdjacentAllyMedicine(pieces: AiBoardPiece[], piece: AiBoardPiece): boolean {
+  for (let dr = -1; dr <= 1; dr += 1) {
+    for (let dc = -1; dc <= 1; dc += 1) {
+      if (dr === 0 && dc === 0) continue;
+      const r = piece.row + dr;
+      const c = piece.col + dc;
+      const ally = pieces.find((p) => p.row === r && p.col === c && p.side === piece.side);
+      if (ally && isMedicinePieceForLegal(ally)) return true;
+    }
+  }
+  return false;
+}
+
 function applySaintAdjacentMoveRangeBuff(
+  vectors: AiPieceDefinition['moveVectors'],
+): AiPieceDefinition['moveVectors'] {
+  return vectors.map((v) => ({
+    ...v,
+    maxStep: Math.max(1, (Number(v.maxStep) || 1) + 1),
+  }));
+}
+
+function applyMedicineAdjacentMoveRangeBuff(
   vectors: AiPieceDefinition['moveVectors'],
 ): AiPieceDefinition['moveVectors'] {
   return vectors.map((v) => ({
@@ -1127,6 +1159,9 @@ function generateBoardPieceMoves(input: {
 
   if (hasOrthogonalAdjacentAllySaint(input.pieces, input.piece)) {
     effectiveVectors = applySaintAdjacentMoveRangeBuff(effectiveVectors);
+  }
+  if (hasAdjacentAllyMedicine(input.pieces, input.piece)) {
+    effectiveVectors = applyMedicineAdjacentMoveRangeBuff(effectiveVectors);
   }
 
   const leapVectors = effectiveVectors.filter((v) => isLeapOverOneMode(v.captureMode));

@@ -604,6 +604,7 @@ export function applyMove(input: {
   let nextPieces = pieces.map((piece) => ({ ...piece }));
   let movedPieceAfterApply: (typeof nextPieces)[number] | null = null;
   let didCapture = false;
+  let diseaseCapturedByActor = false;
   let starReturnProcTriggered = false;
   /** 刀の隣取り・銃の貫通取りなど、エンジン内在スキル（skill_definitions_v2 の 52/54 非依存）。 */
   let intrinsicCombatSkillTriggered = false;
@@ -805,6 +806,19 @@ export function applyMove(input: {
         }
       } else {
         didCapture = true;
+        {
+          const capturedChar = (() => {
+            try {
+              return (captured.char ?? '').normalize('NFKC');
+            } catch {
+              return captured.char ?? '';
+            }
+          })();
+          const rawCode = (captured.pieceCode ?? '').toUpperCase();
+          if (!captureOwnPiece && (capturedChar === '病' || rawCode.includes('151646512B2F'))) {
+            diseaseCapturedByActor = true;
+          }
+        }
         const consumeReiSubstitute =
           !captureOwnPiece && captured
             ? shouldConsumeReiSubstituteAfterAllyCapture(nextPieces, captured)
@@ -1028,6 +1042,19 @@ export function applyMove(input: {
     skillStateRaw && typeof skillStateRaw === 'object'
       ? { ...(skillStateRaw as Record<string, unknown>) }
       : {};
+  // 病: 取った駒（攻撃側）を 3 ターン行動不能にする。
+  if (turnAdvanced && applyLandingDerivedEffects && diseaseCapturedByActor && movedPieceAfterApply) {
+    const prev = (skillState.piece_statuses ?? skillState.pieceStatuses) as unknown;
+    const arr = Array.isArray(prev) ? [...prev] : [];
+    arr.push({
+      row: movedPieceAfterApply.row,
+      col: movedPieceAfterApply.col,
+      side: actorSide,
+      status_type: 'stun',
+      remaining_turns: 3,
+    });
+    (skillState as Record<string, unknown>).piece_statuses = arr;
+  }
   if (turnAdvanced && applyLandingDerivedEffects && movedPieceAfterApply) {
     const key = actorSide === 'player' ? 'last_player_moved_piece' : 'last_enemy_moved_piece';
     skillState[key] = {
