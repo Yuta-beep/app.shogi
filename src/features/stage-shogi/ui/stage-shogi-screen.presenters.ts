@@ -23,8 +23,7 @@ const RIDGE_SKILL_DESCRIPTION = '移動時20%の確率で周囲1マスの空き�
 const ORE_SKILL_DESCRIPTION =
   '移動時20%の確率で味方の「歩」駒1体を「金」「銀」「銅」のいずれかに変化させる。';
 const ROCK_SKILL_DESCRIPTION = '移動時に左右1マスへ2ターン持続する岩障害物を召喚する。';
-const WATERFALL_SKILL_DESCRIPTION =
-  '移動時20％の確率で周囲の敵駒を全て相手の持ち駒に流す。';
+const WATERFALL_SKILL_DESCRIPTION = '移動時20％の確率で周囲の敵駒を全て相手の持ち駒に流す。';
 const EXPERIMENT_SKILL_DESCRIPTION =
   '移動後、周囲8マスにいる敵駒（王・玉を除く）を「異」駒に変化させる。';
 const MUTANT_SKILL_DESCRIPTION =
@@ -56,13 +55,16 @@ const KATANA_SKILL_INSPECT =
 const GUN_SKILL_INSPECT =
   '前方ちょうど2マス、または斜め後ろ2マスへの移動で、進路上の敵駒を貫いて取る（中間の味方はルールに従い除去される場合がある）。';
 const BOOK_SKILL_INSPECT = 'なし';
-const SEAL_SKILL_INSPECT =
-  'この駒の斜め4方向に隣接する敵駒は移動できない。';
+const SEAL_SKILL_INSPECT = 'この駒の斜め4方向に隣接する敵駒は移動できない。';
 const BIGNOISE_SKILL_INSPECT = '轟音で移動時両隣の敵駒を吹き飛ばす。';
 const RITUAL_SKILL_INSPECT =
   '他の味方駒が取られたとき、この駒が身代わりとなり消滅し、取られた味方駒は自分の持ち駒に戻る。';
 const SAINT_SKILL_INSPECT =
   'この駒の前後左右1マスにいる味方駒の移動範囲を、各方向1マスずつ増やす。';
+const RED_ONI_SKILL_INSPECT =
+  '移動時、左右の敵駒を1マス遠ざける。さらに周囲のランダムな1マスを2ターンのバツマスにする。';
+const BLUE_ONI_SKILL_INSPECT = 'この駒の周囲8マスにいる敵駒の移動範囲を前後1マスに制限する。';
+const BLACK_ONI_SKILL_INSPECT = '移動時、相手側の盤面3行からランダムな3マスを2ターン毒マスにする。';
 
 function inspectPieceFlagsByCode(pieceCode?: string | null): {
   book: boolean;
@@ -70,6 +72,9 @@ function inspectPieceFlagsByCode(pieceCode?: string | null): {
   bignoise: boolean;
   ritual: boolean;
   saint: boolean;
+  redOni: boolean;
+  blueOni: boolean;
+  blackOni: boolean;
 } {
   const code = (pieceCode ?? '').toUpperCase();
   return {
@@ -78,6 +83,9 @@ function inspectPieceFlagsByCode(pieceCode?: string | null): {
     bignoise: code === 'BIGNOISE',
     ritual: code === 'RITUAL' || code.includes('4FCDDF14D08D'),
     saint: code === 'SAINT' || code.includes('A3BAB6C13DC7'),
+    redOni: code === 'REDONI',
+    blueOni: code === 'BLUEONI',
+    blackOni: code === 'BLACKONI',
   };
 }
 
@@ -94,6 +102,9 @@ export function resolveInspectSkillDescription(
   if (char === '轟' || byCode.bignoise) return BIGNOISE_SKILL_INSPECT;
   if (char === '礼' || byCode.ritual) return RITUAL_SKILL_INSPECT;
   if (char === '聖' || byCode.saint) return SAINT_SKILL_INSPECT;
+  if (byCode.redOni) return RED_ONI_SKILL_INSPECT;
+  if (byCode.blueOni) return BLUE_ONI_SKILL_INSPECT;
+  if (byCode.blackOni) return BLACK_ONI_SKILL_INSPECT;
   if (char === '葉') return LEAF_SKILL_DESCRIPTION;
   if (char === '電') return ELECTRIC_SKILL_DESCRIPTION;
   if (char === '氷') return ICE_SKILL_DESCRIPTION;
@@ -130,6 +141,9 @@ export function resolveInspectMoveDescription(
   if (char === '書' || byCode.book) return '周囲8マスの味方駒が動ける範囲の和集合。';
   if (char === '封' || byCode.seal) return '通常移動 + 斜め4方向に移動不能オーラ。';
   if (char === '聖' || byCode.saint) return '全方向に1マス。';
+  if (byCode.redOni) return '前後左右に1マス。';
+  if (byCode.blueOni) return '全方向に1マス。';
+  if (byCode.blackOni) return '前後左右に何マスでも。';
   if (char === '闇') return '全方向に1マス';
   if (char === '月') {
     return 'TURN数を4で割った余りが0または1のときは全方位に1マス、余りが2または3のときは全方位に2マスまで移動できる。';

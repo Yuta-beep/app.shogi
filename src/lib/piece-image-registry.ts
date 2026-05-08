@@ -512,6 +512,16 @@ const pieceImageRecords: PieceImageRecord[] = [
     source: require('../../assets/pieces/0083-piece_533b7fec5456.png'),
   },
   {
+    pieceCode: 'blueOni',
+    char: '鬼',
+    source: require('../../assets/pieces/blueOni.png'),
+  },
+  {
+    pieceCode: 'blackOni',
+    char: '鬼',
+    source: require('../../assets/pieces/blackOni.png'),
+  },
+  {
     pieceId: 84,
     pieceCode: 'piece_924546405a8e',
     char: '朧',
@@ -788,6 +798,24 @@ for (const [code, char] of Object.entries(aliasCodeToChar)) {
   if (source != null && !pieceImageByCode.has(code)) {
     pieceImageByCode.set(code, source);
   }
+}
+
+// 鬼バリアントは char ベースだと上書き順で誤画像になるため、コードごとに固定する。
+const redOniSource =
+  pieceImageByCode.get('redOni') ??
+  pieceImageByCode.get('REDONI') ??
+  pieceImageByCode.get('piece_533b7fec5456') ??
+  pieceImageByCode.get('PIECE_533B7FEC5456');
+if (redOniSource != null) {
+  pieceImageByCode.set('REDONI', redOniSource);
+}
+const blueOniSource = pieceImageByCode.get('blueOni') ?? pieceImageByCode.get('BLUEONI');
+if (blueOniSource != null) {
+  pieceImageByCode.set('BLUEONI', blueOniSource);
+}
+const blackOniSource = pieceImageByCode.get('blackOni') ?? pieceImageByCode.get('BLACKONI');
+if (blackOniSource != null) {
+  pieceImageByCode.set('BLACKONI', blackOniSource);
 }
 
 export function getLocalPieceImageSource(input: {

@@ -87,7 +87,11 @@ function resolveCapturedHandCode(
       return captured.char ?? '';
     }
   })();
-  if (capturedChar === '書' || capturedChar === '書物' || rawCapturedCode.includes('5D848242A136')) {
+  if (
+    capturedChar === '書' ||
+    capturedChar === '書物' ||
+    rawCapturedCode.includes('5D848242A136')
+  ) {
     return 'BOOK';
   }
   if (capturedChar === '封' || rawCapturedCode.includes('7000FED9D9D4')) {
@@ -165,7 +169,8 @@ function debugLogBookCaptureToHand(input: {
     }
   })();
   const rawCode = (input.captured.pieceCode ?? '').toUpperCase();
-  const isBook = ch === '書' || ch === '書物' || rawCode.includes('BOOK') || rawCode.includes('5D848242A136');
+  const isBook =
+    ch === '書' || ch === '書物' || rawCode.includes('BOOK') || rawCode.includes('5D848242A136');
   if (!isBook) return;
   console.info('[book-capture-debug] add-to-hand', {
     actorSide: input.actorSide,
@@ -371,9 +376,7 @@ function shouldConsumeReiSubstituteAfterAllyCapture(
   const side = captured.side;
   return boardWithCaptured.some(
     (p) =>
-      p.side === side &&
-      isReiRitualPiece(p) &&
-      !(p.row === captured.row && p.col === captured.col),
+      p.side === side && isReiRitualPiece(p) && !(p.row === captured.row && p.col === captured.col),
   );
 }
 
@@ -431,10 +434,10 @@ function computeGunPenetrationMidpoint(
 
 type HandsBag = ReturnType<typeof normalizeHandsStateKeys>;
 
-function cloneCombatBoardSnapshot(input: {
+function cloneCombatBoardSnapshot(input: { pieces: AiBoardPiece[]; hands: HandsBag }): {
   pieces: AiBoardPiece[];
   hands: HandsBag;
-}): { pieces: AiBoardPiece[]; hands: HandsBag } {
+} {
   return {
     pieces: input.pieces.map((p) => ({ ...p })),
     hands: normalizeHandsStateKeys({
@@ -764,7 +767,10 @@ export function applyMove(input: {
         }
       }
 
-      if (!captureOwnPiece && tryShieldIntrinsicAbortHostileCapture(actorSide, captured, nextPieces)) {
+      if (
+        !captureOwnPiece &&
+        tryShieldIntrinsicAbortHostileCapture(actorSide, captured, nextPieces)
+      ) {
         shieldAbortedMove = true;
         intrinsicCombatSkillTriggered = true;
         const snap = cloneCombatBoardSnapshot(combatBoardSnapshot);
@@ -1076,7 +1082,12 @@ export function applyMove(input: {
       ? { ...(skillStateRaw as Record<string, unknown>) }
       : {};
   // 病: 取った駒（攻撃側）を 3 ターン行動不能にする。
-  if (turnAdvanced && applyLandingDerivedEffects && diseaseCapturedByActor && movedPieceAfterApply) {
+  if (
+    turnAdvanced &&
+    applyLandingDerivedEffects &&
+    diseaseCapturedByActor &&
+    movedPieceAfterApply
+  ) {
     const prev = (skillState.piece_statuses ?? skillState.pieceStatuses) as unknown;
     const arr = Array.isArray(prev) ? [...prev] : [];
     arr.push({
@@ -1102,11 +1113,7 @@ export function applyMove(input: {
     (skillState as Record<string, unknown>).piece_statuses = arr;
   }
   // 穴: 取られたとき、その位置の周囲8マスの空きマスを4ターン侵入不可（バツマス）にする。
-  if (
-    turnAdvanced &&
-    applyLandingDerivedEffects &&
-    capturedHoleCellsByActor.length > 0
-  ) {
+  if (turnAdvanced && applyLandingDerivedEffects && capturedHoleCellsByActor.length > 0) {
     const hazardsRaw = (skillState.board_hazards ?? skillState.boardHazards) as unknown;
     const hazards = Array.isArray(hazardsRaw) ? [...hazardsRaw] : [];
     const occupied = new Set(nextPieces.map((p) => `${p.row}:${p.col}`));

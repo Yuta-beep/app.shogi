@@ -53,6 +53,9 @@ const RIDGE_PIECE_CODES = new Set(['RIDGE', 'REI', '嶺', '555D2E24EFB0']);
 const ROCK_PIECE_CODES = new Set(['ROCK', '岩', '69D6ECEFF4E1']);
 const ORE_PIECE_CODES = new Set(['ORE', '鉱', '1BC740C95315']);
 const GRAVE_PIECE_CODES = new Set(['GRAVE', '墓', 'BC8AB84E787B']);
+const RED_ONI_PIECE_CODES = new Set(['REDONI', '赤鬼', '鬼']);
+const BLUE_ONI_PIECE_CODES = new Set(['BLUEONI', '青鬼']);
+const BLACK_ONI_PIECE_CODES = new Set(['BLACKONI', '黒鬼']);
 const STANDARD_CORE_PIECE_CODES = new Set(['FU', 'KY', 'KE', 'GI', 'KI', 'KA', 'HI', 'OU']);
 /** 牢・柵（不透明 piece ID のサフィックスでも判定） */
 const PRISON_FENCE_PIECE_CODES = new Set([
@@ -304,7 +307,13 @@ function sendAllAdjacentEnemiesToOwnerHands(input: {
     input.pieces.splice(idx, 1);
     // 仕様: 取られた駒は「相手（対象駒の所有者）」の手駒へ移動。
     incrementHand(input.position, target.side, handCode, 1);
-    moved.push({ row: target.row, col: target.col, side: target.side, char: target.char, handCode });
+    moved.push({
+      row: target.row,
+      col: target.col,
+      side: target.side,
+      char: target.char,
+      handCode,
+    });
   }
   return moved;
 }
@@ -426,6 +435,98 @@ function warpHorizontalAdjacentEnemiesToRandomEmptyCell(input: {
     warped += 1;
   }
   return warped;
+}
+
+function pushHorizontalAdjacentEnemiesOneStepAway(input: {
+  pieces: AiBoardPiece[];
+  center: AiBoardPiece;
+  actorSide: Side;
+}): number {
+  const offsets: ReadonlyArray<{ dc: number }> = [{ dc: -1 }, { dc: 1 }];
+  let pushed = 0;
+  for (const offset of offsets) {
+    const row = input.center.row;
+    const col = input.center.col + offset.dc;
+    if (col < 0 || col > 8) continue;
+    const idx = input.pieces.findIndex((piece) => piece.row === row && piece.col === col);
+    if (idx < 0) continue;
+    const target = input.pieces[idx]!;
+    if (target.side === input.actorSide) continue;
+    const nextCol = target.col + offset.dc;
+    if (nextCol < 0 || nextCol > 8) continue;
+    if (!isCellEmpty(input.pieces, row, nextCol)) continue;
+    input.pieces[idx] = {
+      ...target,
+      row,
+      col: nextCol,
+    };
+    pushed += 1;
+  }
+  return pushed;
+}
+
+function addRandomAdjacentHazard(input: {
+  state: SkillStateRecord;
+  center: AiBoardPiece;
+  hazardType: string;
+  affectsSide: Side;
+  durationTurns: number;
+}): boolean {
+  const candidates: Array<{ row: number; col: number }> = [];
+  for (let dr = -1; dr <= 1; dr += 1) {
+    for (let dc = -1; dc <= 1; dc += 1) {
+      if (dr === 0 && dc === 0) continue;
+      const row = input.center.row + dr;
+      const col = input.center.col + dc;
+      if (row < 0 || row > 8 || col < 0 || col > 8) continue;
+      candidates.push({ row, col });
+    }
+  }
+  if (candidates.length === 0) return false;
+  const picked = candidates[Math.floor(Math.random() * candidates.length)]!;
+  input.state.board_hazards.push({
+    row: picked.row,
+    col: picked.col,
+    hazard_type: input.hazardType,
+    affects_side: input.affectsSide,
+    remaining_turns: input.durationTurns,
+  });
+  return true;
+}
+
+function addRandomOpponentCampPoisonCells(input: {
+  state: SkillStateRecord;
+  pieces: AiBoardPiece[];
+  actorSide: Side;
+  count: number;
+  durationTurns: number;
+}): number {
+  const targetRows = input.actorSide === 'player' ? [0, 1, 2] : [6, 7, 8];
+  const pool: Array<{ row: number; col: number }> = [];
+  for (const row of targetRows) {
+    for (let col = 0; col <= 8; col += 1) {
+      if (!isCellEmpty(input.pieces, row, col)) continue;
+      pool.push({ row, col });
+    }
+  }
+  if (pool.length === 0) return 0;
+  let applied = 0;
+  const used = new Set<string>();
+  while (applied < input.count && used.size < pool.length) {
+    const picked = pool[Math.floor(Math.random() * pool.length)]!;
+    const key = `${picked.row}:${picked.col}`;
+    if (used.has(key)) continue;
+    used.add(key);
+    input.state.board_hazards.push({
+      row: picked.row,
+      col: picked.col,
+      hazard_type: 'poison_cell',
+      affects_side: sideOpposite(input.actorSide),
+      remaining_turns: input.durationTurns,
+    });
+    applied += 1;
+  }
+  return applied;
 }
 
 function moveAdjacentAllySandWithLeader(input: {
@@ -1122,9 +1223,7 @@ export function applyMoveSkillEffects(input: {
   const isWaterfallMover =
     WATERFALL_PIECE_CODES.has(movedCode) ||
     normalizeSkillPieceCode(input.move.pieceCode) === '滝' ||
-    (movedPiece
-      ? WATERFALL_PIECE_CODES.has(normalizeSkillPieceCode(movedPiece.pieceCode))
-      : false);
+    (movedPiece ? WATERFALL_PIECE_CODES.has(normalizeSkillPieceCode(movedPiece.pieceCode)) : false);
   const isAMover =
     A_PIECE_CODES.has(movedCode) ||
     normalizeSkillPieceCode(input.move.pieceCode) === 'あ' ||
@@ -1167,6 +1266,18 @@ export function applyMoveSkillEffects(input: {
     normalizeSkillPieceCode(input.move.pieceCode) === '柵' ||
     (movedPiece ? movedPiece.char === '牢' || movedPiece.char === '柵' : false);
   const normalizedMovePieceCode = normalizeSkillPieceCode(input.move.pieceCode);
+  const isBlueOniMover =
+    BLUE_ONI_PIECE_CODES.has(movedCode) ||
+    normalizedMovePieceCode === 'BLUEONI' ||
+    (movedPiece ? movedPiece.char === '鬼' && movedCode === 'BLUEONI' : false);
+  const isBlackOniMover =
+    BLACK_ONI_PIECE_CODES.has(movedCode) ||
+    normalizedMovePieceCode === 'BLACKONI' ||
+    (movedPiece ? movedPiece.char === '鬼' && movedCode === 'BLACKONI' : false);
+  const isRedOniMover =
+    RED_ONI_PIECE_CODES.has(movedCode) ||
+    normalizedMovePieceCode === 'REDONI' ||
+    (movedPiece ? movedPiece.char === '鬼' && movedCode === 'REDONI' : false);
   const isTatsuGodMover =
     movedCode === 'TATSU' ||
     normalizedMovePieceCode === 'TATSU' ||
@@ -1353,9 +1464,9 @@ export function applyMoveSkillEffects(input: {
       });
     }
   }
-  // 虹: 周囲8マスの敵駒の移動範囲を縦横1マスに制限する。
+  // 虹/青鬼: 周囲8マスの敵駒の移動範囲を上下1マスに制限する。
   if (
-    isRainbowMover &&
+    (isRainbowMover || isBlueOniMover) &&
     input.move.fromRow != null &&
     input.move.fromCol != null &&
     input.movedPiece
@@ -1372,7 +1483,7 @@ export function applyMoveSkillEffects(input: {
           row,
           col,
           side: target.side,
-          movement_rule: 'orthogonal_step_only',
+          movement_rule: 'vertical_step_only',
           remaining_turns: 2,
         });
       }
@@ -1808,6 +1919,41 @@ export function applyMoveSkillEffects(input: {
       actorSide: input.actorSide,
       at: [input.movedPiece.row, input.movedPiece.col],
       warpedCount: warped,
+    });
+  }
+  // 赤鬼: 移動時、左右の敵駒を1マス遠ざける + 周囲ランダム1マスを2ターンのバツマスにする。
+  if (
+    isRedOniMover &&
+    input.move.fromRow != null &&
+    input.move.fromCol != null &&
+    input.movedPiece
+  ) {
+    pushHorizontalAdjacentEnemiesOneStepAway({
+      pieces: input.pieces,
+      center: input.movedPiece,
+      actorSide: input.actorSide,
+    });
+    addRandomAdjacentHazard({
+      state,
+      center: input.movedPiece,
+      hazardType: 'pit_cell',
+      affectsSide: sideOpposite(input.actorSide),
+      durationTurns: 2,
+    });
+  }
+  // 黒鬼: 移動時、相手側3行のランダム3マスを2ターン毒マスにする。
+  if (
+    isBlackOniMover &&
+    input.move.fromRow != null &&
+    input.move.fromCol != null &&
+    input.movedPiece
+  ) {
+    addRandomOpponentCampPoisonCells({
+      state,
+      pieces: input.pieces,
+      actorSide: input.actorSide,
+      count: 3,
+      durationTurns: 2,
     });
   }
   // 魔: 移動時10%で周囲8マスの敵駒を最大2体消滅。

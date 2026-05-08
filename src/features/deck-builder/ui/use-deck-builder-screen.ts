@@ -261,7 +261,13 @@ function isDeckAreaRow(row: number): boolean {
 
 /** ステージ30系（K・実・異）はマイデッキ下段に配置不可 */
 export function isPieceBannedFromMyDeck(piece: OwnedPiece): boolean {
-  return piece.char === 'K' || piece.char === '実' || piece.char === '異';
+  const normalizedName = (piece.name ?? '').normalize('NFKC');
+  const isOniBoss =
+    piece.char === '鬼' ||
+    normalizedName === '赤鬼' ||
+    normalizedName === '青鬼' ||
+    normalizedName === '黒鬼';
+  return piece.char === 'K' || piece.char === '実' || piece.char === '異' || isOniBoss;
 }
 
 function filterBannedPiecesOutOfDeckArea(placements: BoardPlacement[]): BoardPlacement[] {

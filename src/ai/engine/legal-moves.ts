@@ -97,6 +97,26 @@ function isGunPiece(piece: AiBoardPiece): boolean {
   return false;
 }
 
+function normalizedPieceCodeUpper(piece: AiBoardPiece): string {
+  return (toBasePieceCode(piece.pieceCode) ?? piece.pieceCode ?? '').toUpperCase();
+}
+
+function isRedOniPiece(piece: AiBoardPiece): boolean {
+  return normalizedPieceCodeUpper(piece) === 'REDONI';
+}
+
+function isBlueOniPiece(piece: AiBoardPiece): boolean {
+  return normalizedPieceCodeUpper(piece) === 'BLUEONI';
+}
+
+function isBlackOniPiece(piece: AiBoardPiece): boolean {
+  return normalizedPieceCodeUpper(piece) === 'BLACKONI';
+}
+
+function isAnyOniVariantPiece(piece: AiBoardPiece): boolean {
+  return isRedOniPiece(piece) || isBlueOniPiece(piece) || isBlackOniPiece(piece);
+}
+
 function gunPieceDebugLog(label: string, payload: Record<string, unknown>): void {
   void label;
   void payload;
@@ -230,13 +250,17 @@ function resolvePieceCodeForLegalMove(piece: AiBoardPiece, lookups: AiPieceLooku
   return 'FU';
 }
 
-function resolveCapturedPieceCodeForLegalMove(piece: AiBoardPiece | null | undefined): string | null {
+function resolveCapturedPieceCodeForLegalMove(
+  piece: AiBoardPiece | null | undefined,
+): string | null {
   if (!piece) return null;
   const ch = normKanjiForEngineRules(piece.char);
   if (ch === '剣') return 'HOLY_SWORD';
   if (ch === '刀') return 'SWORD';
   if (ch === '盾') return 'SHIELD';
-  return toBasePieceCode(capturedToHandPieceCode(piece)) ?? toBasePieceCode(piece.pieceCode ?? null);
+  return (
+    toBasePieceCode(capturedToHandPieceCode(piece)) ?? toBasePieceCode(piece.pieceCode ?? null)
+  );
 }
 
 function resolvePieceDefForBookCopy(
@@ -742,6 +766,41 @@ function normalizeVectorsForTime(piece: AiBoardPiece, vectors: AiPieceDefinition
   ];
 }
 
+function normalizeVectorsForOniVariants(
+  piece: AiBoardPiece,
+  vectors: AiPieceDefinition['moveVectors'],
+): AiPieceDefinition['moveVectors'] {
+  if (isRedOniPiece(piece)) {
+    return [
+      { dx: 0, dy: -1, maxStep: 1 },
+      { dx: -1, dy: 0, maxStep: 1 },
+      { dx: 1, dy: 0, maxStep: 1 },
+      { dx: 0, dy: 1, maxStep: 1 },
+    ];
+  }
+  if (isBlueOniPiece(piece)) {
+    return [
+      { dx: -1, dy: -1, maxStep: 1 },
+      { dx: 0, dy: -1, maxStep: 1 },
+      { dx: 1, dy: -1, maxStep: 1 },
+      { dx: -1, dy: 0, maxStep: 1 },
+      { dx: 1, dy: 0, maxStep: 1 },
+      { dx: -1, dy: 1, maxStep: 1 },
+      { dx: 0, dy: 1, maxStep: 1 },
+      { dx: 1, dy: 1, maxStep: 1 },
+    ];
+  }
+  if (isBlackOniPiece(piece)) {
+    return [
+      { dx: 0, dy: -1, maxStep: 8 },
+      { dx: -1, dy: 0, maxStep: 8 },
+      { dx: 1, dy: 0, maxStep: 8 },
+      { dx: 0, dy: 1, maxStep: 8 },
+    ];
+  }
+  return vectors;
+}
+
 /** 月: TURN（turnNumber）を 4 で割った余りが 0 または 1 のとき全方位 1 マス、2 または 3 のとき全方位 2 マス */
 function moonOmnidirectionalMaxStep(position: AiBattlePosition): number {
   const t = Math.max(1, Math.floor(position.turnNumber));
@@ -819,7 +878,8 @@ function resolveEffectiveVectorsForPiece(
     const boardState = asRecord(position.boardState);
     const customMoveVectors = asRecord(boardState?.custom_move_vectors);
     const marker = lastMovedPieceForBook(position, piece);
-    const markerVectorsRaw = (marker as unknown as { copiedMoveVectors?: unknown }).copiedMoveVectors;
+    const markerVectorsRaw = (marker as unknown as { copiedMoveVectors?: unknown })
+      .copiedMoveVectors;
     if (Array.isArray(markerVectorsRaw) && markerVectorsRaw.length > 0) {
       const markerVectors = markerVectorsRaw
         .map((v) => asRecord(v))
@@ -838,7 +898,9 @@ function resolveEffectiveVectorsForPiece(
               }
             : null;
         })
-        .filter((v): v is { dx: number; dy: number; maxStep: number; captureMode?: string } => v != null);
+        .filter(
+          (v): v is { dx: number; dy: number; maxStep: number; captureMode?: string } => v != null,
+        );
       if (markerVectors.length > 0) {
         didResolveBookCopiedVectors = true;
         return asBookMovementOnlyVectors(markerVectors);
@@ -846,14 +908,15 @@ function resolveEffectiveVectorsForPiece(
     }
     const copied = marker
       ? // skill_state の side / code が壊れていても、盤上の同座標実体を最優先で使う。
-        allPieces.find((p) => p.row === marker.row && p.col === marker.col) ??
-        allPieces.find((p) => p.side === marker.side && p.row === marker.row && p.col === marker.col) ??
-        marker
+        (allPieces.find((p) => p.row === marker.row && p.col === marker.col) ??
+        allPieces.find(
+          (p) => p.side === marker.side && p.row === marker.row && p.col === marker.col,
+        ) ??
+        marker)
       : null;
     if (copied && !isBookPiece(copied)) {
-      const customVectorsRaw = customMoveVectors?.[
-        String(copied.pieceCode ?? marker?.pieceCode ?? '').toUpperCase()
-      ];
+      const customVectorsRaw =
+        customMoveVectors?.[String(copied.pieceCode ?? marker?.pieceCode ?? '').toUpperCase()];
       if (Array.isArray(customVectorsRaw) && customVectorsRaw.length > 0) {
         const customVectors = customVectorsRaw
           .map((v) => asRecord(v))
@@ -872,7 +935,8 @@ function resolveEffectiveVectorsForPiece(
             };
           })
           .filter(
-            (v): v is { dx: number; dy: number; maxStep: number; captureMode?: string } => v != null,
+            (v): v is { dx: number; dy: number; maxStep: number; captureMode?: string } =>
+              v != null,
           );
         if (customVectors.length > 0) {
           didResolveBookCopiedVectors = true;
@@ -909,7 +973,8 @@ function resolveEffectiveVectorsForPiece(
   const fixedHouseField = normalizeVectorsForFixedHouseField(piece, goldNormalized);
   const timeNormalized = normalizeVectorsForTime(piece, fixedHouseField);
   const peopleField = normalizeVectorsForPeopleWithAllyField(piece, timeNormalized, allPieces);
-  return normalizeVectorsForMoon(piece, peopleField, position);
+  const moonNormalized = normalizeVectorsForMoon(piece, peopleField, position);
+  return normalizeVectorsForOniVariants(piece, moonNormalized);
 }
 
 function stableHash(value: string): number {
@@ -1109,7 +1174,10 @@ function generateBoardPieceMoves(input: {
       }
     }
   }
-  if (!pieceDef && (isGunPiece(input.piece) || isKatanaPiece(input.piece))) {
+  if (
+    !pieceDef &&
+    (isGunPiece(input.piece) || isKatanaPiece(input.piece) || isAnyOniVariantPiece(input.piece))
+  ) {
     pieceDef = { ...MINIMAL_SPECIAL_PIECE_DEF, char: input.piece.char };
   }
   if (!pieceDef) return [];
@@ -1117,7 +1185,8 @@ function generateBoardPieceMoves(input: {
   if (
     pieceDef.moveVectors.length === 0 &&
     !isGunPiece(input.piece) &&
-    !isKatanaPiece(input.piece)
+    !isKatanaPiece(input.piece) &&
+    !isAnyOniVariantPiece(input.piece)
   ) {
     return [];
   }

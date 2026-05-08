@@ -172,7 +172,12 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
   const [clearRewardText, setClearRewardText] = useState<string | null>(null);
   const [skillActivationText, setSkillActivationText] = useState<string | null>(null);
   const [inspectingPiece, setInspectingPiece] = useState<InspectingPieceState>(null);
-  const debugLogPieceMoveRanges = (label: string, side: Side, turn: number, moves: BattleMove[]) => {
+  const debugLogPieceMoveRanges = (
+    label: string,
+    side: Side,
+    turn: number,
+    moves: BattleMove[],
+  ) => {
     void label;
     void side;
     void turn;
@@ -585,7 +590,15 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
     return () => {
       active = false;
     };
-  }, [boardSyncEpoch, gameId, isCreatingGame, isFinished, loadGameLegalMovesUseCase, moveNo, sideToMove]);
+  }, [
+    boardSyncEpoch,
+    gameId,
+    isCreatingGame,
+    isFinished,
+    loadGameLegalMovesUseCase,
+    moveNo,
+    sideToMove,
+  ]);
 
   useEffect(() => {
     if (Object.keys(failedImageKeys).length === 0) {
@@ -837,31 +850,37 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
             selectedMoveForApply.toCol,
           );
           const movedCodeFromBoard = movedBefore
-            ? pieceCodeFromPlacement(movedBefore.pieceCode ?? null, movedBefore.char, pieceDefsByChar)
+            ? pieceCodeFromPlacement(
+                movedBefore.pieceCode ?? null,
+                movedBefore.char,
+                pieceDefsByChar,
+              )
             : movedNow
               ? pieceCodeFromPlacement(movedNow.pieceCode ?? null, movedNow.char, pieceDefsByChar)
-            : null;
+              : null;
           const rawMovedCode =
             (movedCodeFromBoard ?? selectedMoveForApply.pieceCode ?? '').toUpperCase() || null;
           const movedCodeFromChar = movedBefore?.char
             ? toAiBasePieceCode(CHAR_TO_CODE[movedBefore.char] ?? null)
             : movedNow?.char
               ? toAiBasePieceCode(CHAR_TO_CODE[movedNow.char] ?? null)
-            : null;
+              : null;
           const movedCode =
             (rawMovedCode && !/^PIECE_[A-Z0-9_]+$/i.test(rawMovedCode)
               ? rawMovedCode
-              : movedCodeFromChar ?? rawMovedCode) || null;
+              : (movedCodeFromChar ?? rawMovedCode)) || null;
           const movedCharRaw =
             movedBefore?.char && !/^piece_[a-z0-9]+$/i.test(movedBefore.char)
               ? movedBefore.char
               : movedNow?.char && !/^piece_[a-z0-9]+$/i.test(movedNow.char)
                 ? movedNow.char
-              : movedCode
-                ? pieceCharFromCode(movedCode, 'enemy', selectedMoveForApply.promote === true)
-                : '?';
+                : movedCode
+                  ? pieceCharFromCode(movedCode, 'enemy', selectedMoveForApply.promote === true)
+                  : '?';
           const movedChar =
-            movedCharRaw && movedCharRaw !== '?' && movedCharRaw !== movedCode ? movedCharRaw : null;
+            movedCharRaw && movedCharRaw !== '?' && movedCharRaw !== movedCode
+              ? movedCharRaw
+              : null;
           const movedDef =
             (movedCode ? pieceDefsByCode[movedCode] : undefined) ??
             (movedChar ? pieceDefsByChar[movedChar] : undefined);
@@ -1068,7 +1087,10 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
           player: { ...(patchedPlayerPosition.hands?.player ?? {}) },
           enemy: { ...(patchedPlayerPosition.hands?.enemy ?? {}) },
         };
-        const beforeCount = Math.max(0, Math.floor((rollbackSnapshot?.hands.player?.BOOK as number) ?? 0));
+        const beforeCount = Math.max(
+          0,
+          Math.floor((rollbackSnapshot?.hands.player?.BOOK as number) ?? 0),
+        );
         const afterCount = Math.max(0, Math.floor((handsRoot.player.BOOK as number) ?? 0));
         if (afterCount <= beforeCount) {
           handsRoot.player.BOOK = afterCount + 1;
@@ -1098,7 +1120,7 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
         const movedCode =
           (rawMovedCode && !/^PIECE_[A-Z0-9_]+$/i.test(rawMovedCode)
             ? rawMovedCode
-            : movedCodeFromChar ?? rawMovedCode) || null;
+            : (movedCodeFromChar ?? rawMovedCode)) || null;
         const movedCharRaw =
           movedAfter?.char && !/^piece_[a-z0-9]+$/i.test(movedAfter.char)
             ? movedAfter.char
@@ -1512,10 +1534,11 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
           const record = getLocalBattleGame(gameId);
           const built = buildBoardState(pieces, pieceDefsByCode) as Record<string, unknown>;
           const regBoard = record?.position?.boardState as Record<string, unknown> | undefined;
-          const latestBoard = aiPositionRef.current?.boardState as Record<string, unknown> | undefined;
+          const latestBoard = aiPositionRef.current?.boardState as
+            | Record<string, unknown>
+            | undefined;
           const mergedBoard: Record<string, unknown> = { ...built };
-          const latestSkillState =
-            latestBoard?.skill_state ?? latestBoard?.skillState ?? null;
+          const latestSkillState = latestBoard?.skill_state ?? latestBoard?.skillState ?? null;
           if (latestSkillState != null) {
             mergedBoard.skill_state = latestSkillState;
           }
@@ -1734,17 +1757,26 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
         ? resolvedChar
         : (target.pieceCode ?? '').toUpperCase() === 'BOOK'
           ? '書'
-        : opaqueBookCode
-          ? '書'
-          : (target.pieceCode ?? '').toUpperCase() === 'SAINT'
-            ? '聖'
-            : opaqueSaintCode
+          : opaqueBookCode
+            ? '書'
+            : (target.pieceCode ?? '').toUpperCase() === 'SAINT'
               ? '聖'
-              : lookupChar;
+              : opaqueSaintCode
+                ? '聖'
+                : lookupChar;
     const detail =
       pieceDefsByChar[displayChar] ??
       (target.pieceCode ? pieceDefsByCode[target.pieceCode] : undefined) ??
       null;
+    const pieceCodeLower = (target.pieceCode ?? '').toLowerCase();
+    const oniNameOverride =
+      pieceCodeLower === 'blueoni'
+        ? '青鬼'
+        : pieceCodeLower === 'blackoni'
+          ? '黒鬼'
+          : pieceCodeLower === 'redoni'
+            ? '赤鬼'
+            : null;
 
     setInspectingPiece({
       char: displayChar,
@@ -1752,7 +1784,7 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
       name:
         (target.pieceCode ?? '').toUpperCase() === 'BOOK' || displayChar === '書'
           ? '書物'
-          : (detail?.name ?? displayChar),
+          : (oniNameOverride ?? detail?.name ?? displayChar),
       desc: resolveInspectSkillDescription(displayChar, detail?.desc, target.pieceCode),
       move: resolveInspectMoveDescription(displayChar, detail?.move, target.pieceCode),
       imageSignedUrl: detail?.imageSignedUrl ?? target.imageSignedUrl ?? null,

@@ -193,6 +193,7 @@ const CAPTURE_CHAR_TO_HAND_CODE: Readonly<Record<string, string>> = {
   滝: 'WATERFALL',
   穴: 'HOLE',
   淵: 'ABYSS',
+  鬼: 'REDONI',
 };
 
 const OPAQUE_CAPTURE_CODE_TO_HAND_CODE: Readonly<Record<string, string>> = {
@@ -209,6 +210,7 @@ const OPAQUE_CAPTURE_CODE_TO_HAND_CODE: Readonly<Record<string, string>> = {
   PIECE_8CC9287B7E93: 'WATERFALL',
   PIECE_E381DFA07A3D: 'HOLE',
   PIECE_31CB39CC0FA8: 'ABYSS',
+  PIECE_533B7FEC5456: 'REDONI',
 };
 
 function opaqueCapturedCodeToHandCode(rawCode: string | null): string | null {
@@ -229,6 +231,10 @@ function opaqueCapturedCodeToHandCode(rawCode: string | null): string | null {
   if (upper.includes('8CC9287B7E93')) return 'WATERFALL';
   if (upper.includes('E381DFA07A3D')) return 'HOLE';
   if (upper.includes('31CB39CC0FA8')) return 'ABYSS';
+  if (upper.includes('533B7FEC5456')) return 'REDONI';
+  if (upper.includes('BLUEONI')) return 'BLUEONI';
+  if (upper.includes('BLACKONI')) return 'BLACKONI';
+  if (upper.includes('REDONI')) return 'REDONI';
   if (upper.includes('BOOK')) return 'BOOK';
   if (upper.includes('SEAL')) return 'SEAL';
   if (upper.includes('BIGNOISE')) return 'BIGNOISE';
@@ -304,11 +310,17 @@ export function capturedToHandPieceCode(piece: BoardPiece) {
   const rawCode = normalizePieceCode(piece.pieceCode);
   const isOpaque = Boolean(rawCode && /^PIECE_[A-Z0-9_]+$/i.test(rawCode));
   const mappedOpaque = opaqueCapturedCodeToHandCode(rawCode);
-  const code =
-    rawCode && !isOpaque
-      ? rawCode
-      : (codeFromChar ?? mappedOpaque);
+  const code = rawCode && !isOpaque ? rawCode : (codeFromChar ?? mappedOpaque);
   if (!code) return null;
+  const upper = code.toUpperCase();
+  if (
+    normalizedChar === '鬼' ||
+    upper === 'REDONI' ||
+    upper === 'BLUEONI' ||
+    upper === 'BLACKONI'
+  ) {
+    return null;
+  }
   if (KING_CODES.has(code)) return null;
   if ((code === 'SWORD' || code === 'KATANA') && normalizedChar !== '刀') {
     const rawUp = (piece.pieceCode ?? '').toUpperCase();

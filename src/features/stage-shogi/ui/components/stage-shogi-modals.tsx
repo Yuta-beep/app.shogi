@@ -187,6 +187,15 @@ export function StageShogiInspectModal({
   inspectingPiece: InspectingPieceState;
   onClose: () => void;
 }) {
+  const inspectCode = (inspectingPiece?.pieceCode ?? '').toUpperCase();
+  const isBossPiece =
+    inspectCode === 'REDONI' ||
+    inspectCode === 'BLUEONI' ||
+    inspectCode === 'BLACKONI' ||
+    inspectCode === 'KBOSS' ||
+    inspectCode === 'A' ||
+    inspectingPiece?.char === 'K' ||
+    inspectingPiece?.char === 'あ';
   return (
     <Modal visible={!!inspectingPiece} transparent animationType="fade" onRequestClose={onClose}>
       <View className="flex-1 items-center justify-center bg-black/45 px-6">
@@ -222,6 +231,9 @@ export function StageShogiInspectModal({
           <Text className="mt-1 text-center text-base font-black text-[#2f1b14]">
             {inspectingPiece?.name}
           </Text>
+          {isBossPiece ? (
+            <Text className="mt-1 text-center text-xs font-black text-[#7f1d1d]">ボス駒</Text>
+          ) : null}
           <Text className="mt-3 text-xs font-black text-[#7f1d1d]">【スキルの説明】</Text>
           <Text className="mt-1 text-sm text-[#1f2937]">{inspectingPiece?.desc}</Text>
           <Text className="mt-3 text-xs font-black text-[#7f1d1d]">【行動範囲】</Text>
