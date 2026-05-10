@@ -1249,9 +1249,7 @@ export function applyMoveSkillEffects(input: {
   const isBoatMover = movedCode === 'BOAT' || movedPiece?.char === '舟';
   const movePcUpper = (input.move.pieceCode ?? '').toUpperCase();
   const isBirdMover =
-    movedCode === 'BIRD' ||
-    movedPiece?.char === '禽' ||
-    movePcUpper.includes('29ECAB1EF3C3');
+    movedCode === 'BIRD' || movedPiece?.char === '禽' || movePcUpper.includes('29ECAB1EF3C3');
   const isWindMover =
     WIND_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '風';
   const isFishMover =

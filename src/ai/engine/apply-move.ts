@@ -263,7 +263,10 @@ function isOboroPieceForApply(piece: { pieceCode: string | null; char: string })
   return b === 'OBORO';
 }
 
-function isDeathOrSoulPieceForOboroTrigger(piece: { pieceCode: string | null; char: string }): boolean {
+function isDeathOrSoulPieceForOboroTrigger(piece: {
+  pieceCode: string | null;
+  char: string;
+}): boolean {
   const ch = normKanjiForEngineRules(piece.char);
   if (ch === '死' || ch === '魂') return true;
   const b = toBasePieceCode(piece.pieceCode);
@@ -898,7 +901,11 @@ export function applyMove(input: {
       if (!captureOwnPiece && !isCloudMover && isArmorPieceForApply(captured)) {
         throw new Error('cannot capture armor');
       }
-      if (!captureOwnPiece && isKingPieceForApply(captured) && hasSoulOnBoardForSide(nextPieces, captured.side)) {
+      if (
+        !captureOwnPiece &&
+        isKingPieceForApply(captured) &&
+        hasSoulOnBoardForSide(nextPieces, captured.side)
+      ) {
         throw new Error('cannot capture king while soul remains');
       }
       if (!captureOwnPiece && isArmorPieceForApply(movingPiece)) {

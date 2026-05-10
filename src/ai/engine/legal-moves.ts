@@ -1079,7 +1079,10 @@ function resolveEffectiveVectorsForPiece(
   const moonNormalized = normalizeVectorsForMoon(piece, peopleField, position);
   const oniNormalized = normalizeVectorsForOniVariants(piece, moonNormalized);
   const deathNormalized = normalizeVectorsForDeath(piece, oniNormalized);
-  const beastBird = normalizeVectorsForBird(piece, normalizeVectorsForBeast(piece, deathNormalized));
+  const beastBird = normalizeVectorsForBird(
+    piece,
+    normalizeVectorsForBeast(piece, deathNormalized),
+  );
   return normalizeVectorsForSoul(piece, beastBird);
 }
 
@@ -1433,10 +1436,7 @@ function generateBoardPieceMoves(input: {
       return captured.side === input.piece.side && !isKingPiece(captured);
     }
     if (captured.side === input.piece.side) return false;
-    if (
-      isKingPiece(captured) &&
-      hasSoulOnBoardForSide(input.pieces, captured.side)
-    ) {
+    if (isKingPiece(captured) && hasSoulOnBoardForSide(input.pieces, captured.side)) {
       return false;
     }
     if (isArmorPiece(captured)) return false;

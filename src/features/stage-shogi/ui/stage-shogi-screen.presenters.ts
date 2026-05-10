@@ -32,10 +32,8 @@ const KBOSS_SKILL_DESCRIPTION =
   '移動・打ちの後40%の確率で周囲8マスの空きマス1つに味方の「実」駒を1体召喚する。2回取られないと消えず、1回目に取られたときは取られる直前の配置に戻り手番が交代する。';
 const DEATH_SKILL_DESCRIPTION =
   'この駒を取った敵駒に呪いをかける。呪われた駒は5ターン後に消滅する。';
-const SOUL_SKILL_DESCRIPTION =
-  'この駒が盤面に残っている間、相手は「王」を攻撃できない。';
-const BEAST_SKILL_DESCRIPTION =
-  '移動時、前後左右に隣接する敵駒をすべて2ターン行動不能にする。';
+const SOUL_SKILL_DESCRIPTION = 'この駒が盤面に残っている間、相手は「王」を攻撃できない。';
+const BEAST_SKILL_DESCRIPTION = '移動時、前後左右に隣接する敵駒をすべて2ターン行動不能にする。';
 const BIRD_SKILL_DESCRIPTION =
   '移動後、真後ろ1マスが空いていればランダムな味方駒（玉以外）をそのマスへ移動させる。';
 

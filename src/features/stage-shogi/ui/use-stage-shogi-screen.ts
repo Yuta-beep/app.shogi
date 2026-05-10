@@ -1767,8 +1767,7 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
               ? '聖'
               : opaqueSaintCode
                 ? '聖'
-                : (target.pieceCode ?? '').toUpperCase() === 'BEAST' ||
-                    opaqueBeastCode
+                : (target.pieceCode ?? '').toUpperCase() === 'BEAST' || opaqueBeastCode
                   ? '獣'
                   : (target.pieceCode ?? '').toUpperCase() === 'BIRD' || opaqueBirdCode
                     ? '禽'
@@ -1801,10 +1800,10 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
         (target.pieceCode ?? '').toUpperCase() === 'BOOK' || displayChar === '書'
           ? '書物'
           : (oniNameOverride ??
-              beastNameOverride ??
-              birdNameOverride ??
-              detail?.name ??
-              displayChar),
+            beastNameOverride ??
+            birdNameOverride ??
+            detail?.name ??
+            displayChar),
       desc: resolveInspectSkillDescription(displayChar, detail?.desc, target.pieceCode),
       move: resolveInspectMoveDescription(displayChar, detail?.move, target.pieceCode),
       imageSignedUrl: detail?.imageSignedUrl ?? target.imageSignedUrl ?? null,
