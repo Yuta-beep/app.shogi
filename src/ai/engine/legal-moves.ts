@@ -244,14 +244,16 @@ function lastMovedPieceForBook(
 ): AiBoardPiece | null {
   const boardState = asRecord(position.boardState);
   const skillState = asRecord(boardState?.skill_state ?? boardState?.skillState);
-  // 「書」は“相手が直前に動かした駒”の移動範囲を継承する。
-  const key = piece.side === 'player' ? 'last_enemy_moved_piece' : 'last_player_moved_piece';
+  // 「書」は“自分が直前に動かした駒”の移動範囲を継承する。
+  // 評価対象の駒 side を基準に参照することで、敵駒プレビュー時でも意図どおり解決する。
+  const key = piece.side === 'player' ? 'last_player_moved_piece' : 'last_enemy_moved_piece';
   const raw = asRecord(skillState?.[key]);
   if (!raw) return null;
   const row = typeof raw.row === 'number' ? raw.row : null;
   const col = typeof raw.col === 'number' ? raw.col : null;
   if (row == null || col == null) return null;
   const side = raw.side === 'enemy' ? 'enemy' : 'player';
+  if (side !== piece.side) return null;
   const pieceCode = typeof raw.pieceCode === 'string' ? raw.pieceCode : null;
   const char = typeof raw.char === 'string' ? raw.char : '';
   const copiedMoveVectors = Array.isArray(raw.copiedMoveVectors) ? raw.copiedMoveVectors : null;
@@ -1227,8 +1229,44 @@ function generateBoardPieceMoves(input: {
   skillView: SkillRuntimeView;
 }): AiBattleMove[] {
   if (isBookPiece(input.piece)) {
-    const marker = lastMovedPieceForBook(input.position, input.piece);
-    if (!marker) return [];
+    const aroundAllies = input.pieces.filter((ally) => {
+      if (ally.side !== input.piece.side) return false;
+      if (ally.row === input.piece.row && ally.col === input.piece.col) return false;
+      const dr = Math.abs(ally.row - input.piece.row);
+      const dc = Math.abs(ally.col - input.piece.col);
+      return dr <= 1 && dc <= 1;
+    });
+    const targetKeys = new Set<string>();
+    const targets: { row: number; col: number }[] = [];
+    for (const ally of aroundAllies) {
+      // 「書」同士の相互参照ループを避けるため、隣接書は参照対象から除外する。
+      if (isBookPiece(ally)) continue;
+      const allyMoves = generateBoardPieceMoves({
+        ...input,
+        piece: ally,
+      });
+      for (const mv of allyMoves) {
+        const row = mv.toRow;
+        const col = mv.toCol;
+        const key = `${row}:${col}`;
+        if (targetKeys.has(key)) continue;
+        targetKeys.add(key);
+        targets.push({ row, col });
+      }
+    }
+    const from = { row: input.piece.row, col: input.piece.col };
+    const pieceCode = resolvePieceCodeForLegalMove(input.piece, input.lookups);
+    return targets.map((to) =>
+      createMove({
+        from,
+        to,
+        pieceCode,
+        promote: false,
+        capturedPieceCode: resolveCapturedPieceCodeForLegalMove(
+          findPieceAtFast(input.occupancy, to.row, to.col),
+        ),
+      }),
+    );
   }
 
   const pieceForDef = effectivePieceForRulesAfterSpring(input.piece, input.pieces, input.lookups);
@@ -1502,9 +1540,7 @@ function generateDropMoves(input: {
 }
 
 export function generateLegalMoves(input: {
-  position:
-    | AiBattlePosition
-    | import('@/usecases/stage-battle/game-move-contract').BattleCanonicalPosition;
+  position: AiBattlePosition;
   pieceCatalog: AiPieceDefinition[];
 }) {
   const position = normalizeBattlePosition(input.position);

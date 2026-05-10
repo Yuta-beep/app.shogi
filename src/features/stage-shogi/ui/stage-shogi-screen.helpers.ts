@@ -121,7 +121,7 @@ export type BoardPiece = {
   pieceCode: string | null;
   char: string;
   promoted?: boolean;
-  imageSignedUrl?: string | null;
+  imageSignedUrl: string | null;
   darkVeiled?: boolean;
   aTransformed?: boolean;
   /** 牢・柵スキル由来の行動不能（鎖.png） */
@@ -313,7 +313,7 @@ export function pieceCodeFromPlacement(
     if (char === '盾') return 'SHIELD';
     const fromKanji = CHAR_TO_CODE[char];
     if (fromKanji) return toBasePieceCode(fromKanji) ?? fromKanji;
-    return catalogItem.pieceCode ?? null;
+    return catalogItem.pieceCode;
   }
   if (PROMOTED_CHAR_TO_BASE_CODE[char]) {
     return PROMOTED_CHAR_TO_BASE_CODE[char];
@@ -1826,7 +1826,7 @@ export function buildPreservedMovedPieceForPlayer(
   const imageSignedUrl = preferBundledPromotedImageOverRemoteUrl(
     resolvedPieceCode ?? moved.pieceCode ?? null,
     promoted,
-    promotedDef?.imageSignedUrl ?? moved.imageSignedUrl ?? null,
+    promotedDef?.imageSignedUrl ?? moved.imageSignedUrl,
   );
   const resolvedChar = resolvedPieceCode
     ? pieceCharFromCode(resolvedPieceCode, moved.side, promoted)
@@ -2063,7 +2063,7 @@ export function syncCanonicalState(params: {
     pieceCatalog.filter((it) => it.char).map((item) => [item.char, item]),
   ) as Partial<Record<string, PieceCatalogItem>>;
   const withSpringDragonAwakening = mapPiecesForSpringDragonAwakeningDisplay(
-    stabilizedPieces.map((p) => ({ ...p, imageSignedUrl: p.imageSignedUrl ?? null })),
+    stabilizedPieces.map((p) => p),
     pieceDefsByChar,
   );
   const nextPersistentHazards = withSpringDragonAwakening.filter((p) =>

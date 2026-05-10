@@ -751,12 +751,10 @@ function collectAdjacentEmptyCells(
 }
 
 export function applyMove(input: {
-  position:
-    | AiBattlePosition
-    | import('@/usecases/stage-battle/game-move-contract').BattleCanonicalPosition;
+  position: AiBattlePosition;
   pieceCatalog: AiPieceDefinition[];
   move: AiBattleMove;
-}): BattleCommittedMove & { position: AiBattlePosition } {
+}): BattleCommittedMove {
   const current = normalizeBattlePosition(input.position);
   const move = normalizeBattleMove(input.move);
   const pieces = piecesFromBoardState(current);
@@ -1163,16 +1161,6 @@ export function applyMove(input: {
     ...(current.boardState ?? {}),
     ...(nextPosition.boardState ?? {}),
   };
-  if ((current.boardState as Record<string, unknown> | undefined)?.skill_definitions_v2 != null) {
-    (nextPosition.boardState as Record<string, unknown>).skill_definitions_v2 = (
-      current.boardState as Record<string, unknown>
-    ).skill_definitions_v2;
-  }
-  if ((current.boardState as Record<string, unknown> | undefined)?.custom_move_vectors != null) {
-    (nextPosition.boardState as Record<string, unknown>).custom_move_vectors = (
-      current.boardState as Record<string, unknown>
-    ).custom_move_vectors;
-  }
 
   if (turnAdvanced) {
     // 既存ハザードの残りターンを進める。
@@ -1257,16 +1245,6 @@ export function applyMove(input: {
     ...(recomputedPosition.boardState ?? {}),
     ...(nextPosition.boardState ?? {}),
   };
-  if ((current.boardState as Record<string, unknown> | undefined)?.skill_definitions_v2 != null) {
-    (recomputedPosition.boardState as Record<string, unknown>).skill_definitions_v2 = (
-      current.boardState as Record<string, unknown>
-    ).skill_definitions_v2;
-  }
-  if ((current.boardState as Record<string, unknown> | undefined)?.custom_move_vectors != null) {
-    (recomputedPosition.boardState as Record<string, unknown>).custom_move_vectors = (
-      current.boardState as Record<string, unknown>
-    ).custom_move_vectors;
-  }
   const skillStateRaw =
     (recomputedPosition.boardState as Record<string, unknown>).skill_state ??
     (recomputedPosition.boardState as Record<string, unknown>).skillState;
