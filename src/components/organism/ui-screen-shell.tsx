@@ -26,6 +26,7 @@ type UiScreenShellProps = {
   /** ユーザーバー（GlobalHomeHud）直下〜画面下端までを覆う背景。タイトル帯・スクロール領域の下にまで伸びる */
   fullBleedBackgroundSource?: ImageSourcePropType;
   useBlackBackgroundWhenNoImage?: boolean;
+  noImageBackgroundClassName?: string;
 };
 
 export function UiScreenShell({
@@ -39,6 +40,7 @@ export function UiScreenShell({
   homeButtonTextClassName = 'text-ink',
   fullBleedBackgroundSource,
   useBlackBackgroundWhenNoImage = false,
+  noImageBackgroundClassName,
 }: UiScreenShellProps) {
   const router = useRouter();
 
@@ -96,7 +98,15 @@ export function UiScreenShell({
 
   return (
     <SafeAreaView
-      className={`flex-1 ${fullBleedBackgroundSource || useBlackBackgroundWhenNoImage ? 'bg-black' : 'bg-paper'}`}
+      className={`flex-1 ${
+        fullBleedBackgroundSource
+          ? 'bg-black'
+          : noImageBackgroundClassName
+            ? noImageBackgroundClassName
+            : useBlackBackgroundWhenNoImage
+              ? 'bg-black'
+              : 'bg-paper'
+      }`}
       edges={['left', 'right', 'bottom']}
     >
       <GlobalHomeHud />

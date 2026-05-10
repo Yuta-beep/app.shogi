@@ -166,9 +166,7 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
   const [pendingTimeActionCell, setPendingTimeActionCell] = useState<BoardCell | null>(null);
   const [pendingHouseSkillCell, setPendingHouseSkillCell] = useState<BoardCell | null>(null);
   /** 悟: 着地マス決定後、スキル対象の敵駒マスを選ぶまで保留する合法手一覧 */
-  const [pendingSatoriEnemyPick, setPendingSatoriEnemyPick] = useState<BattleMove[] | null>(
-    null,
-  );
+  const [pendingSatoriEnemyPick, setPendingSatoriEnemyPick] = useState<BattleMove[] | null>(null);
   /** 心: 着地後に護り対象の味方マスを選ぶまで保留 */
   const [pendingHeartAllyPick, setPendingHeartAllyPick] = useState<BattleMove[] | null>(null);
   const [timeActionMode, setTimeActionMode] = useState<TimeActionMode | null>(null);
@@ -1884,8 +1882,7 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
               ? '聖'
               : opaqueSaintCode
                 ? '聖'
-                : (target.pieceCode ?? '').toUpperCase() === 'BEAST' ||
-                    opaqueBeastCode
+                : (target.pieceCode ?? '').toUpperCase() === 'BEAST' || opaqueBeastCode
                   ? '獣'
                   : (target.pieceCode ?? '').toUpperCase() === 'BIRD' || opaqueBirdCode
                     ? '禽'
@@ -1918,10 +1915,10 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
         (target.pieceCode ?? '').toUpperCase() === 'BOOK' || displayChar === '書'
           ? '書物'
           : (oniNameOverride ??
-              beastNameOverride ??
-              birdNameOverride ??
-              detail?.name ??
-              displayChar),
+            beastNameOverride ??
+            birdNameOverride ??
+            detail?.name ??
+            displayChar),
       desc: resolveInspectSkillDescription(displayChar, detail?.desc, target.pieceCode),
       move: resolveInspectMoveDescription(displayChar, detail?.move, target.pieceCode),
       imageSignedUrl: detail?.imageSignedUrl ?? target.imageSignedUrl ?? null,

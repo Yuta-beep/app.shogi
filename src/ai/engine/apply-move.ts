@@ -90,6 +90,41 @@ function isHolePieceForApply(piece: { pieceCode: string | null; char: string }):
   return raw.includes('E381DFA07A3D');
 }
 
+function isOtsuPieceForApply(piece: { pieceCode: string | null; char: string }): boolean {
+  const ch = normKanjiForEngineRules(piece.char);
+  if (ch === '乙') return true;
+  const base = toBasePieceCode(piece.pieceCode);
+  if (base === 'OTSU') return true;
+  const raw = (piece.pieceCode ?? '').toUpperCase();
+  return raw.includes('5A07CA59B158');
+}
+
+function readOtsuFollowupForSide(
+  boardState: Record<string, unknown> | undefined,
+  side: Side,
+): { row: number; col: number } | null {
+  if (!boardState) return null;
+  const skillState = (boardState.skill_state ?? boardState.skillState) as
+    | Record<string, unknown>
+    | undefined;
+  const rawStatuses = (skillState?.piece_statuses ?? skillState?.pieceStatuses) as unknown;
+  if (!Array.isArray(rawStatuses)) return null;
+  for (const raw of rawStatuses) {
+    const st = (raw ?? {}) as Record<string, unknown>;
+    const statusType = String(st.status_type ?? st.statusType ?? '');
+    if (statusType !== 'otsu_followup') continue;
+    const stSide = String(st.side ?? 'player') === 'enemy' ? 'enemy' : 'player';
+    if (stSide !== side) continue;
+    const remaining = Number(st.remaining_turns ?? st.remainingTurns ?? 0);
+    if (!Number.isFinite(remaining) || remaining <= 0) continue;
+    const row = Number(st.row);
+    const col = Number(st.col);
+    if (!Number.isFinite(row) || !Number.isFinite(col)) continue;
+    return { row, col };
+  }
+  return null;
+}
+
 function resolveCapturedHandCode(
   captured: AiBoardPiece,
   fallbackCapturedCode: string | null,
@@ -172,11 +207,23 @@ function resolveCapturedHandCode(
   if (capturedChar === '心' || rawCapturedCode.includes('CA16911978FF')) {
     return 'HEART';
   }
+  if (capturedChar === '鬱' || rawCapturedCode.includes('9E27F89F65C5')) {
+    return 'DEPRESSION';
+  }
+  if (capturedChar === '乙' || rawCapturedCode.includes('5A07CA59B158')) {
+    return 'OTSU';
+  }
   if (rawCapturedCode.includes('SATORI')) {
     return 'SATORI';
   }
   if (rawCapturedCode.includes('HEART')) {
     return 'HEART';
+  }
+  if (rawCapturedCode.includes('DEPRESSION')) {
+    return 'DEPRESSION';
+  }
+  if (rawCapturedCode.includes('OTSU')) {
+    return 'OTSU';
   }
   const fromCaptured = toBasePieceCode(capturedToHandPieceCode(captured));
   if (fromCaptured) return fromCaptured;
@@ -192,6 +239,8 @@ function resolveCapturedHandCode(
   if (fb.includes('BIRD') || fb.includes('29ECAB1EF3C3')) return 'BIRD';
   if (fb.includes('SATORI') || fb.includes('6D4AFA9CDF1C')) return 'SATORI';
   if (fb.includes('HEART') || fb.includes('CA16911978FF')) return 'HEART';
+  if (fb.includes('DEPRESSION') || fb.includes('9E27F89F65C5')) return 'DEPRESSION';
+  if (fb.includes('OTSU') || fb.includes('5A07CA59B158')) return 'OTSU';
   // opaque id をそのまま手駒キーにしない（手駒表示不能の原因）。
   if (/^PIECE_[A-Z0-9_]+$/i.test(fb)) return null;
   return fb;
@@ -278,7 +327,10 @@ function isOboroPieceForApply(piece: { pieceCode: string | null; char: string })
   return b === 'OBORO';
 }
 
-function isDeathOrSoulPieceForOboroTrigger(piece: { pieceCode: string | null; char: string }): boolean {
+function isDeathOrSoulPieceForOboroTrigger(piece: {
+  pieceCode: string | null;
+  char: string;
+}): boolean {
   const ch = normKanjiForEngineRules(piece.char);
   if (ch === '死' || ch === '魂') return true;
   const b = toBasePieceCode(piece.pieceCode);
@@ -788,6 +840,10 @@ export function applyMove(input: {
     enemy: sanitizeHandsBag(current.hands.enemy),
   });
   const actorSide = current.sideToMove;
+  const otsuFollowupBefore = readOtsuFollowupForSide(
+    current.boardState as Record<string, unknown> | undefined,
+    actorSide,
+  );
   const preMoveSkillView = createSkillRuntimeView(current);
   assertMoveAllowedBySessionCatalog({
     position: current,
@@ -808,6 +864,7 @@ export function applyMove(input: {
   let intrinsicCombatSkillTriggered = false;
   /** 盾の intrinsic：着手全体を巻き戻す。 */
   let shieldAbortedMove = false;
+  let movedByOtsu = false;
 
   if (move.notation === 'time_skill_only' || move.notation === 'house_skill_only') {
     // no-op on board（スキルのみ）
@@ -839,6 +896,7 @@ export function applyMove(input: {
       throw new Error('moving piece not found');
     }
     const movingPiece = nextPieces[movingIndex];
+    movedByOtsu = isOtsuPieceForApply(movingPiece);
     const movingCode = toBasePieceCode(movingPiece?.pieceCode);
     const isCloudMover = movingCode === 'CLOUD' || movingPiece?.char === '雲';
     const combatBoardSnapshot = cloneCombatBoardSnapshot({ pieces: nextPieces, hands });
@@ -923,7 +981,11 @@ export function applyMove(input: {
       if (!captureOwnPiece && !isCloudMover && isArmorPieceForApply(captured)) {
         throw new Error('cannot capture armor');
       }
-      if (!captureOwnPiece && isKingPieceForApply(captured) && hasSoulOnBoardForSide(nextPieces, captured.side)) {
+      if (
+        !captureOwnPiece &&
+        isKingPieceForApply(captured) &&
+        hasSoulOnBoardForSide(nextPieces, captured.side)
+      ) {
         throw new Error('cannot capture king while soul remains');
       }
       if (!captureOwnPiece && isArmorPieceForApply(movingPiece)) {
@@ -1170,11 +1232,58 @@ export function applyMove(input: {
     winnerSide = 'player';
   }
 
+  if (otsuFollowupBefore && didCapture) {
+    throw new Error('otsu followup cannot capture');
+  }
+  let grantsOtsuFollowup = false;
+  if (
+    !otsuFollowupBefore &&
+    movedByOtsu &&
+    didCapture &&
+    !shieldAbortedMove &&
+    movedPieceAfterApply
+  ) {
+    const followupPreview = createPosition({
+      pieces: nextPieces,
+      hands,
+      sideToMove: actorSide,
+      moveCount: current.moveCount,
+      pieceCatalog: input.pieceCatalog,
+    });
+    followupPreview.boardState = {
+      ...(current.boardState ?? {}),
+      ...(followupPreview.boardState ?? {}),
+    };
+    const previewBoard = (followupPreview.boardState ?? {}) as Record<string, unknown>;
+    const previewSkillStateRaw = (previewBoard.skill_state ?? previewBoard.skillState) as
+      | Record<string, unknown>
+      | undefined;
+    const previewSkillState =
+      previewSkillStateRaw && typeof previewSkillStateRaw === 'object'
+        ? { ...previewSkillStateRaw }
+        : {};
+    const previewStatusesRaw = (previewSkillState.piece_statuses ??
+      previewSkillState.pieceStatuses) as unknown;
+    const previewStatuses = Array.isArray(previewStatusesRaw) ? [...previewStatusesRaw] : [];
+    previewStatuses.push({
+      side: actorSide,
+      row: movedPieceAfterApply.row,
+      col: movedPieceAfterApply.col,
+      status_type: 'otsu_followup',
+      remaining_turns: 1,
+    });
+    (previewSkillState as Record<string, unknown>).piece_statuses = previewStatuses;
+    previewBoard.skill_state = previewSkillState;
+    followupPreview.boardState = previewBoard;
+    grantsOtsuFollowup =
+      generateLegalMoves({ position: followupPreview, pieceCatalog: input.pieceCatalog }).legalMoves
+        .length > 0;
+  }
   // 盾で取りが無効化されても着手は1手として消化し、攻撃側の手番を終える。
-  const turnAdvanced = true;
+  const turnAdvanced = !grantsOtsuFollowup;
   const applyLandingDerivedEffects = !shieldAbortedMove;
-  const nextSide: Side = actorSide === 'player' ? 'enemy' : 'player';
-  const nextMoveCount = current.moveCount + 1;
+  const nextSide: Side = turnAdvanced ? (actorSide === 'player' ? 'enemy' : 'player') : actorSide;
+  const nextMoveCount = current.moveCount + (turnAdvanced ? 1 : 0);
   let nextPosition = createPosition({
     pieces: nextPieces,
     hands,
@@ -1382,6 +1491,27 @@ export function applyMove(input: {
       }
     }
     (skillState as Record<string, unknown>).board_hazards = hazards;
+  }
+  {
+    const rawStatuses = (skillState.piece_statuses ?? skillState.pieceStatuses) as unknown;
+    const statuses = Array.isArray(rawStatuses) ? [...rawStatuses] : [];
+    const withoutOtsuFollowup = statuses.filter((raw) => {
+      const st = (raw ?? {}) as Record<string, unknown>;
+      const statusType = String(st.status_type ?? st.statusType ?? '');
+      if (statusType !== 'otsu_followup') return true;
+      const side = String(st.side ?? 'player') === 'enemy' ? 'enemy' : 'player';
+      return side !== actorSide;
+    });
+    if (grantsOtsuFollowup && movedPieceAfterApply) {
+      withoutOtsuFollowup.push({
+        side: actorSide,
+        row: movedPieceAfterApply.row,
+        col: movedPieceAfterApply.col,
+        status_type: 'otsu_followup',
+        remaining_turns: 1,
+      });
+    }
+    (skillState as Record<string, unknown>).piece_statuses = withoutOtsuFollowup;
   }
   if (turnAdvanced && applyLandingDerivedEffects && movedPieceAfterApply) {
     const key = actorSide === 'player' ? 'last_player_moved_piece' : 'last_enemy_moved_piece';

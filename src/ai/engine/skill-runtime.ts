@@ -55,6 +55,7 @@ const RIDGE_PIECE_CODES = new Set(['RIDGE', 'REI', '嶺', '555D2E24EFB0']);
 const ROCK_PIECE_CODES = new Set(['ROCK', '岩', '69D6ECEFF4E1']);
 const ORE_PIECE_CODES = new Set(['ORE', '鉱', '1BC740C95315']);
 const GRAVE_PIECE_CODES = new Set(['GRAVE', '墓', 'BC8AB84E787B']);
+const DEPRESSION_PIECE_CODES = new Set(['DEPRESSION', '鬱', '9E27F89F65C5']);
 const RED_ONI_PIECE_CODES = new Set(['REDONI', '赤鬼', '鬼']);
 const BLUE_ONI_PIECE_CODES = new Set(['BLUEONI', '青鬼']);
 const BLACK_ONI_PIECE_CODES = new Set(['BLACKONI', '黒鬼']);
@@ -693,7 +694,9 @@ function isSatoriMovedPieceActor(piece: AiBoardPiece): boolean {
   return base === 'SATORI';
 }
 
-function parseHeartProtectTargetNotation(notation: string | null): { row: number; col: number } | null {
+function parseHeartProtectTargetNotation(
+  notation: string | null,
+): { row: number; col: number } | null {
   if (!notation) return null;
   const m = /^heart_protect:(\d+):(\d+)$/i.exec(notation.trim());
   if (!m) return null;
@@ -1354,9 +1357,7 @@ export function applyMoveSkillEffects(input: {
   const isBoatMover = movedCode === 'BOAT' || movedPiece?.char === '舟';
   const movePcUpper = (input.move.pieceCode ?? '').toUpperCase();
   const isBirdMover =
-    movedCode === 'BIRD' ||
-    movedPiece?.char === '禽' ||
-    movePcUpper.includes('29ECAB1EF3C3');
+    movedCode === 'BIRD' || movedPiece?.char === '禽' || movePcUpper.includes('29ECAB1EF3C3');
   const isWindMover =
     WIND_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '風';
   const isFishMover =
@@ -1409,6 +1410,10 @@ export function applyMoveSkillEffects(input: {
     GRAVE_PIECE_CODES.has(movedCode) ||
     normalizeSkillPieceCode(input.move.pieceCode) === '墓' ||
     (movedPiece ? movedPiece.char === '墓' : false);
+  const isDepressionMover =
+    DEPRESSION_PIECE_CODES.has(movedCode) ||
+    normalizeSkillPieceCode(input.move.pieceCode) === '鬱' ||
+    (movedPiece ? movedPiece.char === '鬱' : false);
   const isPrisonFenceMover =
     PRISON_FENCE_PIECE_CODES.has(movedCode) ||
     normalizeSkillPieceCode(input.move.pieceCode) === '牢' ||
@@ -1558,8 +1563,7 @@ export function applyMoveSkillEffects(input: {
     const satoriTargetCell = parseSatoriStunTargetNotation(input.move.notation ?? null);
     if (satoriTargetCell && movedPiece && isSatoriMovedPieceActor(movedPiece)) {
       const targetPiece = input.pieces.find(
-        (piece) =>
-          piece.row === satoriTargetCell.row && piece.col === satoriTargetCell.col,
+        (piece) => piece.row === satoriTargetCell.row && piece.col === satoriTargetCell.col,
       );
       if (
         targetPiece &&
@@ -1581,8 +1585,7 @@ export function applyMoveSkillEffects(input: {
     const heartProtectCell = parseHeartProtectTargetNotation(input.move.notation ?? null);
     if (heartProtectCell && movedPiece && isHeartMovedPieceActor(movedPiece)) {
       const targetPiece = input.pieces.find(
-        (piece) =>
-          piece.row === heartProtectCell.row && piece.col === heartProtectCell.col,
+        (piece) => piece.row === heartProtectCell.row && piece.col === heartProtectCell.col,
       );
       if (
         targetPiece &&
@@ -2474,6 +2477,28 @@ export function applyMoveSkillEffects(input: {
         turnNumber: input.position.turnNumber,
         summonedCount: summoned.length,
         summoned,
+      });
+    }
+  }
+  // 鬱: 移動後、左右の空きマスを2ターン持続する侵入菌糸（×マス）にする。
+  if (isDepressionMover && input.move.fromRow != null && input.move.fromCol != null && movedPiece) {
+    for (const dc of [-1, 1] as const) {
+      const row = movedPiece.row;
+      const col = movedPiece.col + dc;
+      if (col < 0 || col > 8) continue;
+      if (!isCellEmpty(input.pieces, row, col)) continue;
+      state.board_hazards = state.board_hazards.filter((entry) => {
+        const type = asString(entry.hazard_type ?? entry.hazardType) ?? '';
+        const hRow = asNumber(entry.row);
+        const hCol = asNumber(entry.col);
+        return !(type === 'pit_cell' && hRow === row && hCol === col);
+      });
+      state.board_hazards.push({
+        row,
+        col,
+        hazard_type: 'pit_cell',
+        affects_side: sideOpposite(input.actorSide),
+        remaining_turns: 2,
       });
     }
   }

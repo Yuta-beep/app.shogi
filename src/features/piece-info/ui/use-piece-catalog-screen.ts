@@ -6,6 +6,32 @@ import { createLoadDeckBuilderUseCase } from '@/usecases/deck-builder/create-dec
 import { supabase } from '@/lib/supabase/supabase-client';
 import { isApiDataSource } from '@/lib/config/data-source';
 
+function normalizeCatalogSkillText(piece: PieceCatalogItem): string {
+  const code = (piece.pieceCode ?? '').toUpperCase();
+  const isDepressionPiece =
+    piece.char === '鬱' || code.includes('DEPRESSION') || code.includes('9E27F89F65C5');
+  if (isDepressionPiece) {
+    return '移動後、左右1マスの空きマスを2ターン侵入禁止の×マスにする。';
+  }
+  return piece.skill;
+}
+
+function normalizeCatalogMoveVectors(piece: PieceCatalogItem): PieceCatalogItem['moveVectors'] {
+  const code = (piece.pieceCode ?? '').toUpperCase();
+  const isDepressionPiece =
+    piece.char === '鬱' || code.includes('DEPRESSION') || code.includes('9E27F89F65C5');
+  if (isDepressionPiece) {
+    return [
+      { dx: 0, dy: -1, maxStep: 1 },
+      { dx: -1, dy: -1, maxStep: 1 },
+      { dx: 1, dy: -1, maxStep: 1 },
+      { dx: -1, dy: 1, maxStep: 1 },
+      { dx: 1, dy: 1, maxStep: 1 },
+    ];
+  }
+  return piece.moveVectors;
+}
+
 export function usePieceCatalogScreen() {
   const isApiMode = isApiDataSource();
   const [items, setItems] = useState<PieceCatalogItem[]>([]);
@@ -22,7 +48,13 @@ export function usePieceCatalogScreen() {
 
       if (!isApiMode) {
         if (active) {
-          setItems(catalog);
+          setItems(
+            catalog.map((piece) => ({
+              ...piece,
+              skill: normalizeCatalogSkillText(piece),
+              moveVectors: normalizeCatalogMoveVectors(piece),
+            })),
+          );
         }
         return;
       }
@@ -61,6 +93,8 @@ export function usePieceCatalogScreen() {
           const owned = ownedByChar.get(piece.char);
           return {
             ...piece,
+            skill: normalizeCatalogSkillText(piece),
+            moveVectors: normalizeCatalogMoveVectors(piece),
             pieceId: owned?.pieceId,
             imageSignedUrl: owned?.imageSignedUrl ?? null,
             quantity: owned?.quantity,

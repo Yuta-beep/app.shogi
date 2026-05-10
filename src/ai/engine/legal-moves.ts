@@ -181,8 +181,7 @@ function simulatedPiecesAfterHeartSkillMove(
   if (move.dropPieceCode) {
     const code = toBasePieceCode(move.dropPieceCode);
     if (!code) return pieces;
-    const ch =
-      (CODE_TO_CHAR as Readonly<Partial<Record<string, string>>>)[code] ?? '心';
+    const ch = (CODE_TO_CHAR as Readonly<Partial<Record<string, string>>>)[code] ?? '心';
     return [
       ...pieces.map((p) => ({ ...p })),
       {
@@ -277,9 +276,7 @@ function expandSatoriSkillMovesForLegalListing(
   };
 
   const isSyntheticHandDropNotation = (m: AiBattleMove): boolean =>
-    !!m.dropPieceCode &&
-    typeof m.notation === 'string' &&
-    m.notation.includes('*');
+    !!m.dropPieceCode && typeof m.notation === 'string' && m.notation.includes('*');
 
   for (const m of moves) {
     if (m.notation === 'time_skill_only' || m.notation === 'house_skill_only') {
@@ -338,9 +335,7 @@ function expandHeartProtectSkillMovesForLegalListing(
   };
 
   const isSyntheticHandDropNotation = (m: AiBattleMove): boolean =>
-    !!m.dropPieceCode &&
-    typeof m.notation === 'string' &&
-    m.notation.includes('*');
+    !!m.dropPieceCode && typeof m.notation === 'string' && m.notation.includes('*');
 
   for (const m of moves) {
     if (m.notation === 'time_skill_only' || m.notation === 'house_skill_only') {
@@ -523,6 +518,12 @@ function resolvePieceCodeForLegalMove(piece: AiBoardPiece, lookups: AiPieceLooku
   if (ch === '心' || rawUp.includes('CA16911978FF') || rawUp.includes('HEART')) {
     return 'HEART';
   }
+  if (ch === '鬱' || rawUp.includes('9E27F89F65C5') || rawUp.includes('DEPRESSION')) {
+    return 'DEPRESSION';
+  }
+  if (ch === '乙' || rawUp.includes('5A07CA59B158') || rawUp.includes('OTSU')) {
+    return 'OTSU';
+  }
   const legacy = toBasePieceCode(CHAR_TO_CODE[piece.char]);
   if (legacy) return legacy;
   return 'FU';
@@ -539,6 +540,32 @@ function resolveCapturedPieceCodeForLegalMove(
   return (
     toBasePieceCode(capturedToHandPieceCode(piece)) ?? toBasePieceCode(piece.pieceCode ?? null)
   );
+}
+
+function activeOtsuFollowupForSide(
+  position: AiBattlePosition,
+): { row: number; col: number } | null {
+  const boardState = (position.boardState ?? {}) as Record<string, unknown>;
+  const skillState = (boardState.skill_state ?? boardState.skillState ?? {}) as Record<
+    string,
+    unknown
+  >;
+  const rawStatuses = (skillState.piece_statuses ?? skillState.pieceStatuses) as unknown;
+  if (!Array.isArray(rawStatuses)) return null;
+  for (const raw of rawStatuses) {
+    const st = (raw ?? {}) as Record<string, unknown>;
+    const statusType = String(st.status_type ?? st.statusType ?? '');
+    if (statusType !== 'otsu_followup') continue;
+    const side = String(st.side ?? 'player') === 'enemy' ? 'enemy' : 'player';
+    if (side !== position.sideToMove) continue;
+    const remaining = Number(st.remaining_turns ?? st.remainingTurns ?? 0);
+    if (!Number.isFinite(remaining) || remaining <= 0) continue;
+    const row = Number(st.row);
+    const col = Number(st.col);
+    if (!Number.isFinite(row) || !Number.isFinite(col)) continue;
+    return { row, col };
+  }
+  return null;
 }
 
 function resolvePieceDefForBookCopy(
@@ -1313,7 +1340,10 @@ function resolveEffectiveVectorsForPiece(
   const moonNormalized = normalizeVectorsForMoon(piece, peopleField, position);
   const oniNormalized = normalizeVectorsForOniVariants(piece, moonNormalized);
   const deathNormalized = normalizeVectorsForDeath(piece, oniNormalized);
-  const beastBird = normalizeVectorsForBird(piece, normalizeVectorsForBeast(piece, deathNormalized));
+  const beastBird = normalizeVectorsForBird(
+    piece,
+    normalizeVectorsForBeast(piece, deathNormalized),
+  );
   return normalizeVectorsForSoul(piece, beastBird);
 }
 
@@ -1461,6 +1491,7 @@ function generateBoardPieceMoves(input: {
   lookups: AiPieceLookups;
   occupancy: OccupancyMap;
   skillView: SkillRuntimeView;
+  noCaptureOnly?: boolean;
 }): AiBattleMove[] {
   if (isBookPiece(input.piece)) {
     const aroundAllies = input.pieces.filter((ally) => {
@@ -1662,23 +1693,19 @@ function generateBoardPieceMoves(input: {
   const captureFilteredTargets = filteredTargets.filter((target) => {
     const captured = findPieceAtFast(input.occupancy, target.row, target.col);
     if (!captured) return true;
+    if (input.noCaptureOnly === true) return false;
     if (isCloudPiece(input.piece)) {
       // 雲: 敵は取れず、味方のみ取れる（ただし味方王/玉は不可）。
       return captured.side === input.piece.side && !isKingPiece(captured);
     }
     if (captured.side === input.piece.side) return false;
-    if (
-      isKingPiece(captured) &&
-      hasSoulOnBoardForSide(input.pieces, captured.side)
-    ) {
+    if (isKingPiece(captured) && hasSoulOnBoardForSide(input.pieces, captured.side)) {
       return false;
     }
     if (isArmorPiece(captured)) return false;
     if (captured.side !== input.piece.side && isArmorPiece(input.piece)) return false;
     if (
-      input.skillView.captureImmunityCells.has(
-        `${captured.side}:${captured.row}:${captured.col}`,
-      )
+      input.skillView.captureImmunityCells.has(`${captured.side}:${captured.row}:${captured.col}`)
     ) {
       return false;
     }
@@ -1716,7 +1743,8 @@ function generateBoardPieceMoves(input: {
 
   const moves = boatFilteredTargets.flatMap((target) => {
     const captured = findPieceAtFast(input.occupancy, target.row, target.col);
-    const capturedPieceCode = resolveCapturedPieceCodeForLegalMove(captured);
+    const capturedPieceCode =
+      input.noCaptureOnly === true ? null : resolveCapturedPieceCodeForLegalMove(captured);
     const transformedByA = isATransformedPawn(input.skillView, input.piece);
     const promote = transformedByA ? false : canPromoteByMove(input.piece, from, target, 9);
     const mustPromote = transformedByA ? false : mustPromoteByMove(input.piece, target, 9);
@@ -1793,7 +1821,14 @@ export function generateLegalMoves(input: {
   const occupancy = buildOccupancyMap(pieces);
   const lookups = buildPieceLookups(input.pieceCatalog);
   const skillView = createSkillRuntimeView(position);
-  const activePieces = pieces.filter((piece) => piece.side === position.sideToMove);
+  const activePiecesRaw = pieces.filter((piece) => piece.side === position.sideToMove);
+  const otsuFollowup = activeOtsuFollowupForSide(position);
+  const activePieces =
+    otsuFollowup == null
+      ? activePiecesRaw
+      : activePiecesRaw.filter(
+          (piece) => piece.row === otsuFollowup.row && piece.col === otsuFollowup.col,
+        );
 
   const boardMoves = activePieces
     .filter(
@@ -1802,9 +1837,17 @@ export function generateLegalMoves(input: {
         !skillView.immobilizedCells.has(`${piece.side}:${piece.row}:${piece.col}`),
     )
     .flatMap((piece) =>
-      generateBoardPieceMoves({ pieces, piece, position, lookups, occupancy, skillView }),
+      generateBoardPieceMoves({
+        pieces,
+        piece,
+        position,
+        lookups,
+        occupancy,
+        skillView,
+        noCaptureOnly: otsuFollowup != null,
+      }),
     );
-  const timeSkillOnlyMoves = activePieces
+  const timeSkillOnlyMoves = (otsuFollowup == null ? activePieces : [])
     .filter((piece) => {
       const code = toBasePieceCode(piece.pieceCode);
       return code === 'TIME' || piece.char === '時';
@@ -1821,20 +1864,22 @@ export function generateLegalMoves(input: {
     );
   const peopleCount = countPeoplePiecesOnBoard(pieces);
   const houseSkillOnlyMoves =
-    peopleCount < 5
-      ? activePieces
-          .filter((piece) => isHousePieceForSkill(piece))
-          .map((piece) =>
-            createMove({
-              from: { row: piece.row, col: piece.col },
-              to: { row: piece.row, col: piece.col },
-              pieceCode: toBasePieceCode(piece.pieceCode) ?? 'HOUSE',
-              promote: false,
-              notation: 'house_skill_only',
-            }),
-          )
-      : [];
-  const dropMoves = generateDropMoves({ pieces, position, skillView });
+    otsuFollowup != null
+      ? []
+      : peopleCount < 5
+        ? activePieces
+            .filter((piece) => isHousePieceForSkill(piece))
+            .map((piece) =>
+              createMove({
+                from: { row: piece.row, col: piece.col },
+                to: { row: piece.row, col: piece.col },
+                pieceCode: toBasePieceCode(piece.pieceCode) ?? 'HOUSE',
+                promote: false,
+                notation: 'house_skill_only',
+              }),
+            )
+        : [];
+  const dropMoves = otsuFollowup != null ? [] : generateDropMoves({ pieces, position, skillView });
 
   const combined = [...boardMoves, ...timeSkillOnlyMoves, ...houseSkillOnlyMoves, ...dropMoves];
   const legalMoves = expandHeartProtectSkillMovesForLegalListing(
