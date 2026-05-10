@@ -129,6 +129,26 @@ const CANONICAL_FALLBACK_DEFINITIONS: ReadonlyArray<Record<string, unknown>> = [
     scriptHook: null,
     notes: 'canonical-engine-parity',
   },
+  {
+    skillId: 74,
+    pieceChars: ['菊'],
+    trigger: { group: 'event_move', type: 'after_move' },
+    conditions: [],
+    effects: [],
+    source: {
+      skillText:
+        '移動後、周囲8マスにいる味方駒1体（玉除く）に2ターンの復活効果を付与する。復活中は敵に取られても元の陣営の手駒に戻る。実装は skill-runtime + apply-move。',
+      sourceKind: 'manual',
+      sourceFile: 'session-skill-definitions-v2',
+      sourceFunction: 'CANONICAL_CHRYSANTHEMUM',
+    },
+    classification: {
+      implementationKind: 'primitive',
+      tags: ['move_trigger', 'ally_buff', 'revival'],
+    },
+    scriptHook: null,
+    notes: 'canonical-engine-parity',
+  },
 ];
 
 type PieceCatalogItemWithSkillJson = PieceCatalogItem & {

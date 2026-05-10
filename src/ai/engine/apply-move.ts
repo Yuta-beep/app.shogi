@@ -125,6 +125,70 @@ function readOtsuFollowupForSide(
   return null;
 }
 
+const CHRYSANTHEMUM_REVIVAL_STATUS = 'chrysanthemum_revival';
+
+function readSkillStatePieceStatuses(
+  boardState: Record<string, unknown> | undefined,
+): Record<string, unknown>[] {
+  if (!boardState) return [];
+  const skillState = (boardState.skill_state ?? boardState.skillState) as
+    | Record<string, unknown>
+    | undefined;
+  const raw = (skillState?.piece_statuses ?? skillState?.pieceStatuses) as unknown;
+  return Array.isArray(raw) ? [...raw] : [];
+}
+
+function hasActiveChrysanthemumRevival(
+  boardState: Record<string, unknown> | undefined,
+  side: Side,
+  row: number,
+  col: number,
+): boolean {
+  for (const raw of readSkillStatePieceStatuses(boardState)) {
+    const st = (raw ?? {}) as Record<string, unknown>;
+    const statusType = String(st.status_type ?? st.statusType ?? '');
+    if (statusType !== CHRYSANTHEMUM_REVIVAL_STATUS) continue;
+    const stSide = String(st.side ?? 'player') === 'enemy' ? 'enemy' : 'player';
+    if (stSide !== side) continue;
+    const remaining = Number(st.remaining_turns ?? st.remainingTurns ?? 0);
+    if (!Number.isFinite(remaining) || remaining <= 0) continue;
+    const r = Number(st.row);
+    const c = Number(st.col);
+    if (!Number.isFinite(r) || !Number.isFinite(c)) continue;
+    if (r === row && c === col) return true;
+  }
+  return false;
+}
+
+/** 盤上の復活マーカーを除去（着手後の座標追従前に呼ぶ想定でも可） */
+function removeChrysanthemumRevivalAtCell(
+  boardState: Record<string, unknown> | undefined,
+  side: Side,
+  row: number,
+  col: number,
+): void {
+  if (!boardState) return;
+  const skillStateRaw = boardState.skill_state ?? boardState.skillState;
+  const skillState =
+    skillStateRaw && typeof skillStateRaw === 'object'
+      ? ({ ...(skillStateRaw as Record<string, unknown>) } as Record<string, unknown>)
+      : ({} as Record<string, unknown>);
+  const prev = (skillState.piece_statuses ?? skillState.pieceStatuses) as unknown;
+  const list = Array.isArray(prev) ? [...prev] : [];
+  const filtered = list.filter((entry) => {
+    const st = (entry ?? {}) as Record<string, unknown>;
+    const statusType = String(st.status_type ?? st.statusType ?? '');
+    if (statusType !== CHRYSANTHEMUM_REVIVAL_STATUS) return true;
+    const stSide = String(st.side ?? 'player') === 'enemy' ? 'enemy' : 'player';
+    const r = Number(st.row);
+    const c = Number(st.col);
+    if (stSide === side && r === row && c === col) return false;
+    return true;
+  });
+  skillState.piece_statuses = filtered;
+  boardState.skill_state = skillState;
+}
+
 function resolveCapturedHandCode(
   captured: AiBoardPiece,
   fallbackCapturedCode: string | null,
@@ -213,6 +277,15 @@ function resolveCapturedHandCode(
   if (capturedChar === '乙' || rawCapturedCode.includes('5A07CA59B158')) {
     return 'OTSU';
   }
+  if (capturedChar === '薔' || rawCapturedCode.includes('A49C1E52B47A')) {
+    return 'ROSE';
+  }
+  if (capturedChar === '菊' || rawCapturedCode.includes('8254C41BA326')) {
+    return 'CHRYSANTHEMUM';
+  }
+  if (capturedChar === '桜' || rawCapturedCode.includes('124C31EA5D7A')) {
+    return 'CHERRY';
+  }
   if (rawCapturedCode.includes('SATORI')) {
     return 'SATORI';
   }
@@ -224,6 +297,15 @@ function resolveCapturedHandCode(
   }
   if (rawCapturedCode.includes('OTSU')) {
     return 'OTSU';
+  }
+  if (rawCapturedCode.includes('ROSE')) {
+    return 'ROSE';
+  }
+  if (rawCapturedCode.includes('CHRYSANTHEMUM')) {
+    return 'CHRYSANTHEMUM';
+  }
+  if (rawCapturedCode.includes('CHERRY')) {
+    return 'CHERRY';
   }
   const fromCaptured = toBasePieceCode(capturedToHandPieceCode(captured));
   if (fromCaptured) return fromCaptured;
@@ -241,6 +323,9 @@ function resolveCapturedHandCode(
   if (fb.includes('HEART') || fb.includes('CA16911978FF')) return 'HEART';
   if (fb.includes('DEPRESSION') || fb.includes('9E27F89F65C5')) return 'DEPRESSION';
   if (fb.includes('OTSU') || fb.includes('5A07CA59B158')) return 'OTSU';
+  if (fb.includes('ROSE') || fb.includes('A49C1E52B47A')) return 'ROSE';
+  if (fb.includes('CHRYSANTHEMUM') || fb.includes('8254C41BA326')) return 'CHRYSANTHEMUM';
+  if (fb.includes('CHERRY') || fb.includes('124C31EA5D7A')) return 'CHERRY';
   // opaque id をそのまま手駒キーにしない（手駒表示不能の原因）。
   if (/^PIECE_[A-Z0-9_]+$/i.test(fb)) return null;
   return fb;
@@ -743,6 +828,31 @@ function applyHostileCaptureAtCell(input: {
     deathCapturedByActor = true;
   }
   const consumeReiSubstitute = shouldConsumeReiSubstituteAfterAllyCapture(nextPieces, captured);
+  if (hasActiveChrysanthemumRevival(input.boardState, captured.side, input.row, input.col)) {
+    nextPieces = nextPieces.filter((piece) => !(piece.row === input.row && piece.col === input.col));
+    removeChrysanthemumRevivalAtCell(input.boardState, captured.side, input.row, input.col);
+    if (!isSpiritPiece(captured)) {
+      const capturedCode = resolveCapturedHandCode(captured, input.fallbackCapturedCode);
+      if (capturedCode) {
+        hands = addHandPiece(hands, captured.side, capturedCode, 1);
+      }
+      debugLogBookCaptureToHand({
+        actorSide: input.actorSide,
+        captured,
+        resolvedCode: capturedCode ?? null,
+        fallbackCapturedCode: input.fallbackCapturedCode,
+        hands,
+      });
+    }
+    return {
+      nextPieces,
+      hands,
+      didCapture: true,
+      starReturnProcTriggered,
+      rebuffKboss,
+      deathCapturedByActor,
+    };
+  }
   nextPieces = nextPieces.filter((piece) => !(piece.row === input.row && piece.col === input.col));
   const isSpiritCaptured = isSpiritPiece(captured);
   const capturedBaseCode = toBasePieceCode(captured.pieceCode);
@@ -1120,6 +1230,15 @@ export function applyMove(input: {
           !captureOwnPiece && captured
             ? shouldConsumeReiSubstituteAfterAllyCapture(nextPieces, captured)
             : false;
+        const chrysRevivalActive =
+          !captureOwnPiece &&
+          captured != null &&
+          hasActiveChrysanthemumRevival(
+            current.boardState as Record<string, unknown> | undefined,
+            captured.side,
+            move.toRow,
+            move.toCol,
+          );
         nextPieces = nextPieces.filter(
           (piece) => !(piece.row === move.toRow && piece.col === move.toCol),
         );
@@ -1129,6 +1248,19 @@ export function applyMove(input: {
           const capturedCode = resolveCapturedHandCode(captured, fallbackCapturedCode);
           if (capturedCode) {
             hands = addHandPiece(hands, actorSide, capturedCode, 1);
+          }
+        } else if (chrysRevivalActive) {
+          removeChrysanthemumRevivalAtCell(
+            current.boardState as Record<string, unknown> | undefined,
+            captured.side,
+            move.toRow,
+            move.toCol,
+          );
+          if (!isSpiritPiece(captured)) {
+            const capturedCode = resolveCapturedHandCode(captured, fallbackCapturedCode);
+            if (capturedCode) {
+              hands = addHandPiece(hands, captured.side, capturedCode, 1);
+            }
           }
         } else {
           const isSpiritCaptured = isSpiritPiece(captured);
@@ -1168,7 +1300,7 @@ export function applyMove(input: {
             }
           }
         }
-        if (consumeReiSubstitute && captured) {
+        if (consumeReiSubstitute && captured && !chrysRevivalActive) {
           nextPieces = removeFirstReiRitualFromSide(nextPieces, captured.side);
         }
       }

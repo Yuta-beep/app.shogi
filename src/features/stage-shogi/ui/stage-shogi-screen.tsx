@@ -120,6 +120,7 @@ export function StageShogiScreen() {
           poisonHazardCells={vm.poisonHazardCells}
           rockObstacleCells={vm.rockObstacleCells}
           batsuHazardCells={vm.batsuHazardCells}
+          thornHazardCells={vm.thornHazardCells}
           onCellPress={vm.handleBoardCellPress}
           onCellLongPress={vm.handleCellLongPress}
         />

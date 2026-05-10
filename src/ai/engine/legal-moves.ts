@@ -407,6 +407,14 @@ function isMedicinePieceForLegal(piece: AiBoardPiece): boolean {
   return code === 'MEDICINE';
 }
 
+function isCherryPieceForLegal(piece: AiBoardPiece): boolean {
+  if (normKanjiForEngineRules(piece.char) === '桜') return true;
+  const raw = (piece.pieceCode ?? '').toUpperCase();
+  if (raw.includes('124C31EA5D7A')) return true;
+  const code = toBasePieceCode(piece.pieceCode);
+  return code === 'CHERRY';
+}
+
 /** この駒が前後左右に味方の「聖」と隣接しているとき、移動ベクトル各方向の maxStep を +1 */
 function hasOrthogonalAdjacentAllySaint(pieces: AiBoardPiece[], piece: AiBoardPiece): boolean {
   const ortho: ReadonlyArray<{ dr: number; dc: number }> = [
@@ -436,6 +444,33 @@ function hasAdjacentAllyMedicine(pieces: AiBoardPiece[], piece: AiBoardPiece): b
     }
   }
   return false;
+}
+
+/** 同じ行に味方の「桜」がいるとき（桜自身を除く）、移動ベクトル各方向の maxStep を +1（桂馬跳びベクトルは除く） */
+function hasSameRowAllyCherryBuff(pieces: AiBoardPiece[], piece: AiBoardPiece): boolean {
+  if (isCherryPieceForLegal(piece)) return false;
+  return pieces.some(
+    (ally) => ally.side === piece.side && ally.row === piece.row && isCherryPieceForLegal(ally),
+  );
+}
+
+/** 桂馬跳び（L字 2+1） */
+function isKnightLeapVector(dx: number, dy: number): boolean {
+  const adx = Math.abs(dx);
+  const ady = Math.abs(dy);
+  return (adx === 2 && ady === 1) || (adx === 1 && ady === 2);
+}
+
+function applyCherryRowMoveRangeBuff(
+  vectors: AiPieceDefinition['moveVectors'],
+): AiPieceDefinition['moveVectors'] {
+  return vectors.map((v) => {
+    if (isKnightLeapVector(v.dx, v.dy)) return v;
+    return {
+      ...v,
+      maxStep: Math.max(1, (Number(v.maxStep) || 1) + 1),
+    };
+  });
 }
 
 function applySaintAdjacentMoveRangeBuff(
@@ -1609,6 +1644,9 @@ function generateBoardPieceMoves(input: {
   if (hasAdjacentAllyMedicine(input.pieces, input.piece)) {
     effectiveVectors = applyMedicineAdjacentMoveRangeBuff(effectiveVectors);
   }
+  if (hasSameRowAllyCherryBuff(input.pieces, input.piece)) {
+    effectiveVectors = applyCherryRowMoveRangeBuff(effectiveVectors);
+  }
 
   const leapVectors = effectiveVectors.filter((v) => isLeapOverOneMode(v.captureMode));
   const normalVectors = effectiveVectors.filter((v) => {
@@ -1777,6 +1815,9 @@ function generateDropMoves(input: {
     for (let row = 0; row < 9; row += 1) {
       for (let col = 0; col < 9; col += 1) {
         if (input.skillView.rockObstacleCells.has(`${row}:${col}`)) {
+          continue;
+        }
+        if (input.skillView.thornDropBlockedCells.has(`${input.position.sideToMove}:${row}:${col}`)) {
           continue;
         }
         if (

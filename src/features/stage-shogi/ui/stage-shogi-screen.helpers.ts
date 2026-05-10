@@ -43,6 +43,10 @@ export const POISON_CELL_IMAGE_SOURCE = require('../../../../assets/cells/毒マ
 export const PRISON_CHAIN_IMAGE_SOURCE = require('../../../../assets/cells/鎖.png');
 /** 穴スキルの侵入不可セル表示 */
 export const BATSU_CELL_IMAGE_SOURCE = require('../../../../assets/cells/バツマス.png');
+/** 薔スキルの茨化セル表示 */
+export const THORN_CELL_IMAGE_SOURCE = require('../../../../assets/cells/茨マス.png');
+/** 菊スキル: 復活効果付与中の駒のバッジ */
+export const CHRYSANTHEMUM_REVIVAL_IMAGE_SOURCE = require('../../../../assets/cells/復活.png');
 /** 岩スキルの障害物セル表示 */
 export const ROCK_OBSTACLE_IMAGE_SOURCE = require('../../../../assets/pieces/岩の障害物.png');
 
@@ -136,6 +140,8 @@ export type BoardPiece = {
   deathCurseCountdown?: number | null;
   /** 「心」など piece_defenses の immunity による捕獲抵抗（光のオーラ） */
   lightProtectionAura?: boolean;
+  /** 菊の復活効果（復活.png バッジ） */
+  chrysanthemumRevivalMark?: boolean;
 };
 
 export type PreservedMovedPiece = {
@@ -894,6 +900,44 @@ export function applyAbyssAuraEffectToPieces(
   }));
 }
 
+function chrysanthemumRevivalMarkKeysFromCanonical(position: BattleCanonicalPosition): Set<string> {
+  const keys = new Set<string>();
+  const boardState = asRecord(position.boardState);
+  if (!boardState) return keys;
+  const skillState = asRecord(boardState.skill_state ?? boardState.skillState);
+  const rawList = (skillState?.piece_statuses ??
+    skillState?.pieceStatuses ??
+    boardState.piece_statuses ??
+    boardState.pieceStatuses) as unknown;
+  if (!Array.isArray(rawList)) return keys;
+  for (const raw of rawList) {
+    const st = asRecord(raw);
+    if (!st) continue;
+    const statusType = asString(st.status_type ?? st.statusType) ?? '';
+    if (statusType !== 'chrysanthemum_revival') continue;
+    const turns = Number(st.remaining_turns ?? st.remainingTurns ?? 1);
+    if (!Number.isFinite(turns) || turns <= 0) continue;
+    const row = normalizeCellIndex(Number(st.row));
+    const col = normalizeCellIndex(Number(st.col));
+    if (row === null || col === null) continue;
+    const side = normalizeSide(asString(st.side) ?? 'player');
+    keys.add(`${side}:${row}:${col}`);
+  }
+  return keys;
+}
+
+export function applyChrysanthemumRevivalMarkToPieces(
+  pieces: BoardPiece[],
+  position: BattleCanonicalPosition,
+): BoardPiece[] {
+  const keys = chrysanthemumRevivalMarkKeysFromCanonical(position);
+  if (keys.size === 0) return pieces.map((p) => ({ ...p, chrysanthemumRevivalMark: false }));
+  return pieces.map((p) => ({
+    ...p,
+    chrysanthemumRevivalMark: keys.has(`${p.side}:${p.row}:${p.col}`),
+  }));
+}
+
 function lightProtectionAuraDisplayKeysFromCanonical(
   position: BattleCanonicalPosition,
 ): Set<string> {
@@ -1062,6 +1106,36 @@ export function batsuHazardCellsForDisplay(position: BattleCanonicalPosition): B
     const row = normalizeCellIndex(Number(hazard.row));
     const col = normalizeCellIndex(Number(hazard.col));
     if (hazardType !== 'pit_cell') continue;
+    if (!Number.isFinite(remaining) || remaining <= 0) continue;
+    if (row === null || col === null) continue;
+    const key = `${row}:${col}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ row, col });
+  }
+  return out;
+}
+
+export function thornHazardCellsForDisplay(position: BattleCanonicalPosition): BoardCell[] {
+  const boardState = asRecord(position.boardState);
+  if (!boardState) return [];
+  const skillState = asRecord(boardState.skill_state ?? boardState.skillState);
+  const rawList = (skillState?.board_hazards ??
+    skillState?.boardHazards ??
+    boardState.board_hazards ??
+    boardState.boardHazards) as unknown;
+  if (!Array.isArray(rawList)) return [];
+
+  const out: BoardCell[] = [];
+  const seen = new Set<string>();
+  for (const raw of rawList) {
+    const hazard = asRecord(raw);
+    if (!hazard) continue;
+    const hazardType = asString(hazard.hazard_type ?? hazard.hazardType) ?? '';
+    const remaining = Number(hazard.remaining_turns ?? hazard.remainingTurns ?? 1);
+    const row = normalizeCellIndex(Number(hazard.row));
+    const col = normalizeCellIndex(Number(hazard.col));
+    if (hazardType !== 'thorn_cell') continue;
     if (!Number.isFinite(remaining) || remaining <= 0) continue;
     if (row === null || col === null) continue;
     const key = `${row}:${col}`;
@@ -2091,11 +2165,13 @@ export function syncCanonicalState(params: {
   const withPrisonChain = applyPrisonChainEffectToPieces(withATransformEffect, position);
   const withStunAura = applyStunAuraEffectToPieces(withPrisonChain, position);
   const withAbyssAura = applyAbyssAuraEffectToPieces(withStunAura, position);
-  const withLightProtectionAura = applyLightProtectionAuraEffectToPieces(withAbyssAura, position);
+  const withChrysRevivalMark = applyChrysanthemumRevivalMarkToPieces(withAbyssAura, position);
+  const withLightProtectionAura = applyLightProtectionAuraEffectToPieces(withChrysRevivalMark, position);
   const withDeathCurseAura = applyDeathCurseEffectToPieces(withLightProtectionAura, position);
   const poisonHazardCells = poisonHazardCellsForDisplay(position);
   const rockObstacleCells = rockObstacleCellsForDisplay(position);
   const batsuHazardCells = batsuHazardCellsForDisplay(position);
+  const thornHazardCells = thornHazardCellsForDisplay(position);
   const movementRuleByCell = movementRuleByCellFromCanonical(position);
   const immobilizedKeys = immobilizedKeysFromCanonical(position);
   const nextHands = remapHandsStateToDisplayPieceCodes(
@@ -2121,6 +2197,7 @@ export function syncCanonicalState(params: {
     poisonHazardCells,
     rockObstacleCells,
     batsuHazardCells,
+    thornHazardCells,
     hands: reconciledHands,
     sideToMove: position.sideToMove,
     moveNo: position.turnNumber,

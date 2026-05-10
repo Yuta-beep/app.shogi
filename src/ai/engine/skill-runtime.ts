@@ -21,6 +21,8 @@ export type SkillRuntimeView = {
   aTransformCells: Set<string>;
   /** `piece_defenses` の mode=immunity かつ remaining>0（敵から取れない） */
   captureImmunityCells: Set<string>;
+  /** 茨化マス: 指定 side はそのセルに持ち駒を打てない */
+  thornDropBlockedCells: Set<string>;
 };
 
 const FLAME_PIECE_CODES = new Set(['ENN', 'FLAME', '炎']);
@@ -56,6 +58,8 @@ const ROCK_PIECE_CODES = new Set(['ROCK', '岩', '69D6ECEFF4E1']);
 const ORE_PIECE_CODES = new Set(['ORE', '鉱', '1BC740C95315']);
 const GRAVE_PIECE_CODES = new Set(['GRAVE', '墓', 'BC8AB84E787B']);
 const DEPRESSION_PIECE_CODES = new Set(['DEPRESSION', '鬱', '9E27F89F65C5']);
+const ROSE_PIECE_CODES = new Set(['ROSE', '薔', 'A49C1E52B47A']);
+const CHRYSANTHEMUM_PIECE_CODES = new Set(['CHRYSANTHEMUM', '菊', '8254C41BA326']);
 const RED_ONI_PIECE_CODES = new Set(['REDONI', '赤鬼', '鬼']);
 const BLUE_ONI_PIECE_CODES = new Set(['BLUEONI', '青鬼']);
 const BLACK_ONI_PIECE_CODES = new Set(['BLACKONI', '黒鬼']);
@@ -1144,6 +1148,21 @@ export function createSkillRuntimeView(position: AiBattlePosition): SkillRuntime
     captureImmunityCells.add(cellKey(side, row, col));
   }
 
+  const thornDropBlockedCells = new Set<string>();
+  for (const entry of state.board_hazards) {
+    const type = asString(entry.hazard_type ?? entry.hazardType) ?? '';
+    if (type !== 'thorn_cell') continue;
+    const row = asNumber(entry.row);
+    const col = asNumber(entry.col);
+    const remaining = asNumber(entry.remaining_turns ?? entry.remainingTurns) ?? 0;
+    const affectsSide =
+      (asString(entry.affects_side ?? entry.affectsSide) ?? 'player') === 'enemy'
+        ? 'enemy'
+        : 'player';
+    if (row == null || col == null || remaining <= 0) continue;
+    thornDropBlockedCells.add(cellKey(affectsSide, row, col));
+  }
+
   return {
     state,
     movementRulesByCell,
@@ -1153,6 +1172,7 @@ export function createSkillRuntimeView(position: AiBattlePosition): SkillRuntime
     rockObstacleCells,
     aTransformCells,
     captureImmunityCells,
+    thornDropBlockedCells,
   };
 }
 
@@ -1414,6 +1434,14 @@ export function applyMoveSkillEffects(input: {
     DEPRESSION_PIECE_CODES.has(movedCode) ||
     normalizeSkillPieceCode(input.move.pieceCode) === '鬱' ||
     (movedPiece ? movedPiece.char === '鬱' : false);
+  const isRoseMover =
+    ROSE_PIECE_CODES.has(movedCode) ||
+    normalizeSkillPieceCode(input.move.pieceCode) === '薔' ||
+    (movedPiece ? movedPiece.char === '薔' : false);
+  const isChrysanthemumMover =
+    CHRYSANTHEMUM_PIECE_CODES.has(movedCode) ||
+    normalizeSkillPieceCode(input.move.pieceCode) === '菊' ||
+    (movedPiece ? movedPiece.char === '菊' : false);
   const isPrisonFenceMover =
     PRISON_FENCE_PIECE_CODES.has(movedCode) ||
     normalizeSkillPieceCode(input.move.pieceCode) === '牢' ||
@@ -2498,6 +2526,71 @@ export function applyMoveSkillEffects(input: {
         col,
         hazard_type: 'pit_cell',
         affects_side: sideOpposite(input.actorSide),
+        remaining_turns: 2,
+      });
+    }
+  }
+  // 薔: 移動時、上下1マスを2ターン持続する茨化マスにする（相手はそのマスへ打てない）。
+  if (isRoseMover && input.move.fromRow != null && input.move.fromCol != null && movedPiece) {
+    for (const dr of [-1, 1] as const) {
+      const row = movedPiece.row + dr;
+      const col = movedPiece.col;
+      if (row < 0 || row > 8) continue;
+      if (!isCellEmpty(input.pieces, row, col)) continue;
+      state.board_hazards = state.board_hazards.filter((entry) => {
+        const type = asString(entry.hazard_type ?? entry.hazardType) ?? '';
+        const hRow = asNumber(entry.row);
+        const hCol = asNumber(entry.col);
+        return !(type === 'thorn_cell' && hRow === row && hCol === col);
+      });
+      state.board_hazards.push({
+        row,
+        col,
+        hazard_type: 'thorn_cell',
+        affects_side: sideOpposite(input.actorSide),
+        remaining_turns: 2,
+      });
+    }
+  }
+  // 菊: 移動後、周囲8マスにいる味方駒1体（玉除く）に2ターンの復活効果。実装は apply-move（捕獲時に元の陣営の手駒へ）。
+  if (
+    isChrysanthemumMover &&
+    input.move.fromRow != null &&
+    input.move.fromCol != null &&
+    movedPiece
+  ) {
+    const allies: AiBoardPiece[] = [];
+    for (let dr = -1; dr <= 1; dr += 1) {
+      for (let dc = -1; dc <= 1; dc += 1) {
+        if (dr === 0 && dc === 0) continue;
+        const r = movedPiece.row + dr;
+        const c = movedPiece.col + dc;
+        const p = input.pieces.find(
+          (x) => x.side === input.actorSide && x.row === r && x.col === c,
+        );
+        if (!p) continue;
+        const b = toBasePieceCode(p.pieceCode);
+        if (b === 'OU' || p.char === '王' || p.char === '玉') continue;
+        allies.push(p);
+      }
+    }
+    allies.sort((a, b) => (a.row !== b.row ? a.row - b.row : a.col - b.col));
+    const target = allies[0];
+    if (target) {
+      state.piece_statuses = state.piece_statuses.filter((entry) => {
+        const t = asString(entry.status_type ?? entry.statusType) ?? '';
+        if (t !== 'chrysanthemum_revival') return true;
+        const s = (asString(entry.side) ?? 'player') === 'enemy' ? 'enemy' : 'player';
+        const row = asNumber(entry.row);
+        const col = asNumber(entry.col);
+        if (s === target.side && row === target.row && col === target.col) return false;
+        return true;
+      });
+      state.piece_statuses.push({
+        side: target.side,
+        row: target.row,
+        col: target.col,
+        status_type: 'chrysanthemum_revival',
         remaining_turns: 2,
       });
     }

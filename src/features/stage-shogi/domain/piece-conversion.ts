@@ -468,6 +468,9 @@ export const CODE_TO_CHAR: Readonly<Record<string, string>> = {
   HEART: '心',
   DEPRESSION: '鬱',
   OTSU: '乙',
+  ROSE: '薔',
+  CHRYSANTHEMUM: '菊',
+  CHERRY: '桜',
 };
 
 export const PROMOTED_CODE_TO_CHAR: Readonly<Record<string, string>> = {
@@ -555,6 +558,9 @@ export const CHAR_TO_CODE: Readonly<Record<string, string>> = {
   心: 'HEART',
   鬱: 'DEPRESSION',
   乙: 'OTSU',
+  薔: 'ROSE',
+  菊: 'CHRYSANTHEMUM',
+  桜: 'CHERRY',
   /** 刀／剣／銃／鎧／盾は `CHAR_TO_CODE` に載せない（`piecesFromBoardState` が canonical に寄せて `resolvePieceDef` が壊れる）。手駒は `game-rules` の CAPTURE_CHAR_TO_HAND_CODE。 */
 };
 

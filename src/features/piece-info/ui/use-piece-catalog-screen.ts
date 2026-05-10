@@ -13,6 +13,11 @@ function normalizeCatalogSkillText(piece: PieceCatalogItem): string {
   if (isDepressionPiece) {
     return '移動後、左右1マスの空きマスを2ターン侵入禁止の×マスにする。';
   }
+  const isChrysanthemumPiece =
+    piece.char === '菊' || code.includes('CHRYSANTHEMUM') || code.includes('8254C41BA326');
+  if (isChrysanthemumPiece) {
+    return '移動後、周囲8マスにいる味方駒1体（玉除く）に2ターンの復活効果を付与する。復活中は敵に取られても元の陣営の手駒に戻る。';
+  }
   return piece.skill;
 }
 

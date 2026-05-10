@@ -17,9 +17,11 @@ import {
   KING_PIECE_SIZE_PERCENT,
   NORMAL_PIECE_SIZE_PERCENT,
   BATSU_CELL_IMAGE_SOURCE,
+  CHRYSANTHEMUM_REVIVAL_IMAGE_SOURCE,
   POISON_CELL_IMAGE_SOURCE,
   PRISON_CHAIN_IMAGE_SOURCE,
   ROCK_OBSTACLE_IMAGE_SOURCE,
+  THORN_CELL_IMAGE_SOURCE,
   collectStandardBaseCodesForLocalPromotedImage,
   fallbackPiecePalette,
   getDisplayChar,
@@ -55,6 +57,7 @@ type BoardPieceSpriteProps = {
   lightProtectionAura?: boolean;
   deathCurseAura?: boolean;
   deathCurseCountdown?: number | null;
+  chrysanthemumRevivalMark?: boolean;
 };
 
 const BoardPieceSprite = memo(function BoardPieceSprite({
@@ -71,6 +74,7 @@ const BoardPieceSprite = memo(function BoardPieceSprite({
   lightProtectionAura = false,
   deathCurseAura = false,
   deathCurseCountdown = null,
+  chrysanthemumRevivalMark = false,
 }: BoardPieceSpriteProps) {
   const rowIndex = normalizeCellIndex(piece.row);
   const colIndex = normalizeCellIndex(piece.col);
@@ -309,6 +313,26 @@ const BoardPieceSprite = memo(function BoardPieceSprite({
               </Text>
             </View>
           ) : null}
+          {chrysanthemumRevivalMark && !darkVeiled ? (
+            <View
+              pointerEvents="none"
+              style={{
+                position: 'absolute',
+                top: '-2%',
+                right: '2%',
+                width: '54%',
+                height: '54%',
+                maxWidth: 56,
+                maxHeight: 56,
+              }}
+            >
+              <Image
+                source={CHRYSANTHEMUM_REVIVAL_IMAGE_SOURCE}
+                contentFit="contain"
+                style={{ width: '100%', height: '100%' }}
+              />
+            </View>
+          ) : null}
         </View>
       </View>
     </View>
@@ -439,6 +463,35 @@ const BatsuHazardLayer = memo(function BatsuHazardLayer({
         >
           <Image
             source={BATSU_CELL_IMAGE_SOURCE}
+            contentFit="cover"
+            style={{ width: '100%', height: '100%' }}
+          />
+        </View>
+      ))}
+    </View>
+  );
+});
+
+const ThornHazardLayer = memo(function ThornHazardLayer({
+  thornHazards,
+}: {
+  thornHazards: BoardCell[];
+}) {
+  return (
+    <View pointerEvents="none" style={{ position: 'absolute', inset: 0, zIndex: 24 }}>
+      {thornHazards.map((cell) => (
+        <View
+          key={`thorn-hazard-image-${cell.row}-${cell.col}`}
+          style={{
+            position: 'absolute',
+            top: `${cell.row * BOARD_CELL_INNER_RATIO * 100}%`,
+            left: `${cell.col * BOARD_CELL_INNER_RATIO * 100}%`,
+            width: `${BOARD_CELL_INNER_RATIO * 100}%`,
+            height: `${BOARD_CELL_INNER_RATIO * 100}%`,
+          }}
+        >
+          <Image
+            source={THORN_CELL_IMAGE_SOURCE}
             contentFit="cover"
             style={{ width: '100%', height: '100%' }}
           />
@@ -599,6 +652,7 @@ const BoardPiecesLayer = memo(function BoardPiecesLayer({
             lightProtectionAura={Boolean((placement as any).lightProtectionAura)}
             deathCurseAura={Boolean((placement as any).deathCurseAura)}
             deathCurseCountdown={(placement as any).deathCurseCountdown ?? null}
+            chrysanthemumRevivalMark={Boolean((placement as any).chrysanthemumRevivalMark)}
           />
         );
       })}
@@ -619,6 +673,7 @@ export function StageShogiBoard(props: {
   poisonHazardCells: BoardCell[];
   rockObstacleCells: BoardCell[];
   batsuHazardCells: BoardCell[];
+  thornHazardCells: BoardCell[];
   onCellPress: (row: number, col: number) => void;
   onCellLongPress: (row: number, col: number) => void;
 }) {
@@ -635,6 +690,7 @@ export function StageShogiBoard(props: {
     poisonHazardCells,
     rockObstacleCells,
     batsuHazardCells,
+    thornHazardCells,
     onCellPress,
     onCellLongPress,
   } = props;
@@ -669,6 +725,7 @@ export function StageShogiBoard(props: {
           <PoisonHazardLayer poisonHazards={poisonHazardCells} />
           <RockObstacleLayer rockObstacles={rockObstacleCells} />
           <BatsuHazardLayer batsuHazards={batsuHazardCells} />
+          <ThornHazardLayer thornHazards={thornHazardCells} />
           <BoardTouchLayer onCellPress={onCellPress} onCellLongPress={onCellLongPress} />
         </View>
       </View>

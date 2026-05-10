@@ -200,6 +200,9 @@ const CAPTURE_CHAR_TO_HAND_CODE: Readonly<Record<string, string>> = {
   心: 'HEART',
   鬱: 'DEPRESSION',
   乙: 'OTSU',
+  薔: 'ROSE',
+  菊: 'CHRYSANTHEMUM',
+  桜: 'CHERRY',
 };
 
 const OPAQUE_CAPTURE_CODE_TO_HAND_CODE: Readonly<Record<string, string>> = {
@@ -223,6 +226,9 @@ const OPAQUE_CAPTURE_CODE_TO_HAND_CODE: Readonly<Record<string, string>> = {
   PIECE_CA16911978FF: 'HEART',
   PIECE_9E27F89F65C5: 'DEPRESSION',
   PIECE_5A07CA59B158: 'OTSU',
+  PIECE_A49C1E52B47A: 'ROSE',
+  PIECE_8254C41BA326: 'CHRYSANTHEMUM',
+  PIECE_124C31EA5D7A: 'CHERRY',
 };
 
 function opaqueCapturedCodeToHandCode(rawCode: string | null): string | null {
@@ -250,6 +256,9 @@ function opaqueCapturedCodeToHandCode(rawCode: string | null): string | null {
   if (upper.includes('CA16911978FF')) return 'HEART';
   if (upper.includes('9E27F89F65C5')) return 'DEPRESSION';
   if (upper.includes('5A07CA59B158')) return 'OTSU';
+  if (upper.includes('A49C1E52B47A')) return 'ROSE';
+  if (upper.includes('8254C41BA326')) return 'CHRYSANTHEMUM';
+  if (upper.includes('124C31EA5D7A')) return 'CHERRY';
   if (upper.includes('BLUEONI')) return 'BLUEONI';
   if (upper.includes('BLACKONI')) return 'BLACKONI';
   if (upper.includes('REDONI')) return 'REDONI';
@@ -270,6 +279,9 @@ function opaqueCapturedCodeToHandCode(rawCode: string | null): string | null {
   if (upper.includes('HEART')) return 'HEART';
   if (upper.includes('DEPRESSION')) return 'DEPRESSION';
   if (upper.includes('OTSU')) return 'OTSU';
+  if (upper.includes('ROSE')) return 'ROSE';
+  if (upper.includes('CHRYSANTHEMUM')) return 'CHRYSANTHEMUM';
+  if (upper.includes('CHERRY')) return 'CHERRY';
   if (upper.includes('0F14ABCC6E5E')) return 'HOLY_SWORD';
   return null;
 }

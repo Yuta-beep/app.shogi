@@ -1373,7 +1373,16 @@ describe('stage17 skill compatibility', () => {
       piece_statuses?: Record<string, unknown>[];
     };
     expect((skillState.piece_defenses ?? []).some((d) => d.mode === 'substitute')).toBe(true);
-    expect((skillState.piece_statuses ?? []).some((s) => s.status_type === 'revive')).toBe(true);
+    expect(
+      (skillState.piece_statuses ?? []).some(
+        (s) =>
+          s.status_type === 'revive' &&
+          s.side === 'player' &&
+          s.row === 4 &&
+          s.col === 4 &&
+          s.remaining_turns === 2,
+      ),
+    ).toBe(true);
   });
 
   it('applies script_hook safe_room_king_relocation and escape_king_follow', () => {
