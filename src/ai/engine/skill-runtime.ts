@@ -1464,9 +1464,34 @@ export function applyMoveSkillEffects(input: {
       });
     }
   }
-  // 虹/青鬼: 周囲8マスの敵駒の移動範囲を上下1マスに制限する。
+  // 虹: 周囲8マスの敵駒の移動範囲を直交1マスに制限する。
   if (
-    (isRainbowMover || isBlueOniMover) &&
+    isRainbowMover &&
+    input.move.fromRow != null &&
+    input.move.fromCol != null &&
+    input.movedPiece
+  ) {
+    for (let dr = -1; dr <= 1; dr += 1) {
+      for (let dc = -1; dc <= 1; dc += 1) {
+        if (dr === 0 && dc === 0) continue;
+        const row = input.movedPiece.row + dr;
+        const col = input.movedPiece.col + dc;
+        if (row < 0 || row > 8 || col < 0 || col > 8) continue;
+        const target = input.pieces.find((piece) => piece.row === row && piece.col === col);
+        if (!target || target.side === input.actorSide) continue;
+        state.movement_modifiers.push({
+          row,
+          col,
+          side: target.side,
+          movement_rule: 'orthogonal_step_only',
+          remaining_turns: 2,
+        });
+      }
+    }
+  }
+  // 青鬼: 周囲8マスの敵駒の移動範囲を上下1マスに制限する。
+  if (
+    isBlueOniMover &&
     input.move.fromRow != null &&
     input.move.fromCol != null &&
     input.movedPiece

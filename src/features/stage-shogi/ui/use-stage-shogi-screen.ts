@@ -76,6 +76,8 @@ import { LoadGameLegalMovesUseCase } from '@/usecases/stage-battle/load-game-leg
 import { LoadGameStateUseCase } from '@/usecases/stage-battle/load-game-state-usecase';
 import { RequestAiMoveUseCase } from '@/usecases/stage-battle/request-ai-move-usecase';
 
+const ILLEGAL_MOVE_RECOVERED_MESSAGE = '局面を自動更新しました。対局を続行します。';
+
 export type PendingPromotion = {
   promoteMove: BattleMove;
   nonPromoteMove: BattleMove;
@@ -437,7 +439,7 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
     setSideToMove('player');
     setMoveNo(1);
     setGameId(null);
-    setAiError(null);
+    setAiError((current) => (current === ILLEGAL_MOVE_RECOVERED_MESSAGE ? current : null));
     setSelectedCell(null);
     setSelectedDropPieceCode(null);
     setLegalTargets([]);
@@ -556,7 +558,7 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
     }
 
     let active = true;
-    setAiError(null);
+    setAiError((current) => (current === ILLEGAL_MOVE_RECOVERED_MESSAGE ? current : null));
     setIsLoadingPlayerLegalMoves(true);
 
     loadGameLegalMovesUseCase
@@ -729,7 +731,7 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
     aiThinkingRef.current = true;
     inFlightAiKeyRef.current = requestKey;
     setIsAiThinking(true);
-    setAiError(null);
+    setAiError((current) => (current === ILLEGAL_MOVE_RECOVERED_MESSAGE ? current : null));
 
     try {
       const maxSameTurnAiRetries = 14;
@@ -804,7 +806,7 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
               toCol: selectedMoveForApply.toCol,
               pieceCode: resolvedPieceCode ?? moved.pieceCode ?? null,
               char,
-              imageSignedUrl,
+              imageSignedUrl: imageSignedUrl ?? null,
               promoted,
             };
           }
@@ -938,7 +940,7 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
     } catch (error: unknown) {
       if (isGameAlreadyFinishedError(error)) {
         setWinner('player');
-        setAiError(null);
+        setAiError((current) => (current === ILLEGAL_MOVE_RECOVERED_MESSAGE ? current : null));
         void claimStageClearRewardIfNeeded();
       } else {
         if (isIllegalMoveError(error)) {
@@ -1009,21 +1011,10 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
       }
 
       if (latest.position.sideToMove === 'player') {
-        try {
-          const legal = await loadGameLegalMovesUseCase.execute({ gameId });
-          setStateHash(legal.stateHash ?? latest.position.stateHash ?? null);
-          setPlayerLegalMoves(legal.legalMoves);
-          debugLogPieceMoveRanges(
-            'recover-loadGameLegalMoves',
-            latest.position.sideToMove,
-            latest.position.turnNumber,
-            legal.legalMoves,
-          );
-          illegalRecoverSignatureRef.current = null;
-          illegalRecoverAttemptsRef.current = 0;
-        } catch {
-          setPlayerLegalMoves([]);
-        }
+        // syncFromCanonicalPosition bumps boardSyncEpoch, so the standard legal-moves effect reloads once.
+        setPlayerLegalMoves([]);
+        illegalRecoverSignatureRef.current = null;
+        illegalRecoverAttemptsRef.current = 0;
       } else {
         setPlayerLegalMoves([]);
         pendingAiResumeRef.current = {
@@ -1031,7 +1022,7 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
           side: latest.position.sideToMove,
         };
       }
-      setAiError(null);
+      setAiError((current) => (current === ILLEGAL_MOVE_RECOVERED_MESSAGE ? current : null));
       return true;
     } catch {
       return false;
@@ -1180,7 +1171,7 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
       if (isIllegalMoveError(error)) {
         const recovered = await recoverFromIllegalMoveIfNeeded();
         if (recovered) {
-          setAiError('局面を自動更新しました。対局を続行します。');
+          setAiError(ILLEGAL_MOVE_RECOVERED_MESSAGE);
           return;
         }
         pendingAiResumeRef.current = null;
@@ -1234,7 +1225,7 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
       setEnemyPreviewTargets([]);
       setPlayerLegalMoves([]);
       setPendingPromotion(null);
-      setAiError(null);
+      setAiError((current) => (current === ILLEGAL_MOVE_RECOVERED_MESSAGE ? current : null));
     };
 
     try {
@@ -1277,7 +1268,7 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
     setEnemyPreviewTargets([]);
     setPlayerLegalMoves([]);
     setPendingPromotion(null);
-    setAiError(null);
+    setAiError((current) => (current === ILLEGAL_MOVE_RECOVERED_MESSAGE ? current : null));
     await sendCommittedPlayerMoveToServer(
       move,
       piecesRenderRef.current,
@@ -1312,7 +1303,7 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
     setPendingPromotion(null);
     setPendingTimeActionCell(null);
     setTimeActionMode(null);
-    setAiError(null);
+    setAiError((current) => (current === ILLEGAL_MOVE_RECOVERED_MESSAGE ? current : null));
     await sendCommittedPlayerMoveToServer(
       move,
       piecesRenderRef.current,
@@ -1403,7 +1394,7 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
     setEnemyPreviewTargets([]);
     setPlayerLegalMoves([]);
     setPendingPromotion(null);
-    setAiError(null);
+    setAiError((current) => (current === ILLEGAL_MOVE_RECOVERED_MESSAGE ? current : null));
 
     const rollbackSnapshot = {
       pieces:
@@ -1534,9 +1525,7 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
           const record = getLocalBattleGame(gameId);
           const built = buildBoardState(pieces, pieceDefsByCode) as Record<string, unknown>;
           const regBoard = record?.position?.boardState as Record<string, unknown> | undefined;
-          const latestBoard = aiPositionRef.current?.boardState as
-            | Record<string, unknown>
-            | undefined;
+          const latestBoard = record?.position?.boardState as Record<string, unknown> | undefined;
           const mergedBoard: Record<string, unknown> = { ...built };
           const latestSkillState = latestBoard?.skill_state ?? latestBoard?.skillState ?? null;
           if (latestSkillState != null) {

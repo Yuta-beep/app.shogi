@@ -6,6 +6,7 @@ import { homeAssets } from '@/constants/home-assets';
 
 type HomeHeaderSectionProps = {
   onPressBackToTitle: () => void;
+  onPressOnlineMatchSetup: () => void;
   onPressOnlineBattle: () => void;
   onPressMatching: () => void;
   onPressGachaBallIcon: () => void;
@@ -21,6 +22,7 @@ type HomeHeaderSectionProps = {
 
 export function HomeHeaderSection({
   onPressBackToTitle,
+  onPressOnlineMatchSetup,
   onPressOnlineBattle,
   onPressMatching,
   onPressGachaBallIcon,
@@ -50,16 +52,28 @@ export function HomeHeaderSection({
         accessibilityRole="button"
         accessibilityLabel="タイトル画面へ戻る"
         onPress={onPressBackToTitle}
-        className="absolute right-6 top-[150px] z-10 rounded-lg border border-[#8e6428] bg-[#d2a860] px-3 py-2 active:opacity-80"
+        className="absolute right-4 top-[150px] z-10 rounded-lg border border-[#8e6428] bg-[#d2a860] px-3 py-2 active:opacity-80"
       >
         <Text className="text-center text-xs font-black text-[#4b2e1f]">タイトルへ</Text>
       </Pressable>
 
       <Pressable
         accessibilityRole="button"
+        accessibilityLabel="オンライン対戦の準備へ"
+        onPress={onPressOnlineMatchSetup}
+        className="absolute right-4 top-[194px] z-10 w-[118px] rounded-xl border border-[#0f4c3a] bg-[#f6f1df] px-3 py-2.5 active:opacity-85"
+      >
+        <Text className="text-center text-[10px] font-black tracking-[0.5px] text-[#166534]">
+          ONLINE SETUP
+        </Text>
+        <Text className="mt-0.5 text-center text-sm font-black text-[#2f1b14]">対戦準備</Text>
+      </Pressable>
+
+      <Pressable
+        accessibilityRole="button"
         accessibilityLabel="オンライン対戦へ"
         onPress={onPressOnlineBattle}
-        className="absolute right-[-20px] top-[220px] z-10 h-24 w-48 active:scale-95"
+        className="absolute right-[-20px] top-[262px] z-10 h-24 w-48 active:scale-95"
       >
         <Image
           source={homeAssets.onlineBattleButton}
@@ -70,7 +84,7 @@ export function HomeHeaderSection({
 
       <Pressable
         onPress={onPressMatching}
-        className="absolute right-[-20px] top-[356px] h-14 w-24 active:scale-95"
+        className="absolute right-[-20px] top-[398px] h-14 w-24 active:scale-95"
       >
         <Image
           source={homeAssets.pvpBadge}

@@ -2,7 +2,7 @@ import type { AiBoardPiece, AiPieceLookups } from '@/ai/model';
 import { toBasePieceCode } from '@/ai/model';
 
 export function hasAllySpringPieceOnBoard(
-  pieces: readonly { side: string; char: string }[],
+  pieces: ReadonlyArray<{ side: string; char: string; [key: string]: unknown }>,
   side: 'player' | 'enemy',
 ): boolean {
   return pieces.some((p) => p.side === side && p.char === '泉');
@@ -40,7 +40,7 @@ export type SpringDragonAwakeningPieceLike = {
   char: string;
   pieceCode: string | null;
   promoted?: boolean;
-  imageSignedUrl: string | null;
+  imageSignedUrl?: string | null;
 };
 
 /** 盤面表示: 泉が味方にいる間、小竜を辰の見た目に寄せる（`getLocalPieceImageSource` が pieceCode 優先のため、辰の pieceCode も載せる）。 */

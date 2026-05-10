@@ -149,7 +149,6 @@ export function PieceInfoScreen() {
                     onChangeEffect={() => {
                       void playSe('tap');
                     }}
-                    pieceImages={pieceImages}
                     itemWidth={144}
                     itemGap={0}
                     cellHeight={300}

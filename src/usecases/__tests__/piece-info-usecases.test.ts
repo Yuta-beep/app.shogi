@@ -5,7 +5,7 @@ describe('MockLoadPieceCatalogUseCase', () => {
     const usecase = new MockLoadPieceCatalogUseCase();
     const items = await usecase.execute();
 
-    expect(items).toHaveLength(5);
+    expect(items).toHaveLength(7);
     expect(items[0]).toMatchObject({
       char: '香',
       name: '香車',

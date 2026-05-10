@@ -17,6 +17,9 @@ import { useScreenBgm } from '@/hooks/common/use-screen-bgm';
 import { playSe } from '@/lib/audio/audio-manager';
 import { resolvePieceImageSource } from '@/lib/piece-image';
 import { getDeckBuilderPieceCost } from '@/features/deck-builder/lib/deck-builder-piece-cost';
+import { createSaveOnlineMatchSetupUseCase } from '@/usecases/online-match/create-online-match-usecases';
+import { supabase } from '@/lib/supabase/supabase-client';
+import { CHAR_TO_CODE } from '@/features/stage-shogi/domain/piece-conversion';
 
 const deckAssets = {
   bg: require('../../../../assets/deck-builder/deck-bg.png'),
@@ -31,7 +34,11 @@ const BOARD_CELL_INNER_RATIO = 1 / BOARD_SIZE;
 const PLACED_PIECE_OFFSET_X = 0;
 const PLACED_PIECE_OFFSET_Y = -2;
 
-export function DeckBuilderScreen() {
+type DeckBuilderScreenProps = {
+  mode?: 'default' | 'online-match-setup';
+};
+
+export function DeckBuilderScreen({ mode = 'default' }: DeckBuilderScreenProps) {
   const router = useRouter();
   const vm = useDeckBuilderScreen();
   const { placeSelectedPieceAt, isValidPlacementAt, selectedPieceForPlacement, openPieceDetail } =
@@ -61,6 +68,21 @@ export function DeckBuilderScreen() {
     [],
   );
   const formattedDeckTotalCost = Number.isFinite(vm.deckTotalCost) ? `${vm.deckTotalCost}` : '0';
+  const isOnlineMatchSetup = mode === 'online-match-setup';
+  const screenTitle = isOnlineMatchSetup ? '対戦準備' : 'マイデッキ作成';
+  const screenSubtitle = isOnlineMatchSetup
+    ? 'オンライン対戦の初期盤面を試しながら整える'
+    : '将棋盤に駒を配置して保存';
+  const paletteDescription = isOnlineMatchSetup
+    ? '所持駒からオンライン対戦用の並びを試せます。今はマイデッキ編集UIを流用しています。'
+    : '所持駒（駒を選択して盤面マスをタップで配置・未選択ならマスの駒を削除）。K・実・異はマイデッキに入れません。';
+  const applyButtonTitle = isOnlineMatchSetup ? '対戦準備として反映' : '反映';
+  const applyButtonSubtitle = isOnlineMatchSetup
+    ? '現在の盤面をオンライン対戦の準備用として試す'
+    : '現在の盤面をマイデッキとして対戦に使用';
+  const appliedSuccessMessage = isOnlineMatchSetup
+    ? '対戦準備の盤面として反映されました。'
+    : '反映されました';
 
   const applyCellAction = useCallback(
     (row: number, col: number) => {
@@ -76,8 +98,8 @@ export function DeckBuilderScreen() {
 
   return (
     <UiScreenShell
-      title="マイデッキ作成"
-      subtitle="将棋盤に駒を配置して保存"
+      title={screenTitle}
+      subtitle={screenSubtitle}
       hideBackButton
       fullBleedBackgroundSource={deckAssets.bg}
       rightAction={
@@ -233,9 +255,7 @@ export function DeckBuilderScreen() {
 
       {/* 所持駒パレット */}
       <View className="mt-4 rounded-xl border border-[#8b0000]/30 bg-white p-3">
-        <Text className="text-sm font-black text-[#2f1b14]">
-          所持駒（駒を選択して盤面マスをタップで配置・未選択ならマスの駒を削除）。K・実・異はマイデッキに入れません。
-        </Text>
+        <Text className="text-sm font-black text-[#2f1b14]">{paletteDescription}</Text>
         <View className="mt-2 flex-row flex-wrap gap-2">
           {vm.ownedPieces.map((piece) => {
             const remaining = vm.getRemainingCount(piece);
@@ -324,11 +344,37 @@ export function DeckBuilderScreen() {
           }
           void playSe('confirm');
           setApplyBattleBusy(true);
-          void vm
-            .applyAsBattleDeck()
+          void (async () => {
+            if (!isOnlineMatchSetup) {
+              return vm.applyAsBattleDeck();
+            }
+
+            const {
+              data: { session },
+            } = await supabase.auth.getSession();
+            const useCase = createSaveOnlineMatchSetupUseCase(session?.access_token);
+            const placements = vm.boardPlacements
+              .filter((placement) => typeof placement.piece.pieceId === 'number')
+              .map((placement) => ({
+                row: placement.row,
+                col: placement.col,
+                pieceId: placement.piece.pieceId!,
+                pieceCode: (
+                  CHAR_TO_CODE[placement.piece.char] ?? placement.piece.char
+                ).toUpperCase(),
+              }));
+            const selectedPieceIds = placements.map((placement) => placement.pieceId);
+            await useCase.execute({
+              name: 'online-match-setup',
+              boardLayout: placements,
+              handsLayout: [],
+              selectedPieceIds,
+            });
+            return true;
+          })()
             .then((ok) => {
               if (ok) {
-                Alert.alert('反映されました');
+                Alert.alert(appliedSuccessMessage);
               } else {
                 Alert.alert('反映に失敗しました', '通信または保存処理を確認してください。');
               }
@@ -345,9 +391,9 @@ export function DeckBuilderScreen() {
           <Text className="text-center text-base font-black text-white">反映中…</Text>
         ) : (
           <View>
-            <Text className="text-center text-base font-black text-white">反映</Text>
+            <Text className="text-center text-base font-black text-white">{applyButtonTitle}</Text>
             <Text className="mt-0.5 text-center text-[11px] font-bold text-white/90">
-              現在の盤面をマイデッキとして対戦に使用
+              {applyButtonSubtitle}
             </Text>
           </View>
         )}

@@ -1,5 +1,6 @@
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
+import { useEffect } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -15,9 +16,14 @@ const matchingBg = require('../../../../assets/online-battle/マッチング中.
 
 export function MatchingScreen() {
   const router = useRouter();
-  const { snapshot, isLoading, cancel } = useMatchingScreen();
+  const { snapshot, isLoading, cancel, startedMatchId } = useMatchingScreen();
   const { isReady: areAssetsReady } = useAssetPreload([matchingBg]);
   useScreenBgm('matching');
+
+  useEffect(() => {
+    if (!startedMatchId) return;
+    router.replace({ pathname: '/online-battle', params: { matchId: startedMatchId } });
+  }, [router, startedMatchId]);
 
   if (isLoading || !areAssetsReady) {
     return <AppLoadingScreen imageSource={homeAssets.loadingImage} />;
