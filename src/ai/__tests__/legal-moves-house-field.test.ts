@@ -169,7 +169,7 @@ describe('legal moves: 家・畑', () => {
       },
     });
     jest.restoreAllMocks();
-    expect(countPeople(committed.position)).toBe(5);
+    expect(countPeople(committed.position as unknown as AiBattlePosition)).toBe(5);
     const pieces = (committed.position.boardState as { pieces: { row: number; col: number }[] })
       .pieces;
     const peopleInPlayerHomeRows = pieces.filter(

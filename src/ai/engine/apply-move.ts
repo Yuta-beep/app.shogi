@@ -32,6 +32,7 @@ import {
   applyMoveSkillEffects,
   tickSkillStateDurations,
   resolveEvadeCaptureProcChanceForPiece,
+  pieceHasActiveCaptureImmunityFromBoardState,
 } from '@/ai/engine/skill-runtime';
 
 function createGameStatus(winnerSide: Side | null): BattleGameStatus {
@@ -165,6 +166,18 @@ function resolveCapturedHandCode(
   if (rawCapturedCode.includes('BIRD')) {
     return 'BIRD';
   }
+  if (capturedChar === '悟' || rawCapturedCode.includes('6D4AFA9CDF1C')) {
+    return 'SATORI';
+  }
+  if (capturedChar === '心' || rawCapturedCode.includes('CA16911978FF')) {
+    return 'HEART';
+  }
+  if (rawCapturedCode.includes('SATORI')) {
+    return 'SATORI';
+  }
+  if (rawCapturedCode.includes('HEART')) {
+    return 'HEART';
+  }
   const fromCaptured = toBasePieceCode(capturedToHandPieceCode(captured));
   if (fromCaptured) return fromCaptured;
   const fb = toBasePieceCode(fallbackCapturedCode);
@@ -177,6 +190,8 @@ function resolveCapturedHandCode(
   if (fb.includes('ABYSS') || fb.includes('31CB39CC0FA8')) return 'ABYSS';
   if (fb.includes('BEAST') || fb.includes('05E4EFB89DAE')) return 'BEAST';
   if (fb.includes('BIRD') || fb.includes('29ECAB1EF3C3')) return 'BIRD';
+  if (fb.includes('SATORI') || fb.includes('6D4AFA9CDF1C')) return 'SATORI';
+  if (fb.includes('HEART') || fb.includes('CA16911978FF')) return 'HEART';
   // opaque id をそのまま手駒キーにしない（手駒表示不能の原因）。
   if (/^PIECE_[A-Z0-9_]+$/i.test(fb)) return null;
   return fb;
@@ -263,10 +278,7 @@ function isOboroPieceForApply(piece: { pieceCode: string | null; char: string })
   return b === 'OBORO';
 }
 
-function isDeathOrSoulPieceForOboroTrigger(piece: {
-  pieceCode: string | null;
-  char: string;
-}): boolean {
+function isDeathOrSoulPieceForOboroTrigger(piece: { pieceCode: string | null; char: string }): boolean {
   const ch = normKanjiForEngineRules(piece.char);
   if (ch === '死' || ch === '魂') return true;
   const b = toBasePieceCode(piece.pieceCode);
@@ -560,6 +572,16 @@ function applyHostileCaptureAtCell(input: {
   }
   if (isArmorPieceForApply(captured)) {
     throw new Error('cannot capture armor');
+  }
+  if (
+    pieceHasActiveCaptureImmunityFromBoardState(
+      input.boardState,
+      captured.side,
+      input.row,
+      input.col,
+    )
+  ) {
+    throw new Error('cannot capture immunity');
   }
   if (isKingPieceForApply(captured) && hasSoulOnBoardForSide(nextPieces, captured.side)) {
     throw new Error('cannot capture king while soul remains');
@@ -901,11 +923,7 @@ export function applyMove(input: {
       if (!captureOwnPiece && !isCloudMover && isArmorPieceForApply(captured)) {
         throw new Error('cannot capture armor');
       }
-      if (
-        !captureOwnPiece &&
-        isKingPieceForApply(captured) &&
-        hasSoulOnBoardForSide(nextPieces, captured.side)
-      ) {
+      if (!captureOwnPiece && isKingPieceForApply(captured) && hasSoulOnBoardForSide(nextPieces, captured.side)) {
         throw new Error('cannot capture king while soul remains');
       }
       if (!captureOwnPiece && isArmorPieceForApply(movingPiece)) {

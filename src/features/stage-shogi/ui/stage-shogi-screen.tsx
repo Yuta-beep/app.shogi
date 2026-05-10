@@ -140,6 +140,18 @@ export function StageShogiScreen() {
       />
       <StageShogiSkillToast text={vm.skillActivationText} />
 
+      {vm.pendingSatoriEnemyPick && vm.pendingSatoriEnemyPick.length > 1 ? (
+        <Text className="mt-2 text-xs font-bold text-[#1d4ed8]">
+          「悟」のスキル：味方が移動したあと、行動を止める敵駒のマスをタップしてください（王・玉は選べません）
+        </Text>
+      ) : null}
+
+      {vm.pendingHeartAllyPick && vm.pendingHeartAllyPick.length > 1 ? (
+        <Text className="mt-2 text-xs font-bold text-amber-900">
+          「心」のスキル：味方が移動したあと、2ターン捕獲されないように守る味方駒のマスをタップしてください（王・玉は選べません）
+        </Text>
+      ) : null}
+
       {vm.selectedDropPieceCode && vm.legalTargets.length === 0 ? (
         <Text className="mt-2 text-xs text-red-600">その駒は打てる場所がありません。</Text>
       ) : null}

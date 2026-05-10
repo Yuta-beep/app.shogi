@@ -134,6 +134,8 @@ export type BoardPiece = {
   deathCurseAura?: boolean;
   /** 死の呪い（death_curse）の残りターン */
   deathCurseCountdown?: number | null;
+  /** 「心」など piece_defenses の immunity による捕獲抵抗（光のオーラ） */
+  lightProtectionAura?: boolean;
 };
 
 export type PreservedMovedPiece = {
@@ -313,7 +315,7 @@ export function pieceCodeFromPlacement(
     if (char === '盾') return 'SHIELD';
     const fromKanji = CHAR_TO_CODE[char];
     if (fromKanji) return toBasePieceCode(fromKanji) ?? fromKanji;
-    return catalogItem.pieceCode;
+    return catalogItem.pieceCode ?? null;
   }
   if (PROMOTED_CHAR_TO_BASE_CODE[char]) {
     return PROMOTED_CHAR_TO_BASE_CODE[char];
@@ -889,6 +891,48 @@ export function applyAbyssAuraEffectToPieces(
   return pieces.map((p) => ({
     ...p,
     abyssAura: keys.has(`${p.side}:${p.row}:${p.col}`),
+  }));
+}
+
+function lightProtectionAuraDisplayKeysFromCanonical(
+  position: BattleCanonicalPosition,
+): Set<string> {
+  const keys = new Set<string>();
+  const boardState = asRecord(position.boardState);
+  if (!boardState) return keys;
+  const skillState = asRecord(boardState.skill_state ?? boardState.skillState);
+  const rawList = (skillState?.piece_defenses ??
+    skillState?.pieceDefenses ??
+    boardState.piece_defenses ??
+    boardState.pieceDefenses) as unknown;
+  if (!Array.isArray(rawList)) return keys;
+  for (const raw of rawList) {
+    const st = asRecord(raw);
+    if (!st) continue;
+    const mode = asString(st.mode) ?? '';
+    if (mode !== 'immunity') continue;
+    const turns = Number(st.remaining_turns ?? st.remainingTurns ?? 0);
+    if (!Number.isFinite(turns) || turns <= 0) continue;
+    const row = normalizeCellIndex(Number(st.row));
+    const col = normalizeCellIndex(Number(st.col));
+    if (row === null || col === null) continue;
+    const side = normalizeSide(asString(st.side) ?? 'player');
+    keys.add(`${side}:${row}:${col}`);
+  }
+  return keys;
+}
+
+export function applyLightProtectionAuraEffectToPieces(
+  pieces: BoardPiece[],
+  position: BattleCanonicalPosition,
+): BoardPiece[] {
+  const keys = lightProtectionAuraDisplayKeysFromCanonical(position);
+  if (keys.size === 0) {
+    return pieces.map((p) => ({ ...p, lightProtectionAura: false }));
+  }
+  return pieces.map((p) => ({
+    ...p,
+    lightProtectionAura: keys.has(`${p.side}:${p.row}:${p.col}`),
   }));
 }
 
@@ -2047,7 +2091,8 @@ export function syncCanonicalState(params: {
   const withPrisonChain = applyPrisonChainEffectToPieces(withATransformEffect, position);
   const withStunAura = applyStunAuraEffectToPieces(withPrisonChain, position);
   const withAbyssAura = applyAbyssAuraEffectToPieces(withStunAura, position);
-  const withDeathCurseAura = applyDeathCurseEffectToPieces(withAbyssAura, position);
+  const withLightProtectionAura = applyLightProtectionAuraEffectToPieces(withAbyssAura, position);
+  const withDeathCurseAura = applyDeathCurseEffectToPieces(withLightProtectionAura, position);
   const poisonHazardCells = poisonHazardCellsForDisplay(position);
   const rockObstacleCells = rockObstacleCellsForDisplay(position);
   const batsuHazardCells = batsuHazardCellsForDisplay(position);

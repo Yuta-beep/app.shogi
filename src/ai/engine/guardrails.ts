@@ -38,13 +38,21 @@ export function assertMoveAllowedBySessionCatalog(input: {
     move.notation === 'time_skill_only' ||
     move.notation === 'house_skill_only'
       ? move.notation
-      : null;
+      : typeof move.notation === 'string' && move.notation.startsWith('satori_stun:')
+        ? move.notation
+        : typeof move.notation === 'string' && move.notation.startsWith('heart_protect:')
+          ? move.notation
+          : null;
   const legalSkillNotation =
     matched.notation === 'time_skill' ||
     matched.notation === 'time_skill_only' ||
     matched.notation === 'house_skill_only'
       ? matched.notation
-      : null;
+      : typeof matched.notation === 'string' && matched.notation.startsWith('satori_stun:')
+        ? matched.notation
+        : typeof matched.notation === 'string' && matched.notation.startsWith('heart_protect:')
+          ? matched.notation
+          : null;
 
   if (requestedSkillNotation !== legalSkillNotation) {
     throw new Error('guardrail rejected move: skill annotation does not match legal move');

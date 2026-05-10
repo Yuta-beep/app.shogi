@@ -52,6 +52,7 @@ type BoardPieceSpriteProps = {
   prisonChained?: boolean;
   stunnedAura?: boolean;
   abyssAura?: boolean;
+  lightProtectionAura?: boolean;
   deathCurseAura?: boolean;
   deathCurseCountdown?: number | null;
 };
@@ -67,6 +68,7 @@ const BoardPieceSprite = memo(function BoardPieceSprite({
   prisonChained = false,
   stunnedAura = false,
   abyssAura = false,
+  lightProtectionAura = false,
   deathCurseAura = false,
   deathCurseCountdown = null,
 }: BoardPieceSpriteProps) {
@@ -247,6 +249,23 @@ const BoardPieceSprite = memo(function BoardPieceSprite({
                 borderColor: 'rgba(147, 51, 234, 0.95)',
                 backgroundColor: 'rgba(147, 51, 234, 0.18)',
                 opacity: 0.95,
+              }}
+            />
+          ) : null}
+          {lightProtectionAura && !darkVeiled ? (
+            <View
+              pointerEvents="none"
+              style={{
+                position: 'absolute',
+                left: '9%',
+                right: '9%',
+                top: '9%',
+                bottom: '9%',
+                borderRadius: 999,
+                borderWidth: 2,
+                borderColor: 'rgba(254, 249, 210, 0.98)',
+                backgroundColor: 'rgba(255, 252, 220, 0.28)',
+                opacity: 0.98,
               }}
             />
           ) : null}
@@ -577,6 +596,7 @@ const BoardPiecesLayer = memo(function BoardPiecesLayer({
             prisonChained={Boolean(placement.prisonChained)}
             stunnedAura={Boolean((placement as any).stunnedAura)}
             abyssAura={Boolean((placement as any).abyssAura)}
+            lightProtectionAura={Boolean((placement as any).lightProtectionAura)}
             deathCurseAura={Boolean((placement as any).deathCurseAura)}
             deathCurseCountdown={(placement as any).deathCurseCountdown ?? null}
           />

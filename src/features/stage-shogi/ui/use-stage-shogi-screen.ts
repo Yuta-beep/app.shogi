@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 
 import { generateLegalMoves } from '@/ai/engine';
+import type { AiBattlePosition } from '@/ai/model';
 import { getLocalBattleGame, setLocalBattlePieceCatalog } from '@/ai/local-battle-registry';
 import { normalizePieceCatalog } from '@/ai/model';
 import { toBasePieceCode as toAiBasePieceCode } from '@/ai/model/move';
@@ -164,6 +165,12 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
   const [pendingPromotion, setPendingPromotion] = useState<PendingPromotion | null>(null);
   const [pendingTimeActionCell, setPendingTimeActionCell] = useState<BoardCell | null>(null);
   const [pendingHouseSkillCell, setPendingHouseSkillCell] = useState<BoardCell | null>(null);
+  /** 悟: 着地マス決定後、スキル対象の敵駒マスを選ぶまで保留する合法手一覧 */
+  const [pendingSatoriEnemyPick, setPendingSatoriEnemyPick] = useState<BattleMove[] | null>(
+    null,
+  );
+  /** 心: 着地後に護り対象の味方マスを選ぶまで保留 */
+  const [pendingHeartAllyPick, setPendingHeartAllyPick] = useState<BattleMove[] | null>(null);
   const [timeActionMode, setTimeActionMode] = useState<TimeActionMode | null>(null);
   const [promotionImageFlash, setPromotionImageFlash] = useState<PromotionImageFlash | null>(null);
   const [stateHash, setStateHash] = useState<string | null>(null);
@@ -200,6 +207,8 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
   const piecesBeforePromotionDialogRef = useRef<BoardPiece[] | null>(null);
   const handsRef = useRef<HandsState>(createEmptyHandsState());
   const stateHashRef = useRef<string | null>(null);
+  /** 直近の同期済み局面（敵駒プレビュー時に skill_state をマージするため） */
+  const aiPositionRef = useRef<BattleCanonicalPosition | null>(null);
   const handleCellPressRef = useRef<(row: number, col: number) => void>(() => undefined);
   const hasEnteredBattleRef = useRef(false);
   const prevStageRef = useRef<string | undefined>(undefined);
@@ -380,6 +389,7 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
     latestImmobilizedByCellRef.current = synced.immobilizedKeys;
     stateHashRef.current = synced.stateHash;
     setStateHash(synced.stateHash);
+    aiPositionRef.current = position;
 
     if (game.status === 'finished') {
       const nextWinner = game.winnerSide ?? null;
@@ -442,6 +452,8 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
     setSelectedDropPieceCode(null);
     setLegalTargets([]);
     setEnemyPreviewTargets([]);
+    setPendingSatoriEnemyPick(null);
+    setPendingHeartAllyPick(null);
     setPoisonHazardCells([]);
     setRockObstacleCells([]);
     setAiPreviewTarget(null);
@@ -449,6 +461,7 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
     setHands(createEmptyHandsState());
     setPendingPromotion(null);
     setStateHash(null);
+    aiPositionRef.current = null;
     setWinner(null);
     setClearRewardText(null);
     setSkillActivationText(null);
@@ -624,7 +637,9 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
     if (
       pendingPromotion !== null ||
       pendingTimeActionCell !== null ||
-      pendingHouseSkillCell !== null
+      pendingHouseSkillCell !== null ||
+      pendingSatoriEnemyPick !== null ||
+      pendingHeartAllyPick !== null
     ) {
       return;
     }
@@ -654,6 +669,8 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
     isFinished,
     pendingHouseSkillCell,
     pendingPromotion,
+    pendingSatoriEnemyPick,
+    pendingHeartAllyPick,
     pendingTimeActionCell,
     pieces,
     playerLegalMoves,
@@ -1232,6 +1249,8 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
       setSelectedDropPieceCode(null);
       setLegalTargets([]);
       setEnemyPreviewTargets([]);
+      setPendingSatoriEnemyPick(null);
+      setPendingHeartAllyPick(null);
       setPlayerLegalMoves([]);
       setPendingPromotion(null);
       setAiError(null);
@@ -1419,18 +1438,107 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
     );
   }
 
+  function beginSatoriEnemySelectionIfNeeded(actionableMoves: BattleMove[]): boolean {
+    const stunVariants = actionableMoves.filter(
+      (m) => typeof m.notation === 'string' && /^satori_stun:\d+:\d+$/i.test(m.notation),
+    );
+    if (stunVariants.length <= 1) return false;
+    const cells = stunVariants.map((mv) => {
+      const matched = /^satori_stun:(\d+):(\d+)$/i.exec(mv.notation!);
+      if (!matched) {
+        return { row: mv.toRow, col: mv.toCol };
+      }
+      return { row: Number(matched[1]), col: Number(matched[2]) };
+    });
+    setPendingSatoriEnemyPick(stunVariants);
+    setPendingHeartAllyPick(null);
+    setSelectedCell(null);
+    setSelectedDropPieceCode(null);
+    setLegalTargets([]);
+    setEnemyPreviewTargets(cells);
+    setPendingHouseSkillCell(null);
+    setPendingTimeActionCell(null);
+    setTimeActionMode(null);
+    return true;
+  }
+
+  function beginHeartAllySelectionIfNeeded(actionableMoves: BattleMove[]): boolean {
+    const protectVariants = actionableMoves.filter(
+      (m) => typeof m.notation === 'string' && /^heart_protect:\d+:\d+$/i.test(m.notation),
+    );
+    if (protectVariants.length <= 1) return false;
+    const cells = protectVariants.map((mv) => {
+      const matched = /^heart_protect:(\d+):(\d+)$/i.exec(mv.notation!);
+      if (!matched) {
+        return { row: mv.toRow, col: mv.toCol };
+      }
+      return { row: Number(matched[1]), col: Number(matched[2]) };
+    });
+    setPendingHeartAllyPick(protectVariants);
+    setPendingSatoriEnemyPick(null);
+    setSelectedCell(null);
+    setSelectedDropPieceCode(null);
+    setLegalTargets(cells);
+    setEnemyPreviewTargets([]);
+    setPendingHouseSkillCell(null);
+    setPendingTimeActionCell(null);
+    setTimeActionMode(null);
+    return true;
+  }
+
   function handleCellPress(row: number, col: number) {
     if (sideToMove !== 'player' || isAiThinking || isCreatingGame || isFinished) return;
     if (pendingPromotion) return;
 
     const tapped = { row, col };
+    if (pendingSatoriEnemyPick && pendingSatoriEnemyPick.length > 0) {
+      const enemyHere = findPieceAt(pieces, row, col);
+      if (enemyHere?.side === 'enemy') {
+        const matched = pendingSatoriEnemyPick.find((mv) => {
+          const p = /^satori_stun:(\d+):(\d+)$/i.exec(mv.notation ?? '');
+          return p != null && Number(p[1]) === row && Number(p[2]) === col;
+        });
+        if (matched) {
+          setPendingSatoriEnemyPick(null);
+          setEnemyPreviewTargets([]);
+          void commitPlayerMove(matched);
+        }
+        return;
+      }
+      setPendingSatoriEnemyPick(null);
+      setEnemyPreviewTargets([]);
+      return;
+    }
+
+    if (pendingHeartAllyPick && pendingHeartAllyPick.length > 0) {
+      const allyHere = findPieceAt(pieces, row, col);
+      if (allyHere?.side === 'player') {
+        const matched = pendingHeartAllyPick.find((mv) => {
+          const p = /^heart_protect:(\d+):(\d+)$/i.exec(mv.notation ?? '');
+          return p != null && Number(p[1]) === row && Number(p[2]) === col;
+        });
+        if (matched) {
+          setPendingHeartAllyPick(null);
+          setLegalTargets([]);
+          void commitPlayerMove(matched);
+        }
+        return;
+      }
+      setPendingHeartAllyPick(null);
+      setLegalTargets([]);
+      return;
+    }
+
     if (selectedDropPieceCode) {
       const dropMoves = legalMovesToTarget(
         legalMovesForDropPiece(playerLegalMoves, selectedDropPieceCode, pieceCatalog),
         tapped,
       );
-      if (dropMoves.length > 0) {
-        void commitPlayerMove(dropMoves[0]);
+      const dropCandidates = dropMoves.filter((m) => m.notation !== 'house_skill_only');
+      if (dropCandidates.length > 0) {
+        if (beginSatoriEnemySelectionIfNeeded(dropCandidates)) return;
+        if (beginHeartAllySelectionIfNeeded(dropCandidates)) return;
+        void commitPlayerMove(dropCandidates[0]!);
         return;
       }
       const tappedPiece = findPieceAt(pieces, row, col);
@@ -1509,6 +1617,12 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
           });
           return;
         }
+        if (beginSatoriEnemySelectionIfNeeded(actionableMoves)) {
+          return;
+        }
+        if (beginHeartAllySelectionIfNeeded(actionableMoves)) {
+          return;
+        }
         void commitPlayerMove(
           moveWithTimeAction(promoteMove ?? nonPromoteMove ?? actionableMoves[0]),
         );
@@ -1561,7 +1675,7 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
             },
           };
           const { legalMoves } = generateLegalMoves({
-            position: inspectPosition,
+            position: inspectPosition as unknown as AiBattlePosition,
             pieceCatalog: normalizePieceCatalog(pieceCatalog),
           });
           previewTargets = uniqueTargetsFromMoves(
@@ -1571,7 +1685,10 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
                 m.fromRow === piece.row &&
                 m.fromCol === piece.col &&
                 m.notation !== 'house_skill_only' &&
-                m.notation !== 'time_skill_only',
+                m.notation !== 'time_skill_only' &&
+                typeof m.notation === 'string' &&
+                !m.notation.startsWith('satori_stun:') &&
+                !m.notation.startsWith('heart_protect:'),
             ),
           );
         } catch {
@@ -1767,7 +1884,8 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
               ? '聖'
               : opaqueSaintCode
                 ? '聖'
-                : (target.pieceCode ?? '').toUpperCase() === 'BEAST' || opaqueBeastCode
+                : (target.pieceCode ?? '').toUpperCase() === 'BEAST' ||
+                    opaqueBeastCode
                   ? '獣'
                   : (target.pieceCode ?? '').toUpperCase() === 'BIRD' || opaqueBirdCode
                     ? '禽'
@@ -1800,10 +1918,10 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
         (target.pieceCode ?? '').toUpperCase() === 'BOOK' || displayChar === '書'
           ? '書物'
           : (oniNameOverride ??
-            beastNameOverride ??
-            birdNameOverride ??
-            detail?.name ??
-            displayChar),
+              beastNameOverride ??
+              birdNameOverride ??
+              detail?.name ??
+              displayChar),
       desc: resolveInspectSkillDescription(displayChar, detail?.desc, target.pieceCode),
       move: resolveInspectMoveDescription(displayChar, detail?.move, target.pieceCode),
       imageSignedUrl: detail?.imageSignedUrl ?? target.imageSignedUrl ?? null,
@@ -1891,6 +2009,8 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
     pendingPromotion,
     pendingTimeActionCell,
     pendingHouseSkillCell,
+    pendingSatoriEnemyPick,
+    pendingHeartAllyPick,
     promotionImageFlash,
     pieceCatalog,
     pieceDefsByCode,

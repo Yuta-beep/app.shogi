@@ -21,7 +21,7 @@ import {
   sanitizeHandsBag,
   toBasePieceCode,
 } from '@/ai/model';
-import { CHAR_TO_CODE } from '@/features/stage-shogi/domain/piece-conversion';
+import { CHAR_TO_CODE, CODE_TO_CHAR } from '@/features/stage-shogi/domain/piece-conversion';
 import { createMove, resolvePieceDef } from '@/ai/engine/shared';
 import { effectivePieceForRulesAfterSpring } from '@/ai/engine/spring-ryu-awakening';
 import { createSkillRuntimeView, type SkillRuntimeView } from '@/ai/engine/skill-runtime';
@@ -152,6 +152,234 @@ function isBirdPieceForLegal(piece: AiBoardPiece): boolean {
   if (raw.includes('29ECAB1EF3C3')) return true;
   const b = toBasePieceCode(piece.pieceCode);
   return b === 'BIRD';
+}
+
+function isSatoriPieceForLegal(piece: AiBoardPiece): boolean {
+  if (normKanjiForEngineRules(piece.char) === '悟') return true;
+  const raw = pieceRawUpperForLegal(piece);
+  if (raw.includes('SATORI')) return true;
+  if (raw.includes('6D4AFA9CDF1C')) return true;
+  const b = toBasePieceCode(piece.pieceCode);
+  return b === 'SATORI';
+}
+
+function isHeartPieceForLegal(piece: AiBoardPiece): boolean {
+  if (normKanjiForEngineRules(piece.char) === '心') return true;
+  const raw = pieceRawUpperForLegal(piece);
+  if (raw.includes('HEART')) return true;
+  if (raw.includes('CA16911978FF')) return true;
+  const b = toBasePieceCode(piece.pieceCode);
+  return b === 'HEART';
+}
+
+/** 着手後の盤面を仮定して、心スキルで守れる味方駒（王・玉除く）を列挙する。 */
+function simulatedPiecesAfterHeartSkillMove(
+  pieces: AiBoardPiece[],
+  actorSide: Side,
+  move: AiBattleMove,
+): AiBoardPiece[] {
+  if (move.dropPieceCode) {
+    const code = toBasePieceCode(move.dropPieceCode);
+    if (!code) return pieces;
+    const ch =
+      (CODE_TO_CHAR as Readonly<Partial<Record<string, string>>>)[code] ?? '心';
+    return [
+      ...pieces.map((p) => ({ ...p })),
+      {
+        side: actorSide,
+        row: move.toRow,
+        col: move.toCol,
+        pieceCode: code,
+        char: ch,
+        promoted: false,
+        imageSignedUrl: null,
+      },
+    ];
+  }
+  if (move.fromRow == null || move.fromCol == null) return pieces;
+  const fr = move.fromRow;
+  const fc = move.fromCol;
+  const tr = move.toRow;
+  const tc = move.toCol;
+  let next = pieces.map((p) => ({ ...p }));
+  const dest = next.find((p) => p.row === tr && p.col === tc);
+  if (dest && dest.side !== actorSide) {
+    next = next.filter((p) => !(p.row === tr && p.col === tc));
+  }
+  const mi = next.findIndex((p) => p.side === actorSide && p.row === fr && p.col === fc);
+  if (mi < 0) return next;
+  const mover = next[mi]!;
+  next[mi] = { ...mover, row: tr, col: tc };
+  return next;
+}
+
+function collectHeartProtectAllyTargets(
+  pieces: AiBoardPiece[],
+  actorSide: Side,
+  move: AiBattleMove,
+): { row: number; col: number }[] {
+  const after = simulatedPiecesAfterHeartSkillMove(pieces, actorSide, move);
+  const out: { row: number; col: number }[] = [];
+  const seen = new Set<string>();
+  for (const p of after) {
+    if (p.side !== actorSide) continue;
+    if (isKingPiece(p)) continue;
+    const k = `${p.row}:${p.col}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push({ row: p.row, col: p.col });
+  }
+  return out;
+}
+
+/** 悟のスキル用: 移動着手時点の盤面上で選択可能な敵駒座標（捕獲で消える敵／王・玉は除外）。 */
+function collectSatoriEnemyStunTargets(
+  pieces: AiBoardPiece[],
+  enemySide: Side,
+  move: AiBattleMove,
+): { row: number; col: number }[] {
+  const out: { row: number; col: number }[] = [];
+  let capturedEnemyAtDest = false;
+  const destOcc = pieces.find((p) => p.row === move.toRow && p.col === move.toCol);
+  if (
+    destOcc &&
+    destOcc.side === enemySide &&
+    move.dropPieceCode == null &&
+    move.fromRow != null &&
+    move.fromCol != null
+  ) {
+    capturedEnemyAtDest = true;
+  }
+  for (const p of pieces) {
+    if (p.side !== enemySide) continue;
+    if (isKingPiece(p)) continue;
+    if (capturedEnemyAtDest && p.row === move.toRow && p.col === move.toCol) continue;
+    out.push({ row: p.row, col: p.col });
+  }
+  return out;
+}
+
+function expandSatoriSkillMovesForLegalListing(
+  moves: AiBattleMove[],
+  pieces: AiBoardPiece[],
+  sideToMove: Side,
+): AiBattleMove[] {
+  const enemySide: Side = sideToMove === 'player' ? 'enemy' : 'player';
+  const out: AiBattleMove[] = [];
+
+  const isEligibleBaseMove = (m: AiBattleMove): boolean => {
+    if (m.dropPieceCode) return toBasePieceCode(m.dropPieceCode) === 'SATORI';
+    if (m.fromRow == null || m.fromCol == null) return false;
+    const acting = pieces.find(
+      (p) => p.side === sideToMove && p.row === m.fromRow && p.col === m.fromCol,
+    );
+    return Boolean(acting && isSatoriPieceForLegal(acting));
+  };
+
+  const isSyntheticHandDropNotation = (m: AiBattleMove): boolean =>
+    !!m.dropPieceCode &&
+    typeof m.notation === 'string' &&
+    m.notation.includes('*');
+
+  for (const m of moves) {
+    if (m.notation === 'time_skill_only' || m.notation === 'house_skill_only') {
+      out.push(m);
+      continue;
+    }
+
+    const expandThis =
+      isEligibleBaseMove(m) &&
+      (m.notation == null ||
+        /^satori_stun:\d+:\d+$/i.test(m.notation ?? '') ||
+        isSyntheticHandDropNotation(m));
+
+    if (!expandThis) {
+      out.push(m);
+      continue;
+    }
+
+    const targets = collectSatoriEnemyStunTargets(pieces, enemySide, m);
+    if (targets.length === 0) {
+      const nmFallback =
+        m.dropPieceCode && isSyntheticHandDropNotation(m)
+          ? m.notation
+          : m.dropPieceCode
+            ? `${toBasePieceCode(m.dropPieceCode) ?? ''}*${m.toRow}${m.toCol}`
+            : null;
+      out.push({ ...m, notation: nmFallback ?? null });
+      continue;
+    }
+    const seenPairs = new Set<string>();
+    for (const t of targets) {
+      const key = `${t.row}:${t.col}`;
+      if (seenPairs.has(key)) continue;
+      seenPairs.add(key);
+      out.push({ ...m, notation: `satori_stun:${t.row}:${t.col}` });
+    }
+  }
+
+  return out;
+}
+
+function expandHeartProtectSkillMovesForLegalListing(
+  moves: AiBattleMove[],
+  pieces: AiBoardPiece[],
+  sideToMove: Side,
+): AiBattleMove[] {
+  const out: AiBattleMove[] = [];
+
+  const isEligibleBaseMove = (m: AiBattleMove): boolean => {
+    if (m.dropPieceCode) return toBasePieceCode(m.dropPieceCode) === 'HEART';
+    if (m.fromRow == null || m.fromCol == null) return false;
+    const acting = pieces.find(
+      (p) => p.side === sideToMove && p.row === m.fromRow && p.col === m.fromCol,
+    );
+    return Boolean(acting && isHeartPieceForLegal(acting));
+  };
+
+  const isSyntheticHandDropNotation = (m: AiBattleMove): boolean =>
+    !!m.dropPieceCode &&
+    typeof m.notation === 'string' &&
+    m.notation.includes('*');
+
+  for (const m of moves) {
+    if (m.notation === 'time_skill_only' || m.notation === 'house_skill_only') {
+      out.push(m);
+      continue;
+    }
+
+    const expandThis =
+      isEligibleBaseMove(m) &&
+      (m.notation == null ||
+        /^heart_protect:\d+:\d+$/i.test(m.notation ?? '') ||
+        isSyntheticHandDropNotation(m));
+
+    if (!expandThis) {
+      out.push(m);
+      continue;
+    }
+
+    const targets = collectHeartProtectAllyTargets(pieces, sideToMove, m);
+    if (targets.length === 0) {
+      const nmFallback =
+        m.dropPieceCode && isSyntheticHandDropNotation(m)
+          ? m.notation
+          : m.dropPieceCode
+            ? `${toBasePieceCode(m.dropPieceCode) ?? ''}*${m.toRow}${m.toCol}`
+            : null;
+      out.push({ ...m, notation: nmFallback ?? null });
+      continue;
+    }
+    const seenPairs = new Set<string>();
+    for (const t of targets) {
+      const key = `${t.row}:${t.col}`;
+      if (seenPairs.has(key)) continue;
+      seenPairs.add(key);
+      out.push({ ...m, notation: `heart_protect:${t.row}:${t.col}` });
+    }
+  }
+
+  return out;
 }
 
 function gunPieceDebugLog(label: string, payload: Record<string, unknown>): void {
@@ -288,6 +516,12 @@ function resolvePieceCodeForLegalMove(piece: AiBoardPiece, lookups: AiPieceLooku
   }
   if (ch === '禽' || rawUp.includes('29ECAB1EF3C3') || rawUp.includes('BIRD')) {
     return 'BIRD';
+  }
+  if (ch === '悟' || rawUp.includes('6D4AFA9CDF1C') || rawUp.includes('SATORI')) {
+    return 'SATORI';
+  }
+  if (ch === '心' || rawUp.includes('CA16911978FF') || rawUp.includes('HEART')) {
+    return 'HEART';
   }
   const legacy = toBasePieceCode(CHAR_TO_CODE[piece.char]);
   if (legacy) return legacy;
@@ -1079,10 +1313,7 @@ function resolveEffectiveVectorsForPiece(
   const moonNormalized = normalizeVectorsForMoon(piece, peopleField, position);
   const oniNormalized = normalizeVectorsForOniVariants(piece, moonNormalized);
   const deathNormalized = normalizeVectorsForDeath(piece, oniNormalized);
-  const beastBird = normalizeVectorsForBird(
-    piece,
-    normalizeVectorsForBeast(piece, deathNormalized),
-  );
+  const beastBird = normalizeVectorsForBird(piece, normalizeVectorsForBeast(piece, deathNormalized));
   return normalizeVectorsForSoul(piece, beastBird);
 }
 
@@ -1436,11 +1667,21 @@ function generateBoardPieceMoves(input: {
       return captured.side === input.piece.side && !isKingPiece(captured);
     }
     if (captured.side === input.piece.side) return false;
-    if (isKingPiece(captured) && hasSoulOnBoardForSide(input.pieces, captured.side)) {
+    if (
+      isKingPiece(captured) &&
+      hasSoulOnBoardForSide(input.pieces, captured.side)
+    ) {
       return false;
     }
     if (isArmorPiece(captured)) return false;
     if (captured.side !== input.piece.side && isArmorPiece(input.piece)) return false;
+    if (
+      input.skillView.captureImmunityCells.has(
+        `${captured.side}:${captured.row}:${captured.col}`,
+      )
+    ) {
+      return false;
+    }
     return !input.skillView.darkBlindCells.has(`${captured.side}:${captured.row}:${captured.col}`);
   });
 
@@ -1595,10 +1836,17 @@ export function generateLegalMoves(input: {
       : [];
   const dropMoves = generateDropMoves({ pieces, position, skillView });
 
+  const combined = [...boardMoves, ...timeSkillOnlyMoves, ...houseSkillOnlyMoves, ...dropMoves];
+  const legalMoves = expandHeartProtectSkillMovesForLegalListing(
+    expandSatoriSkillMovesForLegalListing(combined, pieces, position.sideToMove),
+    pieces,
+    position.sideToMove,
+  );
+
   return {
     sideToMove: position.sideToMove,
     moveNo: position.moveCount + 1,
     stateHash: position.stateHash,
-    legalMoves: [...boardMoves, ...timeSkillOnlyMoves, ...houseSkillOnlyMoves, ...dropMoves],
+    legalMoves,
   };
 }

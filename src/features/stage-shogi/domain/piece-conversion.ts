@@ -464,6 +464,8 @@ export const CODE_TO_CHAR: Readonly<Record<string, string>> = {
   WATERFALL: '滝',
   HOLE: '穴',
   ABYSS: '淵',
+  SATORI: '悟',
+  HEART: '心',
 };
 
 export const PROMOTED_CODE_TO_CHAR: Readonly<Record<string, string>> = {
@@ -547,6 +549,8 @@ export const CHAR_TO_CODE: Readonly<Record<string, string>> = {
   犇: 'BULL',
   礼: 'RITUAL',
   聖: 'SAINT',
+  悟: 'SATORI',
+  心: 'HEART',
   /** 刀／剣／銃／鎧／盾は `CHAR_TO_CODE` に載せない（`piecesFromBoardState` が canonical に寄せて `resolvePieceDef` が壊れる）。手駒は `game-rules` の CAPTURE_CHAR_TO_HAND_CODE。 */
 };
 

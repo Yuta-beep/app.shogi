@@ -235,6 +235,8 @@ function parseSkillTriggered(rawSkillTriggered: unknown, rawMove: unknown): bool
   const move = parseMove(rawMove);
   if (!move.notation) return false;
   if (move.notation === 'time_normal') return false;
+  if (move.notation.startsWith('satori_stun:')) return true;
+  if (move.notation.startsWith('heart_protect:')) return true;
   if (move.notation === 'time_skill') return true;
   if (move.notation === 'house_skill_only') return true;
   if (/^[1-9][a-i][1-9][a-i]\+?$/i.test(move.notation)) return false;

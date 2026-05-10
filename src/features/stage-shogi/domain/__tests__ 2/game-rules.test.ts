@@ -138,4 +138,23 @@ describe('stage shogi game rules', () => {
     expect(capturedToHandPieceCode(capturedRock)).toBe('ROCK');
     expect(capturedToHandPieceCode(capturedOre)).toBe('ORE');
   });
+
+  it('maps captured 悟／心 from kanji or opaque piece id', () => {
+    const satoriOpaque: BoardPiece = {
+      side: 'enemy',
+      row: 0,
+      col: 0,
+      pieceCode: 'piece_6d4afa9cdf1c',
+      char: '悟',
+    };
+    const heartOpaque: BoardPiece = {
+      side: 'enemy',
+      row: 0,
+      col: 0,
+      pieceCode: 'piece_ca16911978ff',
+      char: '心',
+    };
+    expect(capturedToHandPieceCode(satoriOpaque)).toBe('SATORI');
+    expect(capturedToHandPieceCode(heartOpaque)).toBe('HEART');
+  });
 });

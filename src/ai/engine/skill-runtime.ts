@@ -19,6 +19,8 @@ export type SkillRuntimeView = {
   kingPoisonBlockedCells: Set<string>;
   rockObstacleCells: Set<string>;
   aTransformCells: Set<string>;
+  /** `piece_defenses` の mode=immunity かつ remaining>0（敵から取れない） */
+  captureImmunityCells: Set<string>;
 };
 
 const FLAME_PIECE_CODES = new Set(['ENN', 'FLAME', '炎']);
@@ -660,6 +662,64 @@ function moveAllyBehindBoatOneStep(input: {
   input.pieces[idx] = { ...ally, row: destRow, col: destCol };
 }
 
+function parseSatoriStunTargetNotation(
+  notation: string | null,
+): { row: number; col: number } | null {
+  if (!notation) return null;
+  const m = /^satori_stun:(\d+):(\d+)$/i.exec(notation.trim());
+  if (!m) return null;
+  const row = Number(m[1]);
+  const col = Number(m[2]);
+  if (!Number.isFinite(row) || !Number.isFinite(col) || row < 0 || row > 8 || col < 0 || col > 8) {
+    return null;
+  }
+  return { row, col };
+}
+
+function normCharNFKC(char: string | undefined): string {
+  try {
+    return char?.normalize('NFKC') ?? '';
+  } catch {
+    return char ?? '';
+  }
+}
+
+function isSatoriMovedPieceActor(piece: AiBoardPiece): boolean {
+  if (normCharNFKC(piece.char) === '悟') return true;
+  const raw = (piece.pieceCode ?? '').toUpperCase();
+  if (raw.includes('SATORI')) return true;
+  if (raw.includes('6D4AFA9CDF1C')) return true;
+  const base = normalizeSkillPieceCode(toBasePieceCode(piece.pieceCode) ?? '');
+  return base === 'SATORI';
+}
+
+function parseHeartProtectTargetNotation(notation: string | null): { row: number; col: number } | null {
+  if (!notation) return null;
+  const m = /^heart_protect:(\d+):(\d+)$/i.exec(notation.trim());
+  if (!m) return null;
+  const row = Number(m[1]);
+  const col = Number(m[2]);
+  if (!Number.isFinite(row) || !Number.isFinite(col) || row < 0 || row > 8 || col < 0 || col > 8) {
+    return null;
+  }
+  return { row, col };
+}
+
+function isHeartMovedPieceActor(piece: AiBoardPiece): boolean {
+  if (normCharNFKC(piece.char) === '心') return true;
+  const raw = (piece.pieceCode ?? '').toUpperCase();
+  if (raw.includes('HEART')) return true;
+  if (raw.includes('CA16911978FF')) return true;
+  const base = normalizeSkillPieceCode(toBasePieceCode(piece.pieceCode) ?? '');
+  return base === 'HEART';
+}
+
+/** スキルの王除外: 先手の「王」と後手の「玉」の双方を選択不可とする。 */
+function isKingExcludedFromSatoriStun(piece: AiBoardPiece): boolean {
+  const code = normalizeSkillPieceCode(toBasePieceCode(piece.pieceCode) ?? '');
+  return code === 'OU' || piece.char === '王' || piece.char === '玉';
+}
+
 /** 禽: 移動後、真後ろ1マスが空いていればランダムな味方駒（玉除く・自身除く）をそのマスへ移す */
 function moveRandomAllyToCellBehindBird(input: {
   pieces: AiBoardPiece[];
@@ -947,6 +1007,37 @@ function writeSkillState(position: AiBattlePosition, state: SkillStateRecord) {
   };
 }
 
+/** 現在の `skill_state.piece_defenses` に immunity が付いているセルかどうか（合法手・捕捉の整合用） */
+export function pieceHasActiveCaptureImmunityFromBoardState(
+  boardState: Record<string, unknown> | undefined,
+  side: Side,
+  row: number,
+  col: number,
+): boolean {
+  const placeholder: AiBattlePosition = {
+    sideToMove: 'player',
+    turnNumber: 1,
+    moveCount: 0,
+    sfen: '',
+    stateHash: null,
+    boardState: boardState ?? {},
+    hands: { player: {}, enemy: {} },
+  };
+  const state = readSkillState(placeholder);
+  for (const entry of state.piece_defenses) {
+    const remaining = asNumber(entry.remaining_turns ?? entry.remainingTurns) ?? 0;
+    if (remaining <= 0) continue;
+    const mode = asString(entry.mode) ?? '';
+    if (mode !== 'immunity') continue;
+    const s = (asString(entry.side) ?? 'player') === 'enemy' ? 'enemy' : 'player';
+    const r = asNumber(entry.row);
+    const c = asNumber(entry.col);
+    if (r == null || c == null) continue;
+    if (s === side && r === row && c === col) return true;
+  }
+  return false;
+}
+
 export function createSkillRuntimeView(position: AiBattlePosition): SkillRuntimeView {
   const state = readSkillState(position);
   const movementRulesByCell = new Map<string, string>();
@@ -1037,6 +1128,19 @@ export function createSkillRuntimeView(position: AiBattlePosition): SkillRuntime
     rockObstacleCells.add(`${row}:${col}`);
   }
 
+  const captureImmunityCells = new Set<string>();
+  for (const entry of state.piece_defenses) {
+    const remaining = asNumber(entry.remaining_turns ?? entry.remainingTurns) ?? 0;
+    if (remaining <= 0) continue;
+    const mode = asString(entry.mode) ?? '';
+    if (mode !== 'immunity') continue;
+    const side = (asString(entry.side) ?? 'player') === 'enemy' ? 'enemy' : 'player';
+    const row = asNumber(entry.row);
+    const col = asNumber(entry.col);
+    if (row == null || col == null) continue;
+    captureImmunityCells.add(cellKey(side, row, col));
+  }
+
   return {
     state,
     movementRulesByCell,
@@ -1045,6 +1149,7 @@ export function createSkillRuntimeView(position: AiBattlePosition): SkillRuntime
     kingPoisonBlockedCells,
     rockObstacleCells,
     aTransformCells,
+    captureImmunityCells,
   };
 }
 
@@ -1249,7 +1354,9 @@ export function applyMoveSkillEffects(input: {
   const isBoatMover = movedCode === 'BOAT' || movedPiece?.char === '舟';
   const movePcUpper = (input.move.pieceCode ?? '').toUpperCase();
   const isBirdMover =
-    movedCode === 'BIRD' || movedPiece?.char === '禽' || movePcUpper.includes('29ECAB1EF3C3');
+    movedCode === 'BIRD' ||
+    movedPiece?.char === '禽' ||
+    movePcUpper.includes('29ECAB1EF3C3');
   const isWindMover =
     WIND_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '風';
   const isFishMover =
@@ -1445,6 +1552,52 @@ export function applyMoveSkillEffects(input: {
       actorSide: input.actorSide,
       movedBird: input.movedPiece,
     });
+  }
+  // 悟: 移動後にプレイヤーが選んだ敵駒（王・玉以外）を2ターン行動不能（stun）。
+  {
+    const satoriTargetCell = parseSatoriStunTargetNotation(input.move.notation ?? null);
+    if (satoriTargetCell && movedPiece && isSatoriMovedPieceActor(movedPiece)) {
+      const targetPiece = input.pieces.find(
+        (piece) =>
+          piece.row === satoriTargetCell.row && piece.col === satoriTargetCell.col,
+      );
+      if (
+        targetPiece &&
+        targetPiece.side !== input.actorSide &&
+        !isKingExcludedFromSatoriStun(targetPiece)
+      ) {
+        state.piece_statuses.push({
+          row: targetPiece.row,
+          col: targetPiece.col,
+          side: targetPiece.side,
+          status_type: 'stun',
+          remaining_turns: 2,
+        });
+      }
+    }
+  }
+  // 心: 選んだ味方駒を2ターン、敵の捕獲から守る（piece_defenses / mode=immunity）。
+  {
+    const heartProtectCell = parseHeartProtectTargetNotation(input.move.notation ?? null);
+    if (heartProtectCell && movedPiece && isHeartMovedPieceActor(movedPiece)) {
+      const targetPiece = input.pieces.find(
+        (piece) =>
+          piece.row === heartProtectCell.row && piece.col === heartProtectCell.col,
+      );
+      if (
+        targetPiece &&
+        targetPiece.side === input.actorSide &&
+        !isKingExcludedFromSatoriStun(targetPiece)
+      ) {
+        state.piece_defenses.push({
+          row: targetPiece.row,
+          col: targetPiece.col,
+          side: targetPiece.side,
+          mode: 'immunity',
+          remaining_turns: 2,
+        });
+      }
+    }
   }
   // 歯: 隣接していた味方が盤上を動いたとき、同じベクトルで空きマスへ連動。
   if (

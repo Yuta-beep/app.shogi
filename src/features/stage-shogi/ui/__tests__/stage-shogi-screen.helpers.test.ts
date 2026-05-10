@@ -1,4 +1,4 @@
-import type { BoardPiece } from '@/features/stage-shogi/domain/game-rules';
+import type { BoardPiece } from '@/features/stage-shogi/ui/stage-shogi-screen.helpers';
 import { reconcileExtendedPieceHandsAgainstBoard } from '@/features/stage-shogi/ui/stage-shogi-screen.helpers';
 
 describe('reconcileExtendedPieceHandsAgainstBoard', () => {
@@ -15,6 +15,7 @@ describe('reconcileExtendedPieceHandsAgainstBoard', () => {
         pieceCode: 'GEAR',
         char: '歯',
         promoted: false,
+        imageSignedUrl: null,
       },
     ];
     const out = reconcileExtendedPieceHandsAgainstBoard(hands, pieces);
@@ -34,6 +35,7 @@ describe('reconcileExtendedPieceHandsAgainstBoard', () => {
         pieceCode: 'MACHINE',
         char: '機',
         promoted: false,
+        imageSignedUrl: null,
       },
     ];
     const out = reconcileExtendedPieceHandsAgainstBoard(hands, pieces);
@@ -53,6 +55,7 @@ describe('reconcileExtendedPieceHandsAgainstBoard', () => {
         pieceCode: 'HOLE',
         char: '穴',
         promoted: false,
+        imageSignedUrl: null,
       },
     ];
     const out = reconcileExtendedPieceHandsAgainstBoard(hands, pieces);
@@ -72,6 +75,7 @@ describe('reconcileExtendedPieceHandsAgainstBoard', () => {
         pieceCode: 'ABYSS',
         char: '淵',
         promoted: false,
+        imageSignedUrl: null,
       },
     ];
     const out = reconcileExtendedPieceHandsAgainstBoard(hands, pieces);
