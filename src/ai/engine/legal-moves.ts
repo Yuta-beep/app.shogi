@@ -117,6 +117,43 @@ function isAnyOniVariantPiece(piece: AiBoardPiece): boolean {
   return isRedOniPiece(piece) || isBlueOniPiece(piece) || isBlackOniPiece(piece);
 }
 
+function isDeathPieceForLegal(piece: AiBoardPiece): boolean {
+  const base = toBasePieceCode(piece.pieceCode);
+  return base === 'DEATH' || piece.char === '死';
+}
+
+function isSoulPieceForLegal(piece: AiBoardPiece): boolean {
+  const base = toBasePieceCode(piece.pieceCode);
+  return base === 'SOUL' || piece.char === '魂';
+}
+
+function hasSoulOnBoardForSide(pieces: AiBoardPiece[], side: Side): boolean {
+  return pieces.some((p) => p.side === side && isSoulPieceForLegal(p));
+}
+
+function pieceRawUpperForLegal(piece: AiBoardPiece): string {
+  return (piece.pieceCode ?? '').toUpperCase();
+}
+
+/** 不透明 pieceId でも盤上移動できるよう識別（カタログ moveVectors が空のときエンジンが補う） */
+function isBeastPieceForLegal(piece: AiBoardPiece): boolean {
+  if (normKanjiForEngineRules(piece.char) === '獣') return true;
+  const raw = pieceRawUpperForLegal(piece);
+  if (raw.includes('BEAST')) return true;
+  if (raw.includes('05E4EFB89DAE')) return true;
+  const b = toBasePieceCode(piece.pieceCode);
+  return b === 'BEAST';
+}
+
+function isBirdPieceForLegal(piece: AiBoardPiece): boolean {
+  if (normKanjiForEngineRules(piece.char) === '禽') return true;
+  const raw = pieceRawUpperForLegal(piece);
+  if (raw.includes('BIRD')) return true;
+  if (raw.includes('29ECAB1EF3C3')) return true;
+  const b = toBasePieceCode(piece.pieceCode);
+  return b === 'BIRD';
+}
+
 function gunPieceDebugLog(label: string, payload: Record<string, unknown>): void {
   void label;
   void payload;
@@ -243,6 +280,13 @@ function resolvePieceCodeForLegalMove(piece: AiBoardPiece, lookups: AiPieceLooku
   if (ch === '銃') return 'GUN';
   if (ch === '書') return 'BOOK';
   if (ch === '封') return 'SEAL';
+  const rawUp = (piece.pieceCode ?? '').toUpperCase();
+  if (ch === '獣' || rawUp.includes('05E4EFB89DAE') || rawUp.includes('BEAST')) {
+    return 'BEAST';
+  }
+  if (ch === '禽' || rawUp.includes('29ECAB1EF3C3') || rawUp.includes('BIRD')) {
+    return 'BIRD';
+  }
   const legacy = toBasePieceCode(CHAR_TO_CODE[piece.char]);
   if (legacy) return legacy;
   return 'FU';
@@ -799,6 +843,65 @@ function normalizeVectorsForOniVariants(
   return vectors;
 }
 
+function normalizeVectorsForDeath(
+  piece: AiBoardPiece,
+  vectors: AiPieceDefinition['moveVectors'],
+): AiPieceDefinition['moveVectors'] {
+  if (!isDeathPieceForLegal(piece)) return vectors;
+  return [
+    { dx: 0, dy: -1, maxStep: 1 },
+    { dx: 0, dy: 1, maxStep: 1 },
+    { dx: -1, dy: 1, maxStep: 1 },
+    { dx: 1, dy: 1, maxStep: 1 },
+  ];
+}
+
+/** 獣: 桂馬跳び＋その他1マス（m_piece_pattern_vector の beast と整合） */
+function normalizeVectorsForBeast(
+  piece: AiBoardPiece,
+  vectors: AiPieceDefinition['moveVectors'],
+): AiPieceDefinition['moveVectors'] {
+  if (!isBeastPieceForLegal(piece)) return vectors;
+  return [
+    { dx: -1, dy: -2, maxStep: 1 },
+    { dx: 1, dy: -2, maxStep: 1 },
+    { dx: -1, dy: -1, maxStep: 1 },
+    { dx: 1, dy: -1, maxStep: 1 },
+    { dx: -1, dy: 0, maxStep: 1 },
+    { dx: 1, dy: 0, maxStep: 1 },
+    { dx: -1, dy: 1, maxStep: 1 },
+    { dx: 1, dy: 1, maxStep: 1 },
+  ];
+}
+
+/** 禽: 前後左右レイ（m_piece_pattern_vector の bird と整合） */
+function normalizeVectorsForBird(
+  piece: AiBoardPiece,
+  vectors: AiPieceDefinition['moveVectors'],
+): AiPieceDefinition['moveVectors'] {
+  if (!isBirdPieceForLegal(piece)) return vectors;
+  return [
+    { dx: 0, dy: -1, maxStep: 8 },
+    { dx: -1, dy: 0, maxStep: 8 },
+    { dx: 1, dy: 0, maxStep: 8 },
+    { dx: 0, dy: 1, maxStep: 8 },
+  ];
+}
+
+function normalizeVectorsForSoul(
+  piece: AiBoardPiece,
+  vectors: AiPieceDefinition['moveVectors'],
+): AiPieceDefinition['moveVectors'] {
+  if (!isSoulPieceForLegal(piece)) return vectors;
+  return [
+    { dx: 0, dy: -1, maxStep: 1 },
+    { dx: -1, dy: 0, maxStep: 1 },
+    { dx: 1, dy: 0, maxStep: 1 },
+    { dx: -1, dy: 1, maxStep: 1 },
+    { dx: 1, dy: 1, maxStep: 1 },
+  ];
+}
+
 /** 月: TURN（turnNumber）を 4 で割った余りが 0 または 1 のとき全方位 1 マス、2 または 3 のとき全方位 2 マス */
 function moonOmnidirectionalMaxStep(position: AiBattlePosition): number {
   const t = Math.max(1, Math.floor(position.turnNumber));
@@ -972,7 +1075,10 @@ function resolveEffectiveVectorsForPiece(
   const timeNormalized = normalizeVectorsForTime(piece, fixedHouseField);
   const peopleField = normalizeVectorsForPeopleWithAllyField(piece, timeNormalized, allPieces);
   const moonNormalized = normalizeVectorsForMoon(piece, peopleField, position);
-  return normalizeVectorsForOniVariants(piece, moonNormalized);
+  const oniNormalized = normalizeVectorsForOniVariants(piece, moonNormalized);
+  const deathNormalized = normalizeVectorsForDeath(piece, oniNormalized);
+  const beastBird = normalizeVectorsForBird(piece, normalizeVectorsForBeast(piece, deathNormalized));
+  return normalizeVectorsForSoul(piece, beastBird);
 }
 
 function stableHash(value: string): number {
@@ -1138,7 +1244,11 @@ function generateBoardPieceMoves(input: {
   }
   if (
     !pieceDef &&
-    (isGunPiece(input.piece) || isKatanaPiece(input.piece) || isAnyOniVariantPiece(input.piece))
+    (isGunPiece(input.piece) ||
+      isKatanaPiece(input.piece) ||
+      isAnyOniVariantPiece(input.piece) ||
+      isBeastPieceForLegal(input.piece) ||
+      isBirdPieceForLegal(input.piece))
   ) {
     pieceDef = { ...MINIMAL_SPECIAL_PIECE_DEF, char: input.piece.char };
   }
@@ -1148,7 +1258,9 @@ function generateBoardPieceMoves(input: {
     pieceDef.moveVectors.length === 0 &&
     !isGunPiece(input.piece) &&
     !isKatanaPiece(input.piece) &&
-    !isAnyOniVariantPiece(input.piece)
+    !isAnyOniVariantPiece(input.piece) &&
+    !isBeastPieceForLegal(input.piece) &&
+    !isBirdPieceForLegal(input.piece)
   ) {
     return [];
   }
@@ -1283,6 +1395,12 @@ function generateBoardPieceMoves(input: {
       return captured.side === input.piece.side && !isKingPiece(captured);
     }
     if (captured.side === input.piece.side) return false;
+    if (
+      isKingPiece(captured) &&
+      hasSoulOnBoardForSide(input.pieces, captured.side)
+    ) {
+      return false;
+    }
     if (isArmorPiece(captured)) return false;
     if (captured.side !== input.piece.side && isArmorPiece(input.piece)) return false;
     return !input.skillView.darkBlindCells.has(`${captured.side}:${captured.row}:${captured.col}`);

@@ -52,6 +52,20 @@ function isSpiritPiece(piece: { pieceCode: string | null; char: string }): boole
   return raw.includes('9D7397390E77');
 }
 
+function isDeathPieceForApply(piece: { pieceCode: string | null; char: string }): boolean {
+  const ch = normKanjiForEngineRules(piece.char);
+  if (ch === '死') return true;
+  const b = toBasePieceCode(piece.pieceCode);
+  return b === 'DEATH';
+}
+
+function isSoulPieceForApply(piece: { pieceCode: string | null; char: string }): boolean {
+  const ch = normKanjiForEngineRules(piece.char);
+  if (ch === '魂') return true;
+  const b = toBasePieceCode(piece.pieceCode);
+  return b === 'SOUL';
+}
+
 function isKbossPiece(piece: { pieceCode: string | null; char: string }): boolean {
   const base = toBasePieceCode(piece.pieceCode);
   if (base === 'KBOSS') return true;
@@ -139,6 +153,18 @@ function resolveCapturedHandCode(
   if (rawCapturedCode.includes('ABYSS')) {
     return 'ABYSS';
   }
+  if (capturedChar === '獣' || rawCapturedCode.includes('05E4EFB89DAE')) {
+    return 'BEAST';
+  }
+  if (capturedChar === '禽' || rawCapturedCode.includes('29ECAB1EF3C3')) {
+    return 'BIRD';
+  }
+  if (rawCapturedCode.includes('BEAST')) {
+    return 'BEAST';
+  }
+  if (rawCapturedCode.includes('BIRD')) {
+    return 'BIRD';
+  }
   const fromCaptured = toBasePieceCode(capturedToHandPieceCode(captured));
   if (fromCaptured) return fromCaptured;
   const fb = toBasePieceCode(fallbackCapturedCode);
@@ -149,6 +175,8 @@ function resolveCapturedHandCode(
   if (fb.includes('SAINT') || fb.includes('A3BAB6C13DC7')) return 'SAINT';
   if (fb.includes('HOLE') || fb.includes('E381DFA07A3D')) return 'HOLE';
   if (fb.includes('ABYSS') || fb.includes('31CB39CC0FA8')) return 'ABYSS';
+  if (fb.includes('BEAST') || fb.includes('05E4EFB89DAE')) return 'BEAST';
+  if (fb.includes('BIRD') || fb.includes('29ECAB1EF3C3')) return 'BIRD';
   // opaque id をそのまま手駒キーにしない（手駒表示不能の原因）。
   if (/^PIECE_[A-Z0-9_]+$/i.test(fb)) return null;
   return fb;
@@ -227,6 +255,51 @@ function isShieldPieceForApply(piece: { pieceCode: string | null; char: string }
   if (normKanjiForEngineRules(piece.char) === '盾') return true;
   const b = toBasePieceCode(piece.pieceCode);
   return b === 'SHIELD';
+}
+
+function isOboroPieceForApply(piece: { pieceCode: string | null; char: string }): boolean {
+  if (normKanjiForEngineRules(piece.char) === '朧') return true;
+  const b = toBasePieceCode(piece.pieceCode);
+  return b === 'OBORO';
+}
+
+function isDeathOrSoulPieceForOboroTrigger(piece: { pieceCode: string | null; char: string }): boolean {
+  const ch = normKanjiForEngineRules(piece.char);
+  if (ch === '死' || ch === '魂') return true;
+  const b = toBasePieceCode(piece.pieceCode);
+  return b === 'DEATH' || b === 'SOUL';
+}
+
+function collectAllEmptyCells(
+  pieces: Array<{ row: number; col: number }>,
+): Array<{ row: number; col: number }> {
+  const occupied = new Set(pieces.map((p) => `${p.row}:${p.col}`));
+  const out: Array<{ row: number; col: number }> = [];
+  for (let row = 0; row <= 8; row += 1) {
+    for (let col = 0; col <= 8; col += 1) {
+      if (occupied.has(`${row}:${col}`)) continue;
+      out.push({ row, col });
+    }
+  }
+  return out;
+}
+
+function resolveOboroEvadeWarpCell(input: {
+  captured: AiBoardPiece;
+  pieces: AiBoardPiece[];
+  captureRow: number;
+  captureCol: number;
+}): { row: number; col: number } | null {
+  if (!isOboroPieceForApply(input.captured)) return null;
+  const hasTriggerPiece = input.pieces.some(
+    (p) =>
+      isDeathOrSoulPieceForOboroTrigger(p) &&
+      !(p.row === input.captureRow && p.col === input.captureCol && p.side === input.captured.side),
+  );
+  if (!hasTriggerPiece) return null;
+  const empties = collectAllEmptyCells(input.pieces);
+  if (empties.length === 0) return null;
+  return empties[Math.floor(Math.random() * empties.length)] ?? null;
 }
 
 /**
@@ -356,6 +429,10 @@ function isKingPieceForApply(piece: { pieceCode: string | null; char: string }):
   return b === 'OU' || piece.char === '王' || piece.char === '玉';
 }
 
+function hasSoulOnBoardForSide(pieces: AiBoardPiece[], side: Side): boolean {
+  return pieces.some((p) => p.side === side && isSoulPieceForApply(p));
+}
+
 /** 礼拝者「礼」（嶺の REI コードとは別） */
 function isReiRitualPiece(piece: { pieceCode: string | null; char: string }): boolean {
   const ch = normKanjiForEngineRules(piece.char);
@@ -461,16 +538,28 @@ function applyHostileCaptureAtCell(input: {
   didCapture: boolean;
   starReturnProcTriggered: boolean;
   rebuffKboss: boolean;
+  deathCapturedByActor: boolean;
 } {
   let { nextPieces, hands } = input;
   let starReturnProcTriggered = false;
   let rebuffKboss = false;
+  let deathCapturedByActor = false;
   const captured = findPieceAt(nextPieces, input.row, input.col);
   if (!captured || captured.side === input.actorSide) {
-    return { nextPieces, hands, didCapture: false, starReturnProcTriggered, rebuffKboss };
+    return {
+      nextPieces,
+      hands,
+      didCapture: false,
+      starReturnProcTriggered,
+      rebuffKboss,
+      deathCapturedByActor,
+    };
   }
   if (isArmorPieceForApply(captured)) {
     throw new Error('cannot capture armor');
+  }
+  if (isKingPieceForApply(captured) && hasSoulOnBoardForSide(nextPieces, captured.side)) {
+    throw new Error('cannot capture king while soul remains');
   }
 
   if (isKenSwordPieceForApply(captured)) {
@@ -485,8 +574,40 @@ function applyHostileCaptureAtCell(input: {
         nextPieces = [...nextPieces];
         nextPieces[ksIdx] = { ...ks, row: pick.row, col: pick.col };
       }
-      return { nextPieces, hands, didCapture: false, starReturnProcTriggered, rebuffKboss };
+      return {
+        nextPieces,
+        hands,
+        didCapture: false,
+        starReturnProcTriggered,
+        rebuffKboss,
+        deathCapturedByActor,
+      };
     }
+  }
+
+  const oboroEvadeTo = resolveOboroEvadeWarpCell({
+    captured,
+    pieces: nextPieces,
+    captureRow: input.row,
+    captureCol: input.col,
+  });
+  if (oboroEvadeTo) {
+    const obIdx = nextPieces.findIndex(
+      (p) => p.row === input.row && p.col === input.col && p.side === captured.side,
+    );
+    if (obIdx >= 0) {
+      const ob = nextPieces[obIdx]!;
+      nextPieces = [...nextPieces];
+      nextPieces[obIdx] = { ...ob, row: oboroEvadeTo.row, col: oboroEvadeTo.col };
+    }
+    return {
+      nextPieces,
+      hands,
+      didCapture: false,
+      starReturnProcTriggered,
+      rebuffKboss,
+      deathCapturedByActor,
+    };
   }
 
   let phantomEvaded = false;
@@ -508,7 +629,14 @@ function applyHostileCaptureAtCell(input: {
       nextPieces = [...nextPieces];
       nextPieces[phIdx] = { ...ph, row: pick.row, col: pick.col };
     }
-    return { nextPieces, hands, didCapture: false, starReturnProcTriggered, rebuffKboss };
+    return {
+      nextPieces,
+      hands,
+      didCapture: false,
+      starReturnProcTriggered,
+      rebuffKboss,
+      deathCapturedByActor,
+    };
   }
 
   if (isKbossPiece(captured) && kbossEffectiveLives(captured) > 1) {
@@ -524,9 +652,19 @@ function applyHostileCaptureAtCell(input: {
         kbossLivesRemaining: kbossEffectiveLives(cur) - 1,
       };
     }
-    return { nextPieces, hands, didCapture: false, starReturnProcTriggered, rebuffKboss };
+    return {
+      nextPieces,
+      hands,
+      didCapture: false,
+      starReturnProcTriggered,
+      rebuffKboss,
+      deathCapturedByActor,
+    };
   }
 
+  if (isDeathPieceForApply(captured)) {
+    deathCapturedByActor = true;
+  }
   const consumeReiSubstitute = shouldConsumeReiSubstituteAfterAllyCapture(nextPieces, captured);
   nextPieces = nextPieces.filter((piece) => !(piece.row === input.row && piece.col === input.col));
   const isSpiritCaptured = isSpiritPiece(captured);
@@ -583,7 +721,14 @@ function applyHostileCaptureAtCell(input: {
     nextPieces = removeFirstReiRitualFromSide(nextPieces, captured.side);
   }
 
-  return { nextPieces, hands, didCapture: true, starReturnProcTriggered, rebuffKboss };
+  return {
+    nextPieces,
+    hands,
+    didCapture: true,
+    starReturnProcTriggered,
+    rebuffKboss,
+    deathCapturedByActor,
+  };
 }
 
 function collectAdjacentEmptyCells(
@@ -633,6 +778,7 @@ export function applyMove(input: {
   let didCapture = false;
   let diseaseCapturedByActor = false;
   let abyssCapturedByActor = false;
+  let deathCapturedByActor = false;
   const capturedHoleCellsByActor: Array<{ row: number; col: number }> = [];
   let starReturnProcTriggered = false;
   /** 刀の隣取り・銃の貫通取りなど、エンジン内在スキル（skill_definitions_v2 の 52/54 非依存）。 */
@@ -743,6 +889,7 @@ export function applyMove(input: {
           }
         }
         if (midRes.starReturnProcTriggered) starReturnProcTriggered = true;
+        if (midRes.deathCapturedByActor) deathCapturedByActor = true;
       }
     }
 
@@ -752,6 +899,9 @@ export function applyMove(input: {
       const captureOwnPiece = captured.side === actorSide;
       if (!captureOwnPiece && !isCloudMover && isArmorPieceForApply(captured)) {
         throw new Error('cannot capture armor');
+      }
+      if (!captureOwnPiece && isKingPieceForApply(captured) && hasSoulOnBoardForSide(nextPieces, captured.side)) {
+        throw new Error('cannot capture king while soul remains');
       }
       if (!captureOwnPiece && isArmorPieceForApply(movingPiece)) {
         throw new Error('armor cannot capture enemy');
@@ -791,6 +941,15 @@ export function applyMove(input: {
           intrinsicCombatSkillTriggered = true;
         }
       }
+      let oboroEvadeTo: { row: number; col: number } | null = null;
+      if (!shieldAbortedMove && !captureOwnPiece && !kenSwordEvadeTo) {
+        oboroEvadeTo = resolveOboroEvadeWarpCell({
+          captured,
+          pieces: nextPieces,
+          captureRow: move.toRow,
+          captureCol: move.toCol,
+        });
+      }
       if (!shieldAbortedMove && !captureOwnPiece && !kenSwordEvadeTo) {
         const evadeChance = resolveEvadeCaptureProcChanceForPiece(
           current.boardState as Record<string, unknown> | undefined,
@@ -815,6 +974,15 @@ export function applyMove(input: {
         if (ksIdx >= 0) {
           const ks = nextPieces[ksIdx]!;
           nextPieces[ksIdx] = { ...ks, row: kenSwordEvadeTo.row, col: kenSwordEvadeTo.col };
+        }
+      } else if (oboroEvadeTo) {
+        didCapture = false;
+        const obIdx = nextPieces.findIndex(
+          (p) => p.row === move.toRow && p.col === move.toCol && p.side === captured.side,
+        );
+        if (obIdx >= 0) {
+          const ob = nextPieces[obIdx]!;
+          nextPieces[obIdx] = { ...ob, row: oboroEvadeTo.row, col: oboroEvadeTo.col };
         }
       } else if (phantomEvaded) {
         didCapture = false;
@@ -855,6 +1023,9 @@ export function applyMove(input: {
           }
           if (!captureOwnPiece && (capturedChar === '淵' || rawCode.includes('31CB39CC0FA8'))) {
             abyssCapturedByActor = true;
+          }
+          if (!captureOwnPiece && isDeathPieceForApply(captured)) {
+            deathCapturedByActor = true;
           }
           if (!captureOwnPiece && isHolePieceForApply(captured)) {
             capturedHoleCellsByActor.push({ row: move.toRow, col: move.toCol });
@@ -1103,6 +1274,34 @@ export function applyMove(input: {
     skillStateRaw && typeof skillStateRaw === 'object'
       ? { ...(skillStateRaw as Record<string, unknown>) }
       : {};
+  // 行動後、移動した駒に付いている座標依存ステータスを着地点へ追従させる。
+  if (
+    turnAdvanced &&
+    applyLandingDerivedEffects &&
+    move.fromRow != null &&
+    move.fromCol != null &&
+    movedPieceAfterApply
+  ) {
+    const prev = (skillState.piece_statuses ?? skillState.pieceStatuses) as unknown;
+    const list = Array.isArray(prev) ? [...prev] : [];
+    const relocated = list.map((raw) => {
+      const st = (raw ?? {}) as Record<string, unknown>;
+      const side = String(st.side ?? 'player') === 'enemy' ? 'enemy' : 'player';
+      const row = Number(st.row);
+      const col = Number(st.col);
+      if (
+        side === actorSide &&
+        Number.isFinite(row) &&
+        Number.isFinite(col) &&
+        row === move.fromRow &&
+        col === move.fromCol
+      ) {
+        return { ...st, row: movedPieceAfterApply.row, col: movedPieceAfterApply.col };
+      }
+      return st;
+    });
+    (skillState as Record<string, unknown>).piece_statuses = relocated;
+  }
   // 病: 取った駒（攻撃側）を 3 ターン行動不能にする。
   if (
     turnAdvanced &&
@@ -1118,6 +1317,19 @@ export function applyMove(input: {
       side: actorSide,
       status_type: 'stun',
       remaining_turns: 3,
+    });
+    (skillState as Record<string, unknown>).piece_statuses = arr;
+  }
+  // 死: 取った駒（攻撃側）に呪いを付与。5ターン後に消滅する。
+  if (turnAdvanced && applyLandingDerivedEffects && deathCapturedByActor && movedPieceAfterApply) {
+    const prev = (skillState.piece_statuses ?? skillState.pieceStatuses) as unknown;
+    const arr = Array.isArray(prev) ? [...prev] : [];
+    arr.push({
+      row: movedPieceAfterApply.row,
+      col: movedPieceAfterApply.col,
+      side: actorSide,
+      status_type: 'death_curse',
+      remaining_turns: 5,
     });
     (skillState as Record<string, unknown>).piece_statuses = arr;
   }
@@ -1181,6 +1393,62 @@ export function applyMove(input: {
   }
   (recomputedPosition.boardState as Record<string, unknown>).skill_state = skillState;
   nextPosition = recomputedPosition;
+  let deathCurseVanishedAny = false;
+  {
+    const boardState = (nextPosition.boardState ?? {}) as Record<string, unknown>;
+    const skillStateRaw = (boardState.skill_state ?? boardState.skillState) as
+      | Record<string, unknown>
+      | undefined;
+    const statusesRaw = (skillStateRaw?.piece_statuses ?? skillStateRaw?.pieceStatuses) as unknown;
+    const statuses = Array.isArray(statusesRaw) ? statusesRaw : [];
+    const shouldVanish = new Set<string>();
+    const survivors: Record<string, unknown>[] = [];
+    for (const raw of statuses) {
+      const st = (raw ?? {}) as Record<string, unknown>;
+      const statusType = String(st.status_type ?? st.statusType ?? '');
+      const side = String(st.side ?? 'player') === 'enemy' ? 'enemy' : 'player';
+      const row = Number(st.row);
+      const col = Number(st.col);
+      const remaining = Number(st.remaining_turns ?? st.remainingTurns ?? 0);
+      if (
+        statusType === 'death_curse' &&
+        Number.isFinite(row) &&
+        Number.isFinite(col) &&
+        remaining <= 0
+      ) {
+        shouldVanish.add(`${side}:${row}:${col}`);
+        continue;
+      }
+      survivors.push(st);
+    }
+    if (shouldVanish.size > 0) {
+      deathCurseVanishedAny = true;
+      nextPieces = nextPieces.filter((p) => !shouldVanish.has(`${p.side}:${p.row}:${p.col}`));
+    }
+    if (skillStateRaw) {
+      (skillStateRaw as Record<string, unknown>).piece_statuses = survivors;
+      (boardState as Record<string, unknown>).skill_state = skillStateRaw;
+    }
+  }
+  if (deathCurseVanishedAny) {
+    const syncedHands = normalizeHandsStateKeys({
+      player: sanitizeHandsBag(nextPosition.hands.player),
+      enemy: sanitizeHandsBag(nextPosition.hands.enemy),
+    });
+    const vanishedSyncedPosition = createPosition({
+      pieces: nextPieces,
+      hands: syncedHands,
+      sideToMove: nextSide,
+      moveCount: nextMoveCount,
+      pieceCatalog: input.pieceCatalog,
+    });
+    vanishedSyncedPosition.boardState = {
+      ...(vanishedSyncedPosition.boardState ?? {}),
+      ...((nextPosition.boardState as Record<string, unknown> | undefined) ?? {}),
+      pieces: nextPieces.map((piece) => ({ ...piece })),
+    };
+    nextPosition = vanishedSyncedPosition;
+  }
 
   if (!winnerSide) {
     const nextLegal = generateLegalMoves({

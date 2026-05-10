@@ -1741,6 +1741,10 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
       typeof target.pieceCode === 'string' && /5D848242A136/i.test(target.pieceCode);
     const opaqueSaintCode =
       typeof target.pieceCode === 'string' && /A3BAB6C13DC7/i.test(target.pieceCode);
+    const opaqueBeastCode =
+      typeof target.pieceCode === 'string' && /05E4EFB89DAE/i.test(target.pieceCode);
+    const opaqueBirdCode =
+      typeof target.pieceCode === 'string' && /29ECAB1EF3C3/i.test(target.pieceCode);
     const displayChar =
       resolvedChar && resolvedChar !== '?'
         ? resolvedChar
@@ -1752,10 +1756,17 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
               ? '聖'
               : opaqueSaintCode
                 ? '聖'
-                : lookupChar;
+                : (target.pieceCode ?? '').toUpperCase() === 'BEAST' ||
+                    opaqueBeastCode
+                  ? '獣'
+                  : (target.pieceCode ?? '').toUpperCase() === 'BIRD' || opaqueBirdCode
+                    ? '禽'
+                    : lookupChar;
+    const pieceCodeLookupKey =
+      typeof target.pieceCode === 'string' ? target.pieceCode.toUpperCase() : '';
     const detail =
       pieceDefsByChar[displayChar] ??
-      (target.pieceCode ? pieceDefsByCode[target.pieceCode] : undefined) ??
+      (pieceCodeLookupKey ? pieceDefsByCode[pieceCodeLookupKey] : undefined) ??
       null;
     const pieceCodeLower = (target.pieceCode ?? '').toLowerCase();
     const oniNameOverride =
@@ -1767,13 +1778,22 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
             ? '赤鬼'
             : null;
 
+    const beastNameOverride =
+      displayChar === '獣' || pieceCodeLower === 'beast' || opaqueBeastCode ? '獣神' : null;
+    const birdNameOverride =
+      displayChar === '禽' || pieceCodeLower === 'bird' || opaqueBirdCode ? '猛禽類' : null;
+
     setInspectingPiece({
       char: displayChar,
       pieceCode: target.pieceCode,
       name:
         (target.pieceCode ?? '').toUpperCase() === 'BOOK' || displayChar === '書'
           ? '書物'
-          : (oniNameOverride ?? detail?.name ?? displayChar),
+          : (oniNameOverride ??
+              beastNameOverride ??
+              birdNameOverride ??
+              detail?.name ??
+              displayChar),
       desc: resolveInspectSkillDescription(displayChar, detail?.desc, target.pieceCode),
       move: resolveInspectMoveDescription(displayChar, detail?.move, target.pieceCode),
       imageSignedUrl: detail?.imageSignedUrl ?? target.imageSignedUrl ?? null,

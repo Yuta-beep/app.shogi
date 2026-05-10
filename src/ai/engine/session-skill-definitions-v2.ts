@@ -79,6 +79,56 @@ const CANONICAL_FALLBACK_DEFINITIONS: ReadonlyArray<Record<string, unknown>> = [
     scriptHook: null,
     notes: 'canonical-engine-parity',
   },
+  {
+    skillId: 72,
+    pieceChars: ['獣'],
+    trigger: { group: 'event_move', type: 'after_move' },
+    conditions: [{ type: 'orthogonal_adjacent_enemy_exists', params: {} }],
+    effects: [
+      {
+        type: 'apply_status',
+        target: { group: 'adjacent', selector: 'adjacent_enemy' },
+        params: {
+          statusType: 'stun',
+          durationTurns: 2,
+          adjacency: 'orthogonal',
+        },
+      },
+    ],
+    source: {
+      skillText:
+        '移動時、前後左右に隣接する敵駒をすべて2ターン行動不能にする。（skill-runtime adjacency=orthogonal）',
+      sourceKind: 'manual',
+      sourceFile: 'session-skill-definitions-v2',
+      sourceFunction: 'CANONICAL_BEAST',
+    },
+    classification: {
+      implementationKind: 'primitive',
+      tags: ['move_trigger', 'enemy_debuff', 'apply_status'],
+    },
+    scriptHook: null,
+    notes: 'canonical-engine-parity',
+  },
+  {
+    skillId: 73,
+    pieceChars: ['禽'],
+    trigger: { group: 'event_move', type: 'after_move' },
+    conditions: [],
+    effects: [],
+    source: {
+      skillText:
+        '移動後、真後ろ1マスが空いていればランダムな味方駒（玉除く）をそのマスへ移す。実装は skill-runtime（舟と同じ「後ろ」方向）。',
+      sourceKind: 'manual',
+      sourceFile: 'session-skill-definitions-v2',
+      sourceFunction: 'CANONICAL_BIRD',
+    },
+    classification: {
+      implementationKind: 'primitive',
+      tags: ['move_trigger', 'relocate_ally'],
+    },
+    scriptHook: null,
+    notes: 'canonical-engine-parity',
+  },
 ];
 
 type PieceCatalogItemWithSkillJson = PieceCatalogItem & {
@@ -127,10 +177,10 @@ export function assembleSkillDefinitionsV2ForSession(
     }
   }
 
-  // 刀(52)・銃(54): カタログ／BFF の不整合より正典（上のフォールバック）を常に優先。
+  // 刀(52)・銃(54)・獣(72)・禽(73): カタログ／BFF の不整合より正典（上のフォールバック）を常に優先。
   for (const def of CANONICAL_FALLBACK_DEFINITIONS) {
     const id = Number(def.skillId);
-    if (id === 52 || id === 54) {
+    if (id === 52 || id === 54 || id === 72 || id === 73) {
       if (Number.isFinite(id)) {
         bySkillId.set(id, { ...def });
       }

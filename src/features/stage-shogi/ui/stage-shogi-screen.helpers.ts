@@ -130,6 +130,10 @@ export type BoardPiece = {
   stunnedAura?: boolean;
   /** 行動不能（abyss_stun）由来の紫オーラ */
   abyssAura?: boolean;
+  /** 死の呪い（death_curse）由来の赤オーラ */
+  deathCurseAura?: boolean;
+  /** 死の呪い（death_curse）の残りターン */
+  deathCurseCountdown?: number | null;
 };
 
 export type PreservedMovedPiece = {
@@ -886,6 +890,52 @@ export function applyAbyssAuraEffectToPieces(
     ...p,
     abyssAura: keys.has(`${p.side}:${p.row}:${p.col}`),
   }));
+}
+
+function deathCurseCountdownByPieceFromCanonical(
+  position: BattleCanonicalPosition,
+): Map<string, number> {
+  const out = new Map<string, number>();
+  const boardState = asRecord(position.boardState);
+  if (!boardState) return out;
+  const skillState = asRecord(boardState.skill_state ?? boardState.skillState);
+  const rawList = (skillState?.piece_statuses ??
+    skillState?.pieceStatuses ??
+    boardState.piece_statuses ??
+    boardState.pieceStatuses) as unknown;
+  if (!Array.isArray(rawList)) return out;
+  for (const raw of rawList) {
+    const st = asRecord(raw);
+    if (!st) continue;
+    const statusType = asString(st.status_type ?? st.statusType) ?? '';
+    if (statusType !== 'death_curse') continue;
+    const turns = Number(st.remaining_turns ?? st.remainingTurns ?? 1);
+    if (!Number.isFinite(turns) || turns <= 0) continue;
+    const row = normalizeCellIndex(Number(st.row));
+    const col = normalizeCellIndex(Number(st.col));
+    if (row === null || col === null) continue;
+    const side = normalizeSide(asString(st.side) ?? 'player');
+    out.set(`${side}:${row}:${col}`, turns);
+  }
+  return out;
+}
+
+export function applyDeathCurseEffectToPieces(
+  pieces: BoardPiece[],
+  position: BattleCanonicalPosition,
+): BoardPiece[] {
+  const countdownByPiece = deathCurseCountdownByPieceFromCanonical(position);
+  if (countdownByPiece.size === 0) {
+    return pieces.map((p) => ({ ...p, deathCurseAura: false, deathCurseCountdown: null }));
+  }
+  return pieces.map((p) => {
+    const turns = countdownByPiece.get(`${p.side}:${p.row}:${p.col}`) ?? null;
+    return {
+      ...p,
+      deathCurseAura: turns != null,
+      deathCurseCountdown: turns,
+    };
+  });
 }
 
 export function poisonHazardCellsForDisplay(position: BattleCanonicalPosition): BoardCell[] {
@@ -1997,6 +2047,7 @@ export function syncCanonicalState(params: {
   const withPrisonChain = applyPrisonChainEffectToPieces(withATransformEffect, position);
   const withStunAura = applyStunAuraEffectToPieces(withPrisonChain, position);
   const withAbyssAura = applyAbyssAuraEffectToPieces(withStunAura, position);
+  const withDeathCurseAura = applyDeathCurseEffectToPieces(withAbyssAura, position);
   const poisonHazardCells = poisonHazardCellsForDisplay(position);
   const rockObstacleCells = rockObstacleCellsForDisplay(position);
   const batsuHazardCells = batsuHazardCellsForDisplay(position);
@@ -2007,7 +2058,7 @@ export function syncCanonicalState(params: {
     pieceCatalog,
   );
   const reconciledHands = reconcileExtendedPieceHandsAgainstBoard(nextHands, withPromotionOverlay);
-  const stabilizedPieces = enforcePersistentHazardCells(withAbyssAura, persistentHazards);
+  const stabilizedPieces = enforcePersistentHazardCells(withDeathCurseAura, persistentHazards);
   const pieceDefsByChar = Object.fromEntries(
     pieceCatalog.filter((it) => it.char).map((item) => [item.char, item]),
   ) as Partial<Record<string, PieceCatalogItem>>;

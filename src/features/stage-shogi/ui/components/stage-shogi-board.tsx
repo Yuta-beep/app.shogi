@@ -52,6 +52,8 @@ type BoardPieceSpriteProps = {
   prisonChained?: boolean;
   stunnedAura?: boolean;
   abyssAura?: boolean;
+  deathCurseAura?: boolean;
+  deathCurseCountdown?: number | null;
 };
 
 const BoardPieceSprite = memo(function BoardPieceSprite({
@@ -65,6 +67,8 @@ const BoardPieceSprite = memo(function BoardPieceSprite({
   prisonChained = false,
   stunnedAura = false,
   abyssAura = false,
+  deathCurseAura = false,
+  deathCurseCountdown = null,
 }: BoardPieceSpriteProps) {
   const rowIndex = normalizeCellIndex(piece.row);
   const colIndex = normalizeCellIndex(piece.col);
@@ -245,6 +249,46 @@ const BoardPieceSprite = memo(function BoardPieceSprite({
                 opacity: 0.95,
               }}
             />
+          ) : null}
+          {deathCurseAura && !darkVeiled ? (
+            <View
+              pointerEvents="none"
+              style={{
+                position: 'absolute',
+                left: '8%',
+                right: '8%',
+                top: '8%',
+                bottom: '8%',
+                borderRadius: 999,
+                borderWidth: 2,
+                borderColor: 'rgba(239, 68, 68, 0.95)',
+                backgroundColor: 'rgba(239, 68, 68, 0.2)',
+                opacity: 0.96,
+              }}
+            />
+          ) : null}
+          {deathCurseAura && !darkVeiled && deathCurseCountdown != null ? (
+            <View
+              pointerEvents="none"
+              style={{
+                position: 'absolute',
+                top: '2%',
+                right: '2%',
+                minWidth: 16,
+                height: 16,
+                borderRadius: 8,
+                backgroundColor: 'rgba(127, 29, 29, 0.95)',
+                borderWidth: 1,
+                borderColor: 'rgba(255, 200, 200, 0.95)',
+                alignItems: 'center',
+                justifyContent: 'center',
+                paddingHorizontal: 3,
+              }}
+            >
+              <Text style={{ color: '#fff', fontSize: 10, fontWeight: '900' }}>
+                {String(deathCurseCountdown)}
+              </Text>
+            </View>
           ) : null}
         </View>
       </View>
@@ -533,6 +577,8 @@ const BoardPiecesLayer = memo(function BoardPiecesLayer({
             prisonChained={Boolean(placement.prisonChained)}
             stunnedAura={Boolean((placement as any).stunnedAura)}
             abyssAura={Boolean((placement as any).abyssAura)}
+            deathCurseAura={Boolean((placement as any).deathCurseAura)}
+            deathCurseCountdown={(placement as any).deathCurseCountdown ?? null}
           />
         );
       })}

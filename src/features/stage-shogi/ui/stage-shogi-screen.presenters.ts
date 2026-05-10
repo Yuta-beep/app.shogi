@@ -30,6 +30,14 @@ const MUTANT_SKILL_DESCRIPTION =
   '「実」で異化した駒は、周囲8マスに敵の「実」がいなくなると元の駒に戻る。生来の「異」はこの扱いに含まれない。';
 const KBOSS_SKILL_DESCRIPTION =
   '移動・打ちの後40%の確率で周囲8マスの空きマス1つに味方の「実」駒を1体召喚する。2回取られないと消えず、1回目に取られたときは取られる直前の配置に戻り手番が交代する。';
+const DEATH_SKILL_DESCRIPTION =
+  'この駒を取った敵駒に呪いをかける。呪われた駒は5ターン後に消滅する。';
+const SOUL_SKILL_DESCRIPTION =
+  'この駒が盤面に残っている間、相手は「王」を攻撃できない。';
+const BEAST_SKILL_DESCRIPTION =
+  '移動時、前後左右に隣接する敵駒をすべて2ターン行動不能にする。';
+const BIRD_SKILL_DESCRIPTION =
+  '移動後、真後ろ1マスが空いていればランダムな味方駒（玉以外）をそのマスへ移動させる。';
 
 export type InspectingPieceState = {
   char: string;
@@ -125,6 +133,10 @@ export function resolveInspectSkillDescription(
   if (char === '実') return EXPERIMENT_SKILL_DESCRIPTION;
   if (char === '異') return MUTANT_SKILL_DESCRIPTION;
   if (char === 'K') return KBOSS_SKILL_DESCRIPTION;
+  if (char === '死') return DEATH_SKILL_DESCRIPTION;
+  if (char === '魂') return SOUL_SKILL_DESCRIPTION;
+  if (char === '獣') return BEAST_SKILL_DESCRIPTION;
+  if (char === '禽') return BIRD_SKILL_DESCRIPTION;
   if (char === '山') return '嶺のスキルで召喚される補助駒。';
   const normalized = (desc ?? '').trim();
   return normalized.length > 0 ? normalized : '詳細は準備中です。';
@@ -144,6 +156,10 @@ export function resolveInspectMoveDescription(
   if (byCode.redOni) return '前後左右に1マス。';
   if (byCode.blueOni) return '全方向に1マス。';
   if (byCode.blackOni) return '前後左右に何マスでも。';
+  if (char === '死') return '前後と後ろ斜めに1マス。';
+  if (char === '魂') return '前・左・右・後ろ斜めに1マス。';
+  if (char === '獣') return '桂馬跳びおよび前後・左右・四斜めへの1マス移動ができる。';
+  if (char === '禽') return '前後左右に何マスでも進める。';
   if (char === '闇') return '全方向に1マス';
   if (char === '月') {
     return 'TURN数を4で割った余りが0または1のときは全方位に1マス、余りが2または3のときは全方位に2マスまで移動できる。';

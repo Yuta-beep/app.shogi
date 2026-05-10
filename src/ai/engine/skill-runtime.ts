@@ -106,6 +106,13 @@ function catalogPieceTokenMatchesMoved(
   if (normalizeSkillPieceCode(t) === movedCode) return true;
   const codeFromKanji = (CHAR_TO_CODE as Readonly<Record<string, string>>)[t];
   if (codeFromKanji != null && normalizeSkillPieceCode(codeFromKanji) === movedCode) return true;
+  // カタログは漢字のみ・着手は不透明 pieceId のときでも突合できるようにする（獣72・禽73）
+  if (t === '獣') {
+    if (movedCode === 'BEAST' || movedCode.includes('05E4EFB89DAE')) return true;
+  }
+  if (t === '禽') {
+    if (movedCode === 'BIRD' || movedCode.includes('29ECAB1EF3C3')) return true;
+  }
   return false;
 }
 
@@ -653,6 +660,32 @@ function moveAllyBehindBoatOneStep(input: {
   input.pieces[idx] = { ...ally, row: destRow, col: destCol };
 }
 
+/** 禽: 移動後、真後ろ1マスが空いていればランダムな味方駒（玉除く・自身除く）をそのマスへ移す */
+function moveRandomAllyToCellBehindBird(input: {
+  pieces: AiBoardPiece[];
+  actorSide: Side;
+  movedBird: AiBoardPiece;
+}): void {
+  const dBack = backRowDeltaForBoatTow(input.actorSide);
+  const backRow = input.movedBird.row + dBack;
+  const backCol = input.movedBird.col;
+  if (backRow < 0 || backRow > 8 || backCol < 0 || backCol > 8) return;
+  if (!isCellEmpty(input.pieces, backRow, backCol)) return;
+  const candidates = input.pieces.filter((p) => {
+    if (p.side !== input.actorSide) return false;
+    if (p.row === input.movedBird.row && p.col === input.movedBird.col) return false;
+    if (isKingLikePieceForBoatTow(p)) return false;
+    return true;
+  });
+  if (candidates.length === 0) return;
+  const pick = candidates[Math.floor(Math.random() * candidates.length)]!;
+  const idx = input.pieces.findIndex(
+    (p) => p.side === pick.side && p.row === pick.row && p.col === pick.col,
+  );
+  if (idx < 0) return;
+  input.pieces[idx] = { ...pick, row: backRow, col: backCol };
+}
+
 function summonRandomAdjacentEmptyPiece(input: {
   pieces: AiBoardPiece[];
   center: AiBoardPiece;
@@ -1022,8 +1055,14 @@ export function tickSkillStateDurations(position: AiBattlePosition) {
     for (const entry of list) {
       const remaining = asNumber(entry.remaining_turns ?? entry.remainingTurns) ?? 0;
       if (remaining <= 0) continue;
+      const statusType = asString(entry.status_type ?? entry.statusType) ?? '';
       const next = remaining - 1;
-      if (next <= 0) continue;
+      if (next <= 0) {
+        if (statusType === 'death_curse') {
+          out.push({ ...entry, remaining_turns: 0 });
+        }
+        continue;
+      }
       out.push({ ...entry, remaining_turns: next });
     }
     return out;
@@ -1208,6 +1247,11 @@ export function applyMoveSkillEffects(input: {
   const isSandMover =
     SAND_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '砂';
   const isBoatMover = movedCode === 'BOAT' || movedPiece?.char === '舟';
+  const movePcUpper = (input.move.pieceCode ?? '').toUpperCase();
+  const isBirdMover =
+    movedCode === 'BIRD' ||
+    movedPiece?.char === '禽' ||
+    movePcUpper.includes('29ECAB1EF3C3');
   const isWindMover =
     WIND_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '風';
   const isFishMover =
@@ -1394,6 +1438,14 @@ export function applyMoveSkillEffects(input: {
       fromCol: input.move.fromCol,
       toRow: input.move.toRow,
       toCol: input.move.toCol,
+    });
+  }
+  // 禽: 移動後、真後ろ1マスが空いていればランダムな味方駒（玉除く）をそのマスへ。
+  if (isBirdMover && input.move.fromRow != null && input.move.fromCol != null && input.movedPiece) {
+    moveRandomAllyToCellBehindBird({
+      pieces: input.pieces,
+      actorSide: input.actorSide,
+      movedBird: input.movedPiece,
     });
   }
   // 歯: 隣接していた味方が盤上を動いたとき、同じベクトルで空きマスへ連動。
@@ -2337,6 +2389,49 @@ export function applyMoveSkillEffects(input: {
       if (!condition) continue;
       const conditionType = asString(condition.type) ?? '';
       const conditionParams = asRecord(condition.params) ?? {};
+      if (
+        conditionType === 'adjacent_enemy_exists' ||
+        conditionType === 'orthogonal_adjacent_enemy_exists'
+      ) {
+        if (!input.movedPiece) {
+          blockedByCondition = true;
+          break;
+        }
+        const mp = input.movedPiece;
+        const orthOnly = conditionType === 'orthogonal_adjacent_enemy_exists';
+        const deltas: ReadonlyArray<readonly [number, number]> = orthOnly
+          ? [
+              [-1, 0],
+              [1, 0],
+              [0, -1],
+              [0, 1],
+            ]
+          : [
+              [-1, -1],
+              [-1, 0],
+              [-1, 1],
+              [0, -1],
+              [0, 1],
+              [1, -1],
+              [1, 0],
+              [1, 1],
+            ];
+        let found = false;
+        for (const [dr, dc] of deltas) {
+          const row = mp.row + dr;
+          const col = mp.col + dc;
+          if (row < 0 || row > 8 || col < 0 || col > 8) continue;
+          const tp = input.pieces.find((p) => p.row === row && p.col === col);
+          if (tp && tp.side !== input.actorSide) {
+            found = true;
+            break;
+          }
+        }
+        if (!found) {
+          blockedByCondition = true;
+          break;
+        }
+      }
       if (conditionType === 'chance_roll') {
         let procChance =
           asFiniteNumber(conditionParams.procChance) ?? asFiniteNumber(conditionParams.chance);
@@ -2499,9 +2594,23 @@ export function applyMoveSkillEffects(input: {
         if (!input.movedPiece) continue;
         const statusType = asString(params.statusType) ?? '';
         if (!statusType) continue;
-        for (let dr = -1; dr <= 1; dr += 1) {
-          for (let dc = -1; dc <= 1; dc += 1) {
-            if (dr === 0 && dc === 0) continue;
+        const adjacency = asString(params.adjacency)?.toLowerCase() ?? '';
+        const orthOnly = adjacency === 'orthogonal';
+        if (orthOnly) {
+          let applied = 0;
+          const maxTargetsRaw = asNumber(params.maxTargets);
+          const maxTargets =
+            maxTargetsRaw != null && Number.isFinite(maxTargetsRaw) && maxTargetsRaw > 0
+              ? Math.floor(maxTargetsRaw)
+              : null;
+          const orthDeltas: ReadonlyArray<readonly [number, number]> = [
+            [-1, 0],
+            [1, 0],
+            [0, -1],
+            [0, 1],
+          ];
+          for (const [dr, dc] of orthDeltas) {
+            if (maxTargets != null && applied >= maxTargets) break;
             const row = input.movedPiece.row + dr;
             const col = input.movedPiece.col + dc;
             if (row < 0 || row > 8 || col < 0 || col > 8) continue;
@@ -2514,6 +2623,25 @@ export function applyMoveSkillEffects(input: {
               status_type: statusType,
               remaining_turns: duration,
             });
+            applied += 1;
+          }
+        } else {
+          for (let dr = -1; dr <= 1; dr += 1) {
+            for (let dc = -1; dc <= 1; dc += 1) {
+              if (dr === 0 && dc === 0) continue;
+              const row = input.movedPiece.row + dr;
+              const col = input.movedPiece.col + dc;
+              if (row < 0 || row > 8 || col < 0 || col > 8) continue;
+              const targetPiece = input.pieces.find((p) => p.row === row && p.col === col);
+              if (!targetPiece || targetPiece.side === input.actorSide) continue;
+              state.piece_statuses.push({
+                row,
+                col,
+                side: targetPiece.side,
+                status_type: statusType,
+                remaining_turns: duration,
+              });
+            }
           }
         }
         continue;

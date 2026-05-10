@@ -194,6 +194,8 @@ const CAPTURE_CHAR_TO_HAND_CODE: Readonly<Record<string, string>> = {
   穴: 'HOLE',
   淵: 'ABYSS',
   鬼: 'REDONI',
+  獣: 'BEAST',
+  禽: 'BIRD',
 };
 
 const OPAQUE_CAPTURE_CODE_TO_HAND_CODE: Readonly<Record<string, string>> = {
@@ -211,6 +213,8 @@ const OPAQUE_CAPTURE_CODE_TO_HAND_CODE: Readonly<Record<string, string>> = {
   PIECE_E381DFA07A3D: 'HOLE',
   PIECE_31CB39CC0FA8: 'ABYSS',
   PIECE_533B7FEC5456: 'REDONI',
+  PIECE_05E4EFB89DAE: 'BEAST',
+  PIECE_29ECAB1EF3C3: 'BIRD',
 };
 
 function opaqueCapturedCodeToHandCode(rawCode: string | null): string | null {
@@ -232,6 +236,8 @@ function opaqueCapturedCodeToHandCode(rawCode: string | null): string | null {
   if (upper.includes('E381DFA07A3D')) return 'HOLE';
   if (upper.includes('31CB39CC0FA8')) return 'ABYSS';
   if (upper.includes('533B7FEC5456')) return 'REDONI';
+  if (upper.includes('05E4EFB89DAE')) return 'BEAST';
+  if (upper.includes('29ECAB1EF3C3')) return 'BIRD';
   if (upper.includes('BLUEONI')) return 'BLUEONI';
   if (upper.includes('BLACKONI')) return 'BLACKONI';
   if (upper.includes('REDONI')) return 'REDONI';
@@ -246,6 +252,8 @@ function opaqueCapturedCodeToHandCode(rawCode: string | null): string | null {
   if (upper.includes('WATERFALL')) return 'WATERFALL';
   if (upper.includes('HOLE')) return 'HOLE';
   if (upper.includes('ABYSS')) return 'ABYSS';
+  if (upper.includes('BEAST')) return 'BEAST';
+  if (upper.includes('BIRD')) return 'BIRD';
   if (upper.includes('0F14ABCC6E5E')) return 'HOLY_SWORD';
   return null;
 }
