@@ -44,6 +44,15 @@ const DEPRESSION_SKILL_DESCRIPTION = '移動後、左右1マスの空きマス�
 
 const CONCAVE_SKILL_INSPECT = 'なし。';
 
+const COOKING_SEAR_SKILL_INSPECT =
+  '敵駒を取ったとき、盤上のランダムな空きマスに味方の「炎」駒を1体召喚する。';
+
+const COOKING_STEW_SKILL_INSPECT =
+  '敵駒を取ったとき、盤上のランダムな空きマスに味方の「火」駒を1体召喚する。';
+
+const COOKING_SAUTE_SKILL_INSPECT =
+  '敵駒を取ったとき、盤上のランダムな空きマスに味方の「炎」駒または「火」駒のどちらかをランダムに1体召喚する。';
+
 const CONCAVE_MOVE_INSPECT =
   '斜め前・左右・後ろ・斜め後の各筋に何マスでも進める（前方への直進は不可）。盤の端マスが空で、その筋の進路上に敵がいないとき、味方駒を飛び越えてその端まで進める（前方への直進の筋を除く）。貫通で端へ入る着手では敵駒を取れない。';
 
@@ -172,6 +181,27 @@ export function resolveInspectSkillDescription(
     (pieceCode && pieceCode.toUpperCase().includes('48204DCCFA56'))
   ) {
     return CONCAVE_SKILL_INSPECT;
+  }
+  if (
+    char === '焼' ||
+    (pieceCode && pieceCode.toUpperCase().includes('SEAR')) ||
+    (pieceCode && pieceCode.toUpperCase().includes('FDC83CF95746'))
+  ) {
+    return COOKING_SEAR_SKILL_INSPECT;
+  }
+  if (
+    char === '煮' ||
+    (pieceCode && pieceCode.toUpperCase().includes('STEW')) ||
+    (pieceCode && pieceCode.toUpperCase().includes('8DE5676A5E92'))
+  ) {
+    return COOKING_STEW_SKILL_INSPECT;
+  }
+  if (
+    char === '炒' ||
+    (pieceCode && pieceCode.toUpperCase().includes('SAUTE')) ||
+    (pieceCode && pieceCode.toUpperCase().includes('1732246A37D8'))
+  ) {
+    return COOKING_SAUTE_SKILL_INSPECT;
   }
   if (char === '山') return '嶺のスキルで召喚される補助駒。';
   const normalized = (desc ?? '').trim();

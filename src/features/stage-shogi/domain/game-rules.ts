@@ -205,6 +205,9 @@ const CAPTURE_CHAR_TO_HAND_CODE: Readonly<Record<string, string>> = {
   桜: 'CHERRY',
   凹: 'CONCAVE',
   凸: 'CONVEX',
+  焼: 'SEAR',
+  炒: 'SAUTE',
+  煮: 'STEW',
 };
 
 const OPAQUE_CAPTURE_CODE_TO_HAND_CODE: Readonly<Record<string, string>> = {
@@ -233,6 +236,9 @@ const OPAQUE_CAPTURE_CODE_TO_HAND_CODE: Readonly<Record<string, string>> = {
   PIECE_124C31EA5D7A: 'CHERRY',
   PIECE_48204DCCFA56: 'CONCAVE',
   PIECE_94B641477E72: 'CONVEX',
+  PIECE_FDC83CF95746: 'SEAR',
+  PIECE_1732246A37D8: 'SAUTE',
+  PIECE_8DE5676A5E92: 'STEW',
 };
 
 function opaqueCapturedCodeToHandCode(rawCode: string | null): string | null {
@@ -265,6 +271,12 @@ function opaqueCapturedCodeToHandCode(rawCode: string | null): string | null {
   if (upper.includes('124C31EA5D7A')) return 'CHERRY';
   if (upper.includes('48204DCCFA56')) return 'CONCAVE';
   if (upper.includes('94B641477E72')) return 'CONVEX';
+  if (upper.includes('FDC83CF95746')) return 'SEAR';
+  if (upper.includes('1732246A37D8')) return 'SAUTE';
+  if (upper.includes('8DE5676A5E92')) return 'STEW';
+  if (upper.includes('SEAR')) return 'SEAR';
+  if (upper.includes('SAUTE')) return 'SAUTE';
+  if (upper.includes('STEW')) return 'STEW';
   if (upper.includes('BLUEONI')) return 'BLUEONI';
   if (upper.includes('BLACKONI')) return 'BLACKONI';
   if (upper.includes('REDONI')) return 'REDONI';

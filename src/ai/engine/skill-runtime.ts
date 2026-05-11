@@ -820,6 +820,105 @@ function summonOrthogonalAdjacentEmptyPieces(input: {
   return summoned;
 }
 
+function isSearCaptureSkillPiece(piece: AiBoardPiece): boolean {
+  try {
+    if ((piece.char ?? '').normalize('NFKC') === '焼') return true;
+  } catch {
+    /* ignore */
+  }
+  if (piece.char === '焼') return true;
+  if (normalizeSkillPieceCode(toBasePieceCode(piece.pieceCode)) === 'SEAR') return true;
+  return (piece.pieceCode ?? '').toUpperCase().includes('FDC83CF95746');
+}
+
+function isStewCaptureSkillPiece(piece: AiBoardPiece): boolean {
+  try {
+    if ((piece.char ?? '').normalize('NFKC') === '煮') return true;
+  } catch {
+    /* ignore */
+  }
+  if (piece.char === '煮') return true;
+  if (normalizeSkillPieceCode(toBasePieceCode(piece.pieceCode)) === 'STEW') return true;
+  return (piece.pieceCode ?? '').toUpperCase().includes('8DE5676A5E92');
+}
+
+function isSauteCaptureSkillPiece(piece: AiBoardPiece): boolean {
+  try {
+    if ((piece.char ?? '').normalize('NFKC') === '炒') return true;
+  } catch {
+    /* ignore */
+  }
+  if (piece.char === '炒') return true;
+  if (normalizeSkillPieceCode(toBasePieceCode(piece.pieceCode)) === 'SAUTE') return true;
+  return (piece.pieceCode ?? '').toUpperCase().includes('1732246A37D8');
+}
+
+/**
+ * 「焼」「煮」「炒」: 敵駒を取ったとき、盤上の空きマス（岩・穴マス不可）に味方として「炎」または「火」を召喚する。
+ * 凸の2手目など手番が続く局面でも捕獲時に必ず評価されるよう apply-move から呼ぶ。
+ */
+export function applyCookingCaptureSummonEffects(input: {
+  position: AiBattlePosition;
+  pieces: AiBoardPiece[];
+  movedPiece: AiBoardPiece;
+  actorSide: Side;
+}): boolean {
+  const m = input.movedPiece;
+  const isSear = isSearCaptureSkillPiece(m);
+  const isStew = isStewCaptureSkillPiece(m);
+  const isSaute = isSauteCaptureSkillPiece(m);
+  if (!isSear && !isStew && !isSaute) return false;
+
+  const positionForView: AiBattlePosition = {
+    ...input.position,
+    boardState: {
+      ...(asRecord(input.position.boardState) ?? {}),
+      pieces: input.pieces.map((p) => ({ ...p })),
+    },
+  };
+  const view = createSkillRuntimeView(positionForView);
+
+  const candidates: { row: number; col: number }[] = [];
+  for (let row = 0; row < 9; row += 1) {
+    for (let col = 0; col < 9; col += 1) {
+      if (input.pieces.some((p) => p.row === row && p.col === col)) continue;
+      if (view.rockObstacleCells.has(`${row}:${col}`)) continue;
+      candidates.push({ row, col });
+    }
+  }
+  if (candidates.length === 0) return false;
+  const cell = candidates[Math.floor(Math.random() * candidates.length)]!;
+
+  let summonCode = 'ENN';
+  let summonChar = '炎';
+  if (isStew) {
+    summonCode = 'FIR';
+    summonChar = '火';
+  } else if (isSear) {
+    summonCode = 'ENN';
+    summonChar = '炎';
+  } else if (isSaute) {
+    if (Math.random() < 0.5) {
+      summonCode = 'ENN';
+      summonChar = '炎';
+    } else {
+      summonCode = 'FIR';
+      summonChar = '火';
+    }
+  }
+
+  input.pieces.push({
+    side: input.actorSide,
+    row: cell.row,
+    col: cell.col,
+    pieceCode: summonCode,
+    char: summonChar,
+    promoted: false,
+    imageSignedUrl: null,
+  });
+  return true;
+}
+
 /** 家スキル: 自陣4行の空マスに民を1体召喚（row 0 が盤の奥＝画面上端、player は手前 row 5–8 が自陣） */
 const HOUSE_SUMMON_HOME_DEPTH = 4;
 

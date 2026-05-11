@@ -25,6 +25,21 @@ function isConcaveCatalogPiece(piece: PieceCatalogItem): boolean {
   return piece.char === '凹' || code.includes('CONCAVE') || code.includes('48204DCCFA56');
 }
 
+function isSearCatalogPiece(piece: PieceCatalogItem): boolean {
+  const code = (piece.pieceCode ?? '').toUpperCase();
+  return piece.char === '焼' || code.includes('SEAR') || code.includes('FDC83CF95746');
+}
+
+function isStewCatalogPiece(piece: PieceCatalogItem): boolean {
+  const code = (piece.pieceCode ?? '').toUpperCase();
+  return piece.char === '煮' || code.includes('STEW') || code.includes('8DE5676A5E92');
+}
+
+function isSauteCatalogPiece(piece: PieceCatalogItem): boolean {
+  const code = (piece.pieceCode ?? '').toUpperCase();
+  return piece.char === '炒' || code.includes('SAUTE') || code.includes('1732246A37D8');
+}
+
 function normalizeCatalogSkillText(piece: PieceCatalogItem): string {
   const code = (piece.pieceCode ?? '').toUpperCase();
   const isDepressionPiece =
@@ -39,6 +54,15 @@ function normalizeCatalogSkillText(piece: PieceCatalogItem): string {
   }
   if (isConcaveCatalogPiece(piece)) {
     return 'なし。';
+  }
+  if (isSearCatalogPiece(piece)) {
+    return '敵駒を取ったとき、盤上のランダムな空きマスに味方の「炎」駒を1体召喚する。';
+  }
+  if (isStewCatalogPiece(piece)) {
+    return '敵駒を取ったとき、盤上のランダムな空きマスに味方の「火」駒を1体召喚する。';
+  }
+  if (isSauteCatalogPiece(piece)) {
+    return '敵駒を取ったとき、盤上のランダムな空きマスに味方の「炎」駒または「火」駒のどちらかをランダムに1体召喚する。';
   }
   return piece.skill;
 }

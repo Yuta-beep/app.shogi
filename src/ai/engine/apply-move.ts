@@ -30,6 +30,7 @@ import {
   createSkillRuntimeView,
   applyBoardHazardsOnLanding,
   applyMoveSkillEffects,
+  applyCookingCaptureSummonEffects,
   tickSkillStateDurations,
   resolveEvadeCaptureProcChanceForPiece,
   pieceHasActiveCaptureImmunityFromBoardState,
@@ -327,6 +328,15 @@ function resolveCapturedHandCode(
   if (capturedChar === '凸' || rawCapturedCode.includes('94B641477E72')) {
     return 'CONVEX';
   }
+  if (capturedChar === '焼' || rawCapturedCode.includes('FDC83CF95746')) {
+    return 'SEAR';
+  }
+  if (capturedChar === '炒' || rawCapturedCode.includes('1732246A37D8')) {
+    return 'SAUTE';
+  }
+  if (capturedChar === '煮' || rawCapturedCode.includes('8DE5676A5E92')) {
+    return 'STEW';
+  }
   if (rawCapturedCode.includes('SATORI')) {
     return 'SATORI';
   }
@@ -354,6 +364,15 @@ function resolveCapturedHandCode(
   if (rawCapturedCode.includes('CONVEX')) {
     return 'CONVEX';
   }
+  if (rawCapturedCode.includes('SEAR')) {
+    return 'SEAR';
+  }
+  if (rawCapturedCode.includes('SAUTE')) {
+    return 'SAUTE';
+  }
+  if (rawCapturedCode.includes('STEW')) {
+    return 'STEW';
+  }
   const fromCaptured = toBasePieceCode(capturedToHandPieceCode(captured));
   if (fromCaptured) return fromCaptured;
   const fb = toBasePieceCode(fallbackCapturedCode);
@@ -375,6 +394,9 @@ function resolveCapturedHandCode(
   if (fb.includes('CHERRY') || fb.includes('124C31EA5D7A')) return 'CHERRY';
   if (fb.includes('CONCAVE') || fb.includes('48204DCCFA56')) return 'CONCAVE';
   if (fb.includes('CONVEX') || fb.includes('94B641477E72')) return 'CONVEX';
+  if (fb.includes('SEAR') || fb.includes('FDC83CF95746')) return 'SEAR';
+  if (fb.includes('SAUTE') || fb.includes('1732246A37D8')) return 'SAUTE';
+  if (fb.includes('STEW') || fb.includes('8DE5676A5E92')) return 'STEW';
   // opaque id をそのまま手駒キーにしない（手駒表示不能の原因）。
   if (/^PIECE_[A-Z0-9_]+$/i.test(fb)) return null;
   return fb;
@@ -1597,6 +1619,22 @@ export function applyMove(input: {
     ...(nextPosition.boardState ?? {}),
     pieces: nextPieces.map((piece) => ({ ...piece })),
   };
+
+  if (applyLandingDerivedEffects && didCapture && movedPieceAfterApply) {
+    const cookingSummoned = applyCookingCaptureSummonEffects({
+      position: nextPosition,
+      pieces: nextPieces,
+      movedPiece: movedPieceAfterApply,
+      actorSide,
+    });
+    if (cookingSummoned) {
+      intrinsicCombatSkillTriggered = true;
+      nextPosition.boardState = {
+        ...(nextPosition.boardState ?? {}),
+        pieces: nextPieces.map((piece) => ({ ...piece })),
+      };
+    }
+  }
 
   // スキルで盤上座標が変わる（例: 水の押し流し）ため、
   // boardState だけでなく SFEN も同じターン内で再構築して二重表示を防ぐ。

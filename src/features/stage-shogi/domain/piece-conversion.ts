@@ -473,6 +473,9 @@ export const CODE_TO_CHAR: Readonly<Record<string, string>> = {
   CHERRY: '桜',
   CONCAVE: '凹',
   CONVEX: '凸',
+  SEAR: '焼',
+  SAUTE: '炒',
+  STEW: '煮',
 };
 
 export const PROMOTED_CODE_TO_CHAR: Readonly<Record<string, string>> = {
@@ -565,6 +568,9 @@ export const CHAR_TO_CODE: Readonly<Record<string, string>> = {
   桜: 'CHERRY',
   凹: 'CONCAVE',
   凸: 'CONVEX',
+  焼: 'SEAR',
+  炒: 'SAUTE',
+  煮: 'STEW',
   /** 刀／剣／銃／鎧／盾は `CHAR_TO_CODE` に載せない（`piecesFromBoardState` が canonical に寄せて `resolvePieceDef` が壊れる）。手駒は `game-rules` の CAPTURE_CHAR_TO_HAND_CODE。 */
 };
 

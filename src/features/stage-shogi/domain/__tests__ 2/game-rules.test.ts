@@ -157,4 +157,34 @@ describe('stage shogi game rules', () => {
     expect(capturedToHandPieceCode(satoriOpaque)).toBe('SATORI');
     expect(capturedToHandPieceCode(heartOpaque)).toBe('HEART');
   });
+
+  it('maps captured 焼／炒／煮 from kanji or stage opaque piece id', () => {
+    expect(
+      capturedToHandPieceCode({
+        side: 'enemy',
+        row: 0,
+        col: 0,
+        pieceCode: 'piece_fdc83cf95746',
+        char: '焼',
+      }),
+    ).toBe('SEAR');
+    expect(
+      capturedToHandPieceCode({
+        side: 'enemy',
+        row: 0,
+        col: 0,
+        pieceCode: null,
+        char: '炒',
+      }),
+    ).toBe('SAUTE');
+    expect(
+      capturedToHandPieceCode({
+        side: 'enemy',
+        row: 0,
+        col: 0,
+        pieceCode: 'PIECE_8DE5676A5E92',
+        char: '煮',
+      }),
+    ).toBe('STEW');
+  });
 });

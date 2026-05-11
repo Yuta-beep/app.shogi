@@ -633,6 +633,15 @@ function resolvePieceCodeForLegalMove(piece: AiBoardPiece, lookups: AiPieceLooku
   if (ch === '凸' || rawUp.includes('94B641477E72') || rawUp.includes('CONVEX')) {
     return 'CONVEX';
   }
+  if (ch === '焼' || rawUp.includes('FDC83CF95746') || rawUp.includes('SEAR')) {
+    return 'SEAR';
+  }
+  if (ch === '炒' || rawUp.includes('1732246A37D8') || rawUp.includes('SAUTE')) {
+    return 'SAUTE';
+  }
+  if (ch === '煮' || rawUp.includes('8DE5676A5E92') || rawUp.includes('STEW')) {
+    return 'STEW';
+  }
   const legacy = toBasePieceCode(CHAR_TO_CODE[piece.char]);
   if (legacy) return legacy;
   return 'FU';
