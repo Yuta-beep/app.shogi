@@ -337,6 +337,21 @@ function resolveCapturedHandCode(
   if (capturedChar === '煮' || rawCapturedCode.includes('8DE5676A5E92')) {
     return 'STEW';
   }
+  if (capturedChar === '陽' || rawCapturedCode.includes('313B9456C8AC')) {
+    return 'YANG';
+  }
+  if (capturedChar === '陰' || rawCapturedCode.includes('A67CE76969F7')) {
+    return 'YIN';
+  }
+  if (capturedChar === '牛' || rawCapturedCode.includes('F75D88C48D6D')) {
+    return 'COW';
+  }
+  if (capturedChar === '豚' || rawCapturedCode.includes('3EFA5702E75B')) {
+    return 'PIG';
+  }
+  if (capturedChar === '鶏' || rawCapturedCode.includes('F1A6EF3B99DF')) {
+    return 'CHICKEN';
+  }
   if (rawCapturedCode.includes('SATORI')) {
     return 'SATORI';
   }
@@ -373,6 +388,21 @@ function resolveCapturedHandCode(
   if (rawCapturedCode.includes('STEW')) {
     return 'STEW';
   }
+  if (rawCapturedCode.includes('YANG')) {
+    return 'YANG';
+  }
+  if (rawCapturedCode.includes('YIN')) {
+    return 'YIN';
+  }
+  if (rawCapturedCode.includes('COW')) {
+    return 'COW';
+  }
+  if (rawCapturedCode.includes('PIG')) {
+    return 'PIG';
+  }
+  if (rawCapturedCode.includes('CHICKEN')) {
+    return 'CHICKEN';
+  }
   const fromCaptured = toBasePieceCode(capturedToHandPieceCode(captured));
   if (fromCaptured) return fromCaptured;
   const fb = toBasePieceCode(fallbackCapturedCode);
@@ -397,6 +427,11 @@ function resolveCapturedHandCode(
   if (fb.includes('SEAR') || fb.includes('FDC83CF95746')) return 'SEAR';
   if (fb.includes('SAUTE') || fb.includes('1732246A37D8')) return 'SAUTE';
   if (fb.includes('STEW') || fb.includes('8DE5676A5E92')) return 'STEW';
+  if (fb.includes('YANG') || fb.includes('313B9456C8AC')) return 'YANG';
+  if (fb.includes('YIN') || fb.includes('A67CE76969F7')) return 'YIN';
+  if (fb.includes('COW') || fb.includes('F75D88C48D6D')) return 'COW';
+  if (fb.includes('PIG') || fb.includes('3EFA5702E75B')) return 'PIG';
+  if (fb.includes('CHICKEN') || fb.includes('F1A6EF3B99DF')) return 'CHICKEN';
   // opaque id をそのまま手駒キーにしない（手駒表示不能の原因）。
   if (/^PIECE_[A-Z0-9_]+$/i.test(fb)) return null;
   return fb;
@@ -732,6 +767,40 @@ function computeGunPenetrationMidpoint(
   return null;
 }
 
+function gunForwardRowDeltaForApply(side: Side): number {
+  return side === 'player' ? -1 : 1;
+}
+
+function isCowPieceForApply(piece: { pieceCode: string | null; char: string }): boolean {
+  if (normKanjiForEngineRules(piece.char) === '牛') return true;
+  const b = toBasePieceCode(piece.pieceCode);
+  if (b === 'COW') return true;
+  return (piece.pieceCode ?? '').toUpperCase().includes('F75D88C48D6D');
+}
+
+function isPigPieceForApply(piece: { pieceCode: string | null; char: string }): boolean {
+  if (normKanjiForEngineRules(piece.char) === '豚') return true;
+  const b = toBasePieceCode(piece.pieceCode);
+  if (b === 'PIG') return true;
+  return (piece.pieceCode ?? '').toUpperCase().includes('3EFA5702E75B');
+}
+
+function computeCowForwardPathDistanceForApply(
+  side: Side,
+  fromRow: number,
+  fromCol: number,
+  toRow: number,
+  toCol: number,
+): number | null {
+  if (fromCol !== toCol) return null;
+  const d = gunForwardRowDeltaForApply(side);
+  const dr = toRow - fromRow;
+  if (dr === 0) return null;
+  if (dr % d !== 0) return null;
+  const dist = dr / d;
+  return dist >= 1 ? dist : null;
+}
+
 type HandsBag = ReturnType<typeof normalizeHandsStateKeys>;
 
 function cloneCombatBoardSnapshot(input: { pieces: AiBoardPiece[]; hands: HandsBag }): {
@@ -787,6 +856,7 @@ function applyHostileCaptureAtCell(input: {
       captured.side,
       input.row,
       input.col,
+      nextPieces,
     )
   ) {
     throw new Error('cannot capture immunity');
@@ -1161,7 +1231,55 @@ export function applyMove(input: {
       }
     }
 
+    let cowChargedPathDist: number | null = null;
+    if (isCowPieceForApply(movingPiece) && move.fromRow != null && move.fromCol != null) {
+      cowChargedPathDist = computeCowForwardPathDistanceForApply(
+        actorSide,
+        move.fromRow,
+        move.fromCol,
+        move.toRow,
+        move.toCol,
+      );
+      if (cowChargedPathDist != null && cowChargedPathDist > 1) {
+        const d = gunForwardRowDeltaForApply(actorSide);
+        for (let s = 1; s < cowChargedPathDist; s += 1) {
+          const r = move.fromRow + d * s;
+          const c = move.fromCol;
+          const mid = findPieceAt(nextPieces, r, c);
+          if (!mid) continue;
+          if (mid.side === actorSide) {
+            throw new Error('cow path blocked by ally');
+          }
+          const midHole = isHolePieceForApply(mid);
+          const midRes = applyHostileCaptureAtCell({
+            boardState: current.boardState as Record<string, unknown> | undefined,
+            nextPieces,
+            hands,
+            actorSide,
+            row: r,
+            col: c,
+            fallbackCapturedCode: null,
+          });
+          if (midRes.rebuffKboss) {
+            throw new Error('invalid cow move: kboss path');
+          }
+          nextPieces = midRes.nextPieces;
+          hands = midRes.hands;
+          if (midRes.didCapture) {
+            didCapture = true;
+            intrinsicCombatSkillTriggered = true;
+            if (midHole) {
+              capturedHoleCellsByActor.push({ row: r, col: c });
+            }
+          }
+          if (midRes.starReturnProcTriggered) starReturnProcTriggered = true;
+          if (midRes.deathCapturedByActor) deathCapturedByActor = true;
+        }
+      }
+    }
+
     const captured = findPieceAt(nextPieces, move.toRow, move.toCol);
+    let pigInheritVictim: AiBoardPiece | null = null;
     let rebuffKboss = false;
     if (captured) {
       const captureOwnPiece = captured.side === actorSide;
@@ -1281,6 +1399,9 @@ export function applyMove(input: {
         }
       } else {
         didCapture = true;
+        if (!captureOwnPiece && isPigPieceForApply(movingPiece)) {
+          pigInheritVictim = captured;
+        }
         {
           const capturedChar = (() => {
             try {
@@ -1396,19 +1517,85 @@ export function applyMove(input: {
       const resolvedChar = pieceChar(moving.pieceCode, nextPromoted);
       // pieceCode が剣と共有（SWORD 等）のとき pieceChar が「剣」になり、刀の intrinsic が死ぬのを防ぐ。銃も同様。
       const nextChar =
-        isKatanaPieceForApply(moving) || isGunPieceForApply(moving)
+        isKatanaPieceForApply(moving) ||
+        isGunPieceForApply(moving) ||
+        isCowPieceForApply(moving) ||
+        isPigPieceForApply(moving)
           ? moving.char
           : resolvedChar === '?' ||
               (toBasePieceCode(moving.pieceCode) != null &&
                 resolvedChar === toBasePieceCode(moving.pieceCode))
             ? moving.char
             : resolvedChar;
+      const cowFwdDistForCharge =
+        move.fromRow != null && move.fromCol != null
+          ? computeCowForwardPathDistanceForApply(
+              actorSide,
+              move.fromRow,
+              move.fromCol,
+              move.toRow,
+              move.toCol,
+            )
+          : null;
+      const isCowFwdMove = isCowPieceForApply(moving) && cowFwdDistForCharge != null;
+      const isCowBackMove =
+        isCowPieceForApply(moving) &&
+        move.fromRow != null &&
+        move.toCol === move.fromCol &&
+        move.toRow - move.fromRow === -gunForwardRowDeltaForApply(actorSide);
       nextPieces[movingIndexAfterCapture] = {
         ...moving,
         row: move.toRow,
         col: move.toCol,
         promoted: nextPromoted,
         char: nextChar,
+        ...(isCowPieceForApply(moving)
+          ? {
+              cowChargeCount: isCowFwdMove
+                ? 0
+                : isCowBackMove
+                  ? Math.min(8, Math.max(0, Math.floor(moving.cowChargeCount ?? 0)) + 1)
+                  : Math.max(0, Math.floor(moving.cowChargeCount ?? 0)),
+            }
+          : {}),
+        ...(isPigPieceForApply(moving)
+          ? pigInheritVictim
+            ? (() => {
+                const resolved =
+                  resolveCapturedHandCode(
+                    pigInheritVictim,
+                    toBasePieceCode(move.capturedPieceCode),
+                  ) ?? toBasePieceCode(pigInheritVictim.pieceCode);
+                const code =
+                  resolved && `${resolved}`.trim() !== ''
+                    ? `${resolved}`.trim().toUpperCase()
+                    : null;
+                return code
+                  ? {
+                      pigInheritedPieceCode: code,
+                      pigInheritedChar: pigInheritVictim.char,
+                      pigInheritedPromoted: pigInheritVictim.promoted ?? false,
+                    }
+                  : {
+                      pigInheritedPieceCode: moving.pigInheritedPieceCode ?? null,
+                      ...(moving.pigInheritedChar != null
+                        ? { pigInheritedChar: moving.pigInheritedChar }
+                        : {}),
+                      ...(moving.pigInheritedPromoted != null
+                        ? { pigInheritedPromoted: moving.pigInheritedPromoted }
+                        : {}),
+                    };
+              })()
+            : {
+                pigInheritedPieceCode: moving.pigInheritedPieceCode ?? null,
+                ...(moving.pigInheritedChar != null
+                  ? { pigInheritedChar: moving.pigInheritedChar }
+                  : {}),
+                ...(moving.pigInheritedPromoted != null
+                  ? { pigInheritedPromoted: moving.pigInheritedPromoted }
+                  : {}),
+              }
+          : {}),
       };
       movedPieceAfterApply = nextPieces[movingIndexAfterCapture] ?? null;
     } else {
@@ -1417,6 +1604,14 @@ export function applyMove(input: {
 
     // 銃の貫通手で敵を取った（中点のみ／先のみ／両方）ときスキル発動扱いにする。
     if (gunPen != null && isGunPieceForApply(movingPiece) && didCapture) {
+      intrinsicCombatSkillTriggered = true;
+    }
+    if (
+      cowChargedPathDist != null &&
+      cowChargedPathDist > 1 &&
+      isCowPieceForApply(movingPiece) &&
+      didCapture
+    ) {
       intrinsicCombatSkillTriggered = true;
     }
 

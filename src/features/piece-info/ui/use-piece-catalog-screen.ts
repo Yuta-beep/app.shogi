@@ -64,6 +64,10 @@ function normalizeCatalogSkillText(piece: PieceCatalogItem): string {
   if (isSauteCatalogPiece(piece)) {
     return '敵駒を取ったとき、盤上のランダムな空きマスに味方の「炎」駒または「火」駒のどちらかをランダムに1体召喚する。';
   }
+  const pc = (piece.pieceCode ?? '').toUpperCase();
+  if (piece.char === '鶏' || pc.includes('CHICKEN') || pc.includes('F1A6EF3B99DF')) {
+    return 'なし';
+  }
   return piece.skill;
 }
 

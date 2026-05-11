@@ -204,6 +204,14 @@ export function resolveInspectSkillDescription(
     return COOKING_SAUTE_SKILL_INSPECT;
   }
   if (char === '山') return '嶺のスキルで召喚される補助駒。';
+  if (
+    char === '鶏' ||
+    (pieceCode &&
+      (pieceCode.toUpperCase().includes('CHICKEN') ||
+        pieceCode.toUpperCase().includes('F1A6EF3B99DF')))
+  ) {
+    return 'なし';
+  }
   const normalized = (desc ?? '').trim();
   return normalized.length > 0 ? normalized : '詳細は準備中です。';
 }

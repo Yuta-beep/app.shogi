@@ -919,6 +919,84 @@ export function applyCookingCaptureSummonEffects(input: {
   return true;
 }
 
+function isYangAllyAuraPiece(piece: AiBoardPiece): boolean {
+  try {
+    if ((piece.char ?? '').normalize('NFKC') === '陽') return true;
+  } catch {
+    /* ignore */
+  }
+  if (piece.char === '陽') return true;
+  if (normalizeSkillPieceCode(toBasePieceCode(piece.pieceCode)) === 'YANG') return true;
+  return (piece.pieceCode ?? '').toUpperCase().includes('313B9456C8AC');
+}
+
+function isYinYangBondPiece(piece: AiBoardPiece): boolean {
+  try {
+    if ((piece.char ?? '').normalize('NFKC') === '陰') return true;
+  } catch {
+    /* ignore */
+  }
+  if (piece.char === '陰') return true;
+  if (normalizeSkillPieceCode(toBasePieceCode(piece.pieceCode)) === 'YIN') return true;
+  return (piece.pieceCode ?? '').toUpperCase().includes('A67CE76969F7');
+}
+
+function allyYinSharesRowOrColumnWithYang(pieces: AiBoardPiece[], yang: AiBoardPiece): boolean {
+  return pieces.some(
+    (p) =>
+      p !== yang &&
+      p.side === yang.side &&
+      isYinYangBondPiece(p) &&
+      (p.row === yang.row || p.col === yang.col),
+  );
+}
+
+function allyYangSharesRowOrColumnWithYin(pieces: AiBoardPiece[], yin: AiBoardPiece): boolean {
+  return pieces.some(
+    (p) =>
+      p !== yin &&
+      p.side === yin.side &&
+      isYangAllyAuraPiece(p) &&
+      (p.row === yin.row || p.col === yin.col),
+  );
+}
+
+/** 味方「陰」が同一行または同一列にいる「陽」は敵に取られない（合法手・捕捉の両方で参照）。 */
+export function isYangBondProtectedFromCapture(pieces: AiBoardPiece[], target: AiBoardPiece): boolean {
+  if (!isYangAllyAuraPiece(target)) return false;
+  return allyYinSharesRowOrColumnWithYang(pieces, target);
+}
+
+/** 味方「陽」が同一行または同一列にいる「陰」は敵に取られない（合法手・捕捉の両方で参照）。 */
+export function isYinBondProtectedFromCapture(pieces: AiBoardPiece[], target: AiBoardPiece): boolean {
+  if (!isYinYangBondPiece(target)) return false;
+  return allyYangSharesRowOrColumnWithYin(pieces, target);
+}
+
+/** 味方「陽」の周囲8マスにいるとき、スキル発動確率を 1.3 倍（上限1）。 */
+export function computeYangSkillProcFactorForMover(
+  pieces: AiBoardPiece[],
+  actorSide: Side,
+  movedPiece: AiBoardPiece | null,
+): number {
+  if (!movedPiece || movedPiece.side !== actorSide) return 1;
+  for (const p of pieces) {
+    if (p.side !== actorSide) continue;
+    if (!isYangAllyAuraPiece(p)) continue;
+    const dr = Math.abs(p.row - movedPiece.row);
+    const dc = Math.abs(p.col - movedPiece.col);
+    if (dr <= 1 && dc <= 1 && (dr !== 0 || dc !== 0)) return 1.3;
+  }
+  return 1;
+}
+
+export function applyYangAllySkillProcMultiplier(baseChance: number, yangFactor: number): number {
+  if (yangFactor <= 1) return baseChance;
+  if (!Number.isFinite(baseChance) || baseChance <= 0) return baseChance;
+  if (baseChance >= 1) return baseChance;
+  return Math.min(1, baseChance * yangFactor);
+}
+
 /** 家スキル: 自陣4行の空マスに民を1体召喚（row 0 が盤の奥＝画面上端、player は手前 row 5–8 が自陣） */
 const HOUSE_SUMMON_HOME_DEPTH = 4;
 
@@ -983,6 +1061,26 @@ function sideOpposite(side: Side): Side {
 
 function cellKey(side: Side, row: number, col: number): string {
   return `${side}:${row}:${col}`;
+}
+
+/**
+ * いずれかの「陰」の周囲8マスにいる **その陰にとっての敵駒** が着手したとき、
+ * その駒のスキルは発動しない（陰と同じ側の駒は対象外）。
+ */
+export function isActorSkillProcSuppressedByAdjacentEnemyYin(
+  pieces: AiBoardPiece[],
+  actorSide: Side,
+  movedPiece: AiBoardPiece | null,
+): boolean {
+  if (!movedPiece || movedPiece.side !== actorSide) return false;
+  for (const yin of pieces) {
+    if (!isYinYangBondPiece(yin)) continue;
+    if (yin.side === movedPiece.side) continue;
+    const dr = Math.abs(yin.row - movedPiece.row);
+    const dc = Math.abs(yin.col - movedPiece.col);
+    if (dr <= 1 && dc <= 1 && (dr !== 0 || dc !== 0)) return true;
+  }
+  return false;
 }
 
 function hasAdjacentPiece(input: {
@@ -1119,6 +1217,7 @@ export function pieceHasActiveCaptureImmunityFromBoardState(
   side: Side,
   row: number,
   col: number,
+  pieces?: AiBoardPiece[] | null,
 ): boolean {
   const placeholder: AiBattlePosition = {
     sideToMove: 'player',
@@ -1140,6 +1239,11 @@ export function pieceHasActiveCaptureImmunityFromBoardState(
     const c = asNumber(entry.col);
     if (r == null || c == null) continue;
     if (s === side && r === row && c === col) return true;
+  }
+  if (pieces && pieces.length > 0) {
+    const target = pieces.find((p) => p.side === side && p.row === row && p.col === col);
+    if (target && isYangBondProtectedFromCapture(pieces, target)) return true;
+    if (target && isYinBondProtectedFromCapture(pieces, target)) return true;
   }
   return false;
 }
@@ -1245,6 +1349,15 @@ export function createSkillRuntimeView(position: AiBattlePosition): SkillRuntime
     const col = asNumber(entry.col);
     if (row == null || col == null) continue;
     captureImmunityCells.add(cellKey(side, row, col));
+  }
+
+  for (const p of boardPieces) {
+    if (
+      isYangBondProtectedFromCapture(boardPieces, p) ||
+      isYinBondProtectedFromCapture(boardPieces, p)
+    ) {
+      captureImmunityCells.add(cellKey(p.side, p.row, p.col));
+    }
   }
 
   const thornDropBlockedCells = new Set<string>();
@@ -1425,12 +1538,27 @@ export function applyMoveSkillEffects(input: {
 }) {
   const movedCodeRaw = toBasePieceCode(input.move.pieceCode);
   const movedCode = normalizeSkillPieceCode(movedCodeRaw);
+  const movedPiece = input.movedPiece;
+  const yangSkillProcFactor = computeYangSkillProcFactorForMover(
+    input.pieces,
+    input.actorSide,
+    movedPiece,
+  );
+  const yinEnemySuppressesSkills = isActorSkillProcSuppressedByAdjacentEnemyYin(
+    input.pieces,
+    input.actorSide,
+    movedPiece,
+  );
+  const skillProcRoll = (p: number): boolean => {
+    if (yinEnemySuppressesSkills) return false;
+    const eff = applyYangAllySkillProcMultiplier(p, yangSkillProcFactor);
+    return Math.random() <= eff;
+  };
   if (!movedCode) return;
   const boardState = asRecord(input.position.boardState) ?? {};
   const defsRoot = asRecord(boardState.skill_definitions_v2 ?? boardState.skillDefinitionsV2);
   const defs = asArray(defsRoot?.definitions);
   const state = readSkillState(input.position);
-  const movedPiece = input.movedPiece;
   if (input.move.fromRow != null && input.move.fromCol != null && movedPiece) {
     state.piece_statuses = state.piece_statuses.map((entry) => {
       const statusType = asString(entry.status_type ?? entry.statusType) ?? '';
@@ -1581,8 +1709,7 @@ export function applyMoveSkillEffects(input: {
     input.movedPiece
   ) {
     const procChance = 0.2;
-    const roll = Math.random();
-    const triggered = roll <= procChance;
+    const triggered = skillProcRoll(procChance);
     if (triggered) {
       removeRandomAdjacentEnemyPiece({
         pieces: input.pieces,
@@ -1594,8 +1721,7 @@ export function applyMoveSkillEffects(input: {
   // 火: 移動時20%で敵の手持ち駒を1つ消滅。
   if (isFireMover && input.move.fromRow != null && input.move.fromCol != null) {
     const procChance = 0.2;
-    const roll = Math.random();
-    const triggered = roll <= procChance;
+    const triggered = skillProcRoll(procChance);
     if (triggered) {
       decrementFirstHandPiece(input.position, sideOpposite(input.actorSide));
     }
@@ -1603,8 +1729,7 @@ export function applyMoveSkillEffects(input: {
   // 宝: 移動時20%で手持ちに金・銀・銅のいずれか1つを加える。
   if (isTreasureMover && input.move.fromRow != null && input.move.fromCol != null) {
     const procChance = 0.2;
-    const roll = Math.random();
-    const triggered = roll <= procChance;
+    const triggered = skillProcRoll(procChance);
     let grantedCode: string | null = null;
     if (triggered) {
       const idx = Math.floor(Math.random() * TREASURE_REWARD_CODES.length);
@@ -1619,7 +1744,7 @@ export function applyMoveSkillEffects(input: {
         turnNumber: input.position.turnNumber,
         pieceCode: movedCode,
         procChance,
-        roll,
+        effectiveChance: applyYangAllySkillProcMultiplier(procChance, yangSkillProcFactor),
         triggered,
         grantedCode,
       });
@@ -1757,8 +1882,7 @@ export function applyMoveSkillEffects(input: {
   // 魚: 移動時30%で周囲の敵駒1体（玉除く）を3ターン行動不能（stun）。
   if (isFishMover && input.move.fromRow != null && input.move.fromCol != null && movedPiece) {
     const procChance = 0.3;
-    const roll = Math.random();
-    const triggered = roll <= procChance;
+    const triggered = skillProcRoll(procChance);
     if (triggered) {
       const candidates = input.pieces.filter((piece) => {
         if (piece.side === input.actorSide) return false;
@@ -1785,8 +1909,7 @@ export function applyMoveSkillEffects(input: {
   // 苔: 移動時30%で周囲の空きマスに苔駒（MOSS）を1体召喚。
   if (isMossMover && input.move.fromRow != null && input.move.fromCol != null && input.movedPiece) {
     const procChance = 0.3;
-    const roll = Math.random();
-    const triggered = roll <= procChance;
+    const triggered = skillProcRoll(procChance);
     if (triggered) {
       summonRandomAdjacentEmptyPiece({
         pieces: input.pieces,
@@ -1878,8 +2001,7 @@ export function applyMoveSkillEffects(input: {
     input.movedPiece
   ) {
     const procChance = 0.2;
-    const roll = Math.random();
-    const triggered = roll <= procChance;
+    const triggered = skillProcRoll(procChance);
     waterfallSkillDebugLog({
       phase: 'proc-roll',
       moveCount: input.position.moveCount,
@@ -1888,7 +2010,7 @@ export function applyMoveSkillEffects(input: {
       from: [input.move.fromRow, input.move.fromCol],
       to: [input.move.toRow, input.move.toCol],
       procChance,
-      roll,
+      effectiveChance: applyYangAllySkillProcMultiplier(procChance, yangSkillProcFactor),
       triggered,
     });
     if (triggered) {
@@ -2015,8 +2137,7 @@ export function applyMoveSkillEffects(input: {
   // 錫: 移動時10%で周囲8マスの敵駒（玉除く）を2ターン行動不能（stun）。
   if (isTinMover && input.move.fromRow != null && input.move.fromCol != null && input.movedPiece) {
     const procChance = 0.1;
-    const roll = Math.random();
-    const triggered = roll <= procChance;
+    const triggered = skillProcRoll(procChance);
     if (triggered) {
       for (let dr = -1; dr <= 1; dr += 1) {
         for (let dc = -1; dc <= 1; dc += 1) {
@@ -2047,8 +2168,7 @@ export function applyMoveSkillEffects(input: {
   // 電: 移動時20%で周囲8マスの敵駒1体（玉除く）を3ターン行動不能（stun）。
   if (isElectricMover && input.move.fromRow != null && input.move.fromCol != null && movedPiece) {
     const procChance = 0.2;
-    const roll = Math.random();
-    const triggered = roll <= procChance;
+    const triggered = skillProcRoll(procChance);
     if (triggered) {
       const candidates = input.pieces.filter((piece) => {
         if (piece.side === input.actorSide) return false;
@@ -2075,8 +2195,7 @@ export function applyMoveSkillEffects(input: {
   // 雷: 移動時10%で相手手持ち駒を最大2つランダム消滅。
   if (isThunderMover && input.move.fromRow != null && input.move.fromCol != null) {
     const procChance = 0.1;
-    const roll = Math.random();
-    const triggered = roll <= procChance;
+    const triggered = skillProcRoll(procChance);
     const removedHandCodes: string[] = [];
     if (triggered) {
       const targetSide = sideOpposite(input.actorSide);
@@ -2090,8 +2209,7 @@ export function applyMoveSkillEffects(input: {
   // 氷: 移動時30%で周囲8マスの敵駒（玉除く）1体を2ターン行動不能（stun）。
   if (isIceMover && input.move.fromRow != null && input.move.fromCol != null && movedPiece) {
     const procChance = 0.3;
-    const roll = Math.random();
-    const triggered = roll <= procChance;
+    const triggered = skillProcRoll(procChance);
     if (triggered) {
       const candidates = input.pieces.filter((piece) => {
         if (piece.side === input.actorSide) return false;
@@ -2118,8 +2236,7 @@ export function applyMoveSkillEffects(input: {
   // 雪: 移動時20%で手持ちに氷（ICE）を1つ加える。
   if (isSnowMover && input.move.fromRow != null && input.move.fromCol != null) {
     const procChance = 0.2;
-    const roll = Math.random();
-    const triggered = roll <= procChance;
+    const triggered = skillProcRoll(procChance);
     if (triggered) {
       incrementHand(input.position, input.actorSide, 'ICE', 1);
     }
@@ -2181,8 +2298,7 @@ export function applyMoveSkillEffects(input: {
   // 木: 移動時10%で周囲8マスのランダム1マスに木を召喚。
   if (isWoodMover && input.move.fromRow != null && input.move.fromCol != null && input.movedPiece) {
     const procChance = 0.1;
-    const roll = Math.random();
-    const triggered = roll <= procChance;
+    const triggered = skillProcRoll(procChance);
     if (triggered) {
       summonRandomAdjacentEmptyPiece({
         pieces: input.pieces,
@@ -2196,8 +2312,7 @@ export function applyMoveSkillEffects(input: {
   // 葉: 移動時10%で周囲8マスのランダム1マスに葉を召喚。
   if (isLeafMover && input.move.fromRow != null && input.move.fromCol != null && input.movedPiece) {
     const procChance = 0.1;
-    const roll = Math.random();
-    const triggered = roll <= procChance;
+    const triggered = skillProcRoll(procChance);
     if (triggered) {
       summonRandomAdjacentEmptyPiece({
         pieces: input.pieces,
@@ -2211,8 +2326,7 @@ export function applyMoveSkillEffects(input: {
   // 犇: 移動時10%で前後左右4マスの空きマスに犇を召喚。
   if (isBullMover && input.move.fromRow != null && input.move.fromCol != null && input.movedPiece) {
     const procChance = 0.1;
-    const roll = Math.random();
-    const triggered = roll <= procChance;
+    const triggered = skillProcRoll(procChance);
     const summoned = triggered
       ? summonOrthogonalAdjacentEmptyPieces({
           pieces: input.pieces,
@@ -2228,7 +2342,7 @@ export function applyMoveSkillEffects(input: {
       actorSide: input.actorSide,
       at: [input.movedPiece.row, input.movedPiece.col],
       procChance,
-      roll,
+      effectiveChance: applyYangAllySkillProcMultiplier(procChance, yangSkillProcFactor),
       triggered,
       summonedCount: summoned.length,
       summoned,
@@ -2296,7 +2410,7 @@ export function applyMoveSkillEffects(input: {
     input.move.fromCol != null &&
     input.movedPiece
   ) {
-    if (Math.random() <= 0.1) {
+    if (skillProcRoll(0.1)) {
       removeUpToRandomAdjacentEnemyPieces({
         pieces: input.pieces,
         center: input.movedPiece,
@@ -2312,9 +2426,7 @@ export function applyMoveSkillEffects(input: {
     input.move.fromCol != null &&
     input.movedPiece
   ) {
-    const procChance = 0.1;
-    const roll = Math.random();
-    if (roll <= procChance) {
+    if (skillProcRoll(0.1)) {
       removeUpToRandomAdjacentEnemyPieces({
         pieces: input.pieces,
         center: input.movedPiece,
@@ -2442,8 +2554,7 @@ export function applyMoveSkillEffects(input: {
   // 嶺: 移動時20%で周囲1マスの空きマスに「山」駒を1体召喚。
   if (isRidgeMover && input.move.fromRow != null && input.move.fromCol != null && movedPiece) {
     const procChance = 0.2;
-    const roll = Math.random();
-    const triggered = roll <= procChance;
+    const triggered = skillProcRoll(procChance);
     let summoned = false;
     let summonRow: number | null = null;
     let summonCol: number | null = null;
@@ -2480,7 +2591,7 @@ export function applyMoveSkillEffects(input: {
         moveCount: input.position.moveCount,
         turnNumber: input.position.turnNumber,
         procChance,
-        roll,
+        effectiveChance: applyYangAllySkillProcMultiplier(procChance, yangSkillProcFactor),
         triggered,
         summoned,
         summonRow,
@@ -2491,8 +2602,7 @@ export function applyMoveSkillEffects(input: {
   // K 博士: 移動・打ち後 40% で周囲 8 マスの空き 1 マスに「実」を召喚（味方として出現）。
   if (isKbossMover && movedPiece) {
     const procChance = 0.4;
-    const roll = Math.random();
-    if (roll <= procChance) {
+    if (skillProcRoll(procChance)) {
       const template = input.pieces.find((p) => p.char === '実' && p.pieceCode) ?? null;
       const summonCode =
         (template?.pieceCode ? toBasePieceCode(template.pieceCode) : null) ?? 'EXPERIMENT';
@@ -2512,8 +2622,7 @@ export function applyMoveSkillEffects(input: {
   // 鉱: 移動時20%で味方の歩1体を金/銀/銅のいずれかへ変化。
   if (isOreMover && input.move.fromRow != null && input.move.fromCol != null && movedPiece) {
     const procChance = 0.2;
-    const roll = Math.random();
-    const triggered = roll <= procChance;
+    const triggered = skillProcRoll(procChance);
     let transformed = false;
     let targetRow: number | null = null;
     let targetCol: number | null = null;
@@ -2541,8 +2650,7 @@ export function applyMoveSkillEffects(input: {
   // 墓: 移動時20%で周囲8マスの空きマス1つに霊を召喚。
   if (isGraveMover && input.move.fromRow != null && input.move.fromCol != null && movedPiece) {
     const procChance = 0.2;
-    const roll = Math.random();
-    const triggered = roll <= procChance;
+    const triggered = skillProcRoll(procChance);
     let summoned = false;
     let summonRow: number | null = null;
     let summonCol: number | null = null;
@@ -2782,8 +2890,7 @@ export function applyMoveSkillEffects(input: {
           procChance = procChance / 100;
         }
         if (procChance != null && procChance > 0 && procChance < 1) {
-          const roll = Math.random();
-          const triggered = roll <= procChance;
+          const triggered = skillProcRoll(procChance);
           if (!triggered) {
             blockedByCondition = true;
             break;
@@ -3304,8 +3411,7 @@ export function applyMoveSkillEffects(input: {
               continue;
             }
             if (star) {
-              const roll = Math.random();
-              if (roll <= 0.4) {
+              if (skillProcRoll(0.4)) {
                 incrementHand(input.position, target.side, 'HOS', 1);
               } else {
                 const code = toBasePieceCode(capturedToHandPieceCode(target));
@@ -3316,7 +3422,7 @@ export function applyMoveSkillEffects(input: {
             const code = toBasePieceCode(capturedToHandPieceCode(target));
             if (code) incrementHand(input.position, input.actorSide, code, 1);
           }
-          continue;
+        continue;
         }
         for (let dr = -1; dr <= 1; dr += 1) {
           for (let dc = -1; dc <= 1; dc += 1) {
@@ -3386,8 +3492,7 @@ export function applyMoveSkillEffects(input: {
           input.pieces.splice(idx, 1);
           if (spirit || vanish) continue;
           if (star) {
-            const roll = Math.random();
-            if (roll <= 0.4) {
+            if (skillProcRoll(0.4)) {
               incrementHand(input.position, target.side, 'HOS', 1);
             } else {
               const code = toBasePieceCode(capturedToHandPieceCode(target));

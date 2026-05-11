@@ -187,4 +187,25 @@ describe('stage shogi game rules', () => {
       }),
     ).toBe('STEW');
   });
+
+  it('maps captured 陽／陰 from kanji or opaque piece id', () => {
+    expect(
+      capturedToHandPieceCode({
+        side: 'enemy',
+        row: 0,
+        col: 0,
+        pieceCode: 'piece_313b9456c8ac',
+        char: '陽',
+      }),
+    ).toBe('YANG');
+    expect(
+      capturedToHandPieceCode({
+        side: 'enemy',
+        row: 0,
+        col: 0,
+        pieceCode: null,
+        char: '陰',
+      }),
+    ).toBe('YIN');
+  });
 });

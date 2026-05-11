@@ -9,7 +9,10 @@
  */
 
 import { createEmptyHandsState, type HandsState } from '@/features/stage-shogi/domain/game-rules';
+import { CHAR_TO_CODE } from '@/features/stage-shogi/domain/char-to-piece-code-map';
 import type { PieceCatalogItem } from '@/domain/models/piece';
+
+export { CHAR_TO_CODE };
 
 export type PieceSfenMapping = {
   sfenToCode: {
@@ -159,7 +162,7 @@ const ENGINE_SFEN_ATOM_TO_FALLBACK_CODE: Readonly<Record<string, string>> = (() 
 })();
 
 /**
- * 表示駒字（幻・霧・月・舟・実・異・英字 K など）の canonical pieceCode と CHAR_TO_CODE を同期すること。
+ * 表示駒字（幻・霧・月・舟・実・異・英字 K など）の canonical pieceCode と `char-to-piece-code-map.ts` の CHAR_TO_CODE を同期すること。
  * opaque な `pieceId` 行だけがカタログにあるとき、SFEN 逆引きが opaque のままだと
  * `toSfenBoardPure` で atom 解決に失敗して駒が消えるため、ZMO 等のトークンを canonical へ寄せる。
  */
@@ -476,6 +479,11 @@ export const CODE_TO_CHAR: Readonly<Record<string, string>> = {
   SEAR: '焼',
   SAUTE: '炒',
   STEW: '煮',
+  YANG: '陽',
+  YIN: '陰',
+  COW: '牛',
+  PIG: '豚',
+  CHICKEN: '鶏',
 };
 
 export const PROMOTED_CODE_TO_CHAR: Readonly<Record<string, string>> = {
@@ -485,93 +493,6 @@ export const PROMOTED_CODE_TO_CHAR: Readonly<Record<string, string>> = {
   GI: '成銀',
   KA: '馬',
   HI: '龍',
-};
-
-/** 未成り漢字 → canonical。`竜` は小竜駒（飛の成りの「龍」「竜王」と別物）。 */
-export const CHAR_TO_CODE: Readonly<Record<string, string>> = {
-  歩: 'FU',
-  香: 'KY',
-  桂: 'KE',
-  銀: 'GI',
-  金: 'KI',
-  角: 'KA',
-  飛: 'HI',
-  王: 'OU',
-  玉: 'OU',
-  忍: 'NIN',
-  影: 'KAG',
-  砲: 'HOU',
-  /** 小竜（`PROMOTED_CODE_TO_CHAR.HI` の「龍」＝竜王とは別駒） */
-  竜: 'RYU',
-  鳳: 'HOO',
-  炎: 'ENN',
-  火: 'FIR',
-  水: 'SUI',
-  波: 'NAM',
-  木: 'MOK',
-  葉: 'HAA',
-  光: 'HIK',
-  星: 'HOS',
-  闇: 'YAM',
-  魔: 'MAK',
-  銅: 'COPPER',
-  鉄: 'IRON',
-  錫: 'TIN',
-  鉛: 'LEAD',
-  宝: 'TREASURE',
-  電: 'ELECTRIC',
-  雷: 'THUNDER',
-  時: 'TIME',
-  氷: 'ICE',
-  雪: 'SNOW',
-  砂: 'SAND',
-  風: 'WIND',
-  苔: 'MOSS',
-  魚: 'FISH',
-  雲: 'CLOUD',
-  虹: 'RAINBOW',
-  毒: 'POISON',
-  沼: 'SWAMP',
-  牢: 'PRISON',
-  柵: 'FENCE',
-  嶺: 'RIDGE',
-  峰: 'PEAK',
-  山: 'YAMA',
-  岩: 'ROCK',
-  鉱: 'ORE',
-  墓: 'GRAVE',
-  霊: 'SPIRIT',
-  幻: 'PHANTOM',
-  霧: 'MIST',
-  月: 'MOON',
-  舟: 'BOAT',
-  機: 'MACHINE',
-  歯: 'GEAR',
-  家: 'HOUSE',
-  民: 'PEOPLE',
-  畑: 'FIELD',
-  泉: 'SPRING',
-  辰: 'TATSU',
-  実: 'EXPERIMENT',
-  異: 'MUTANT',
-  K: 'KBOSS',
-  轟: 'BIGNOISE',
-  犇: 'BULL',
-  礼: 'RITUAL',
-  聖: 'SAINT',
-  悟: 'SATORI',
-  心: 'HEART',
-  鬱: 'DEPRESSION',
-  乙: 'OTSU',
-  薔: 'ROSE',
-  菊: 'CHRYSANTHEMUM',
-  桜: 'CHERRY',
-  凹: 'CONCAVE',
-  凸: 'CONVEX',
-  焼: 'SEAR',
-  炒: 'SAUTE',
-  煮: 'STEW',
-  /** 刀／剣／銃／鎧／盾は `CHAR_TO_CODE` に載せない（`piecesFromBoardState` が canonical に寄せて `resolvePieceDef` が壊れる）。手駒は `game-rules` の CAPTURE_CHAR_TO_HAND_CODE。 */
 };
 
 // ── toSfenBoardPure ───────────────────────────────────────────────────────────

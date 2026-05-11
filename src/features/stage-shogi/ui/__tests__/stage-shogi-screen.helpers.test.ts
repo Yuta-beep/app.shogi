@@ -81,4 +81,72 @@ describe('reconcileExtendedPieceHandsAgainstBoard', () => {
     const out = reconcileExtendedPieceHandsAgainstBoard(hands, pieces);
     expect(out.player.ABYSS).toBe(1);
   });
+
+  it('does not subtract on-board COW from in-hand COW (captured piece vs own piece)', () => {
+    const hands = { player: {}, enemy: { COW: 1 } };
+    const pieces: BoardPiece[] = [
+      {
+        side: 'enemy',
+        row: 4,
+        col: 4,
+        pieceCode: 'COW',
+        char: '牛',
+        promoted: false,
+        imageSignedUrl: null,
+      },
+    ];
+    const out = reconcileExtendedPieceHandsAgainstBoard(hands, pieces);
+    expect(out.enemy.COW).toBe(1);
+  });
+
+  it('does not subtract on-board PIG from in-hand PIG', () => {
+    const hands = { player: {}, enemy: { PIG: 1 } };
+    const pieces: BoardPiece[] = [
+      {
+        side: 'enemy',
+        row: 3,
+        col: 3,
+        pieceCode: 'PIG',
+        char: '豚',
+        promoted: false,
+        imageSignedUrl: null,
+      },
+    ];
+    const out = reconcileExtendedPieceHandsAgainstBoard(hands, pieces);
+    expect(out.enemy.PIG).toBe(1);
+  });
+
+  it('does not subtract on-board CHICKEN from in-hand CHICKEN', () => {
+    const hands = { player: {}, enemy: { CHICKEN: 1 } };
+    const pieces: BoardPiece[] = [
+      {
+        side: 'enemy',
+        row: 2,
+        col: 2,
+        pieceCode: 'CHICKEN',
+        char: '鶏',
+        promoted: false,
+        imageSignedUrl: null,
+      },
+    ];
+    const out = reconcileExtendedPieceHandsAgainstBoard(hands, pieces);
+    expect(out.enemy.CHICKEN).toBe(1);
+  });
+
+  it('does not subtract on-board HAA from in-hand HAA (CODE_TO_CHAR extended)', () => {
+    const hands = { player: {}, enemy: { HAA: 1 } };
+    const pieces: BoardPiece[] = [
+      {
+        side: 'enemy',
+        row: 1,
+        col: 1,
+        pieceCode: 'HAA',
+        char: '葉',
+        promoted: false,
+        imageSignedUrl: null,
+      },
+    ];
+    const out = reconcileExtendedPieceHandsAgainstBoard(hands, pieces);
+    expect(out.enemy.HAA).toBe(1);
+  });
 });

@@ -51,6 +51,48 @@ export const CHRYSANTHEMUM_REVIVAL_IMAGE_SOURCE = require('../../../../assets/ce
 export const ROCK_OBSTACLE_IMAGE_SOURCE = require('../../../../assets/pieces/岩の障害物.png');
 
 const STANDARD_PIECE_CODES = new Set(['FU', 'KY', 'KE', 'GI', 'KI', 'KA', 'HI', 'OU']);
+
+/**
+ * apply-move では取った側の手駒にならない駒（霊の消滅、K・実・異の取った扱いでの消滅）。
+ * 手駒同期の「盤上数で手駒を打ち消す」補正の対象外にはしない（スキル仕様をここで上書きしない）。
+ */
+const NO_CAPTURE_TO_CAPTOR_HAND_CODES = new Set([
+  'SPIRIT',
+  'KBOSS',
+  'EXPERIMENT',
+  'MUTANT',
+]);
+
+/**
+ * 同一側に同種が盤上に複数いると、手駒キーと盤上カウントの差し引きで「取った手駒」が消える。
+ * 標準駒以外の拡張駒は原則ここで補正対象外（opaque 手駒キーは従来どおり別扱い）。
+ */
+const EXTENDED_HAND_RECONCILE_SKIP_CODES: ReadonlySet<string> = (() => {
+  const s = new Set<string>();
+  for (const k of Object.keys(CODE_TO_CHAR)) {
+    const u = k.toUpperCase();
+    if (STANDARD_PIECE_CODES.has(u)) continue;
+    if (NO_CAPTURE_TO_CAPTOR_HAND_CODES.has(u)) continue;
+    s.add(u);
+  }
+  for (const k of [
+    'SWORD',
+    'KATANA',
+    'GUN',
+    'ARMOR',
+    'SHIELD',
+    'BOOK',
+    'SEAL',
+    'BEAST',
+    'BIRD',
+    'REDONI',
+    'BLUEONI',
+    'BLACKONI',
+  ]) {
+    if (!NO_CAPTURE_TO_CAPTOR_HAND_CODES.has(k)) s.add(k);
+  }
+  return s;
+})();
 const LOCAL_PROMOTED_PIECE_IMAGE_BY_CODE: Partial<Record<string, number>> = {
   FU: require('../../../../assets/pieces/promoted/tokin.png'),
   KY: require('../../../../assets/pieces/promoted/narikyo.png'),
@@ -142,6 +184,15 @@ export type BoardPiece = {
   lightProtectionAura?: boolean;
   /** 菊の復活効果（復活.png バッジ） */
   chrysanthemumRevivalMark?: boolean;
+  /** 味方「陽」の周囲8マス内（陽自身を除く）でスキル確率バフを受けている表示 */
+  yangSkillSparkle?: boolean;
+  /** 敵「陰」の周囲8マス内（陰のスキル封じ圏）の表示 */
+  yinSkillSparkle?: boolean;
+  /** 「牛」スキル: 後ろ移動で溜めたチャージ（同期用、任意） */
+  cowChargeCount?: number;
+  pigInheritedPieceCode?: string | null;
+  pigInheritedChar?: string;
+  pigInheritedPromoted?: boolean;
 };
 
 export type PreservedMovedPiece = {
@@ -656,26 +707,7 @@ export function reconcileExtendedPieceHandsAgainstBoard(
     const next = { ...bag };
     for (const code of Object.keys(next)) {
       const codeU = code.toUpperCase();
-      if (
-        codeU === 'ICE' ||
-        codeU === 'SAND' ||
-        codeU === 'WIND' ||
-        codeU === 'HIK' ||
-        codeU === 'SWAMP' ||
-        codeU === 'GEAR' ||
-        codeU === 'MACHINE' ||
-        codeU === 'HOUSE' ||
-        codeU === 'PEOPLE' ||
-        codeU === 'FIELD' ||
-        codeU === 'BOOK' ||
-        codeU === 'SEAL' ||
-        codeU === 'BIGNOISE' ||
-        codeU === 'BULL' ||
-        codeU === 'RITUAL' ||
-        codeU === 'SAINT' ||
-        codeU === 'HOLE' ||
-        codeU === 'ABYSS'
-      ) {
+      if (EXTENDED_HAND_RECONCILE_SKIP_CODES.has(codeU)) {
         continue;
       }
       // DB 由来の opaque 駒コード（PIECE_...）は盤上実体との 1:1 対応が崩れやすく、
@@ -977,6 +1009,68 @@ export function applyLightProtectionAuraEffectToPieces(
   return pieces.map((p) => ({
     ...p,
     lightProtectionAura: keys.has(`${p.side}:${p.row}:${p.col}`),
+  }));
+}
+
+function isBoardPieceYangForSkillAura(piece: BoardPiece): boolean {
+  try {
+    if ((piece.char ?? '').normalize('NFKC') === '陽') return true;
+  } catch {
+    /* ignore */
+  }
+  if (piece.char === '陽') return true;
+  const base = toBasePieceCode(piece.pieceCode);
+  if (base === 'YANG') return true;
+  return (piece.pieceCode ?? '').toUpperCase().includes('313B9456C8AC');
+}
+
+function isBoardPieceYinForSkillAura(piece: BoardPiece): boolean {
+  try {
+    if ((piece.char ?? '').normalize('NFKC') === '陰') return true;
+  } catch {
+    /* ignore */
+  }
+  if (piece.char === '陰') return true;
+  const base = toBasePieceCode(piece.pieceCode);
+  if (base === 'YIN') return true;
+  return (piece.pieceCode ?? '').toUpperCase().includes('A67CE76969F7');
+}
+
+function isChebyshevAdjacent8(
+  a: Pick<BoardPiece, 'row' | 'col'>,
+  b: Pick<BoardPiece, 'row' | 'col'>,
+): boolean {
+  const dr = Math.abs(a.row - b.row);
+  const dc = Math.abs(a.col - b.col);
+  return dr <= 1 && dc <= 1 && (dr !== 0 || dc !== 0);
+}
+
+/** 盤上配置のみで陽バフ圏・陰封じ圏の駒にフラグを付与（盤面表示用）。 */
+export function applyYinYangSkillAuraDisplayToPieces(pieces: BoardPiece[]): BoardPiece[] {
+  const yangKeys = new Set<string>();
+  const yinKeys = new Set<string>();
+  for (const yang of pieces) {
+    if (!isBoardPieceYangForSkillAura(yang)) continue;
+    for (const p of pieces) {
+      if (p.side !== yang.side) continue;
+      if (p.row === yang.row && p.col === yang.col) continue;
+      if (!isChebyshevAdjacent8(p, yang)) continue;
+      yangKeys.add(`${p.side}:${p.row}:${p.col}`);
+    }
+  }
+  for (const yin of pieces) {
+    if (!isBoardPieceYinForSkillAura(yin)) continue;
+    for (const p of pieces) {
+      if (p.side === yin.side) continue;
+      if (p.row === yin.row && p.col === yin.col) continue;
+      if (!isChebyshevAdjacent8(p, yin)) continue;
+      yinKeys.add(`${p.side}:${p.row}:${p.col}`);
+    }
+  }
+  return pieces.map((p) => ({
+    ...p,
+    yangSkillSparkle: yangKeys.has(`${p.side}:${p.row}:${p.col}`),
+    yinSkillSparkle: yinKeys.has(`${p.side}:${p.row}:${p.col}`),
   }));
 }
 
@@ -1761,7 +1855,23 @@ export function reconcilePieceIdentity(
     if (!existing) return piece;
     if (!sameBoardPieceForReconcile(existing, piece)) return piece;
     if (isPromotedVisualPiece(piece) !== isPromotedVisualPiece(existing)) return piece;
-    return existing;
+    return {
+      ...existing,
+      row: piece.row,
+      col: piece.col,
+      pieceCode: piece.pieceCode,
+      char: piece.char,
+      promoted: piece.promoted ?? existing.promoted,
+      cowChargeCount: piece.cowChargeCount ?? existing.cowChargeCount,
+      pigInheritedPieceCode:
+        piece.pigInheritedPieceCode !== undefined
+          ? piece.pigInheritedPieceCode
+          : existing.pigInheritedPieceCode,
+      pigInheritedChar: piece.pigInheritedChar ?? existing.pigInheritedChar,
+      pigInheritedPromoted: piece.pigInheritedPromoted ?? existing.pigInheritedPromoted,
+      kbossLivesRemaining: piece.kbossLivesRemaining ?? existing.kbossLivesRemaining,
+      imageSignedUrl: existing.imageSignedUrl ?? piece.imageSignedUrl,
+    };
   });
 }
 
@@ -2187,12 +2297,13 @@ export function syncCanonicalState(params: {
     stabilizedPieces.map((p) => p),
     pieceDefsByChar,
   );
-  const nextPersistentHazards = withSpringDragonAwakening.filter((p) =>
+  const withYinYangSkillAura = applyYinYangSkillAuraDisplayToPieces(withSpringDragonAwakening);
+  const nextPersistentHazards = withYinYangSkillAura.filter((p) =>
     PERSISTENT_SYNC_GUARD_CHARS.has(p.char),
   );
 
   return {
-    pieces: withSpringDragonAwakening,
+    pieces: withYinYangSkillAura,
     persistentHazards: nextPersistentHazards,
     poisonHazardCells,
     rockObstacleCells,

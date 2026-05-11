@@ -141,6 +141,36 @@ export function piecesFromBoardState(position: AiBattlePosition): AiBoardPiece[]
       (typeof mrpc === 'string' && mrpc.length > 0) ||
       (typeof mrch === 'string' && mrch.length > 0);
 
+    const cowChargeRaw = obj.cowChargeCount ?? obj.cow_charge_count;
+    const cowChargeCount =
+      typeof cowChargeRaw === 'number' && Number.isFinite(cowChargeRaw)
+        ? Math.max(0, Math.min(8, Math.floor(cowChargeRaw)))
+        : undefined;
+
+    const pigCodeRaw =
+      typeof obj.pigInheritedPieceCode === 'string'
+        ? obj.pigInheritedPieceCode
+        : typeof obj.pig_inherited_piece_code === 'string'
+          ? obj.pig_inherited_piece_code
+          : null;
+    const pigInheritedPieceCode =
+      pigCodeRaw && pigCodeRaw.trim().length > 0 ? pigCodeRaw.trim().toUpperCase() : null;
+    const pigIc =
+      typeof obj.pigInheritedChar === 'string'
+        ? obj.pigInheritedChar
+        : typeof obj.pig_inherited_char === 'string'
+          ? obj.pig_inherited_char
+          : undefined;
+    const pigInheritedChar =
+      typeof pigIc === 'string' && pigIc.trim().length > 0 ? pigIc : undefined;
+    const pigPr = obj.pigInheritedPromoted ?? obj.pig_inherited_promoted;
+    const pigInheritedPromoted =
+      typeof pigPr === 'boolean'
+        ? pigPr
+        : typeof pigPr === 'number'
+          ? pigPr !== 0
+          : undefined;
+
     pieces.push({
       side,
       row,
@@ -148,6 +178,14 @@ export function piecesFromBoardState(position: AiBattlePosition): AiBoardPiece[]
       pieceCode: baseCode,
       char,
       promoted,
+      ...(cowChargeCount != null ? { cowChargeCount } : {}),
+      ...(pigInheritedPieceCode != null
+        ? {
+            pigInheritedPieceCode,
+            ...(pigInheritedChar != null ? { pigInheritedChar } : {}),
+            ...(pigInheritedPromoted != null ? { pigInheritedPromoted } : {}),
+          }
+        : {}),
       ...(kbossLivesRemaining != null ? { kbossLivesRemaining } : {}),
       ...(hasMutantRevert
         ? {

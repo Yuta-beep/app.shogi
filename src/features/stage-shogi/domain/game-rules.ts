@@ -1,4 +1,5 @@
 import { MoveVector } from '@/usecases/piece-info/load-piece-catalog-usecase';
+import { CHAR_TO_CODE } from '@/features/stage-shogi/domain/char-to-piece-code-map';
 
 export type Side = 'player' | 'enemy';
 export type Hands = Record<string, number>;
@@ -26,6 +27,12 @@ export type BoardPiece = {
   mutantRevertChar?: string;
   mutantRevertPromoted?: boolean;
   mutantRevertImageSignedUrl?: string | null;
+  /** 「牛」: 後ろへ1マス動いた回数。前へ進むと0にリセットされ、前進の最大マス数に加算される。 */
+  cowChargeCount?: number;
+  /** 「豚」: 直近で取った敵駒の手駒正規コード（移動ベクトルの参照用） */
+  pigInheritedPieceCode?: string | null;
+  pigInheritedChar?: string;
+  pigInheritedPromoted?: boolean;
 };
 
 const PROMOTABLE_PIECES = new Set(['FU', 'KY', 'KE', 'GI', 'KA', 'HI']);
@@ -208,6 +215,11 @@ const CAPTURE_CHAR_TO_HAND_CODE: Readonly<Record<string, string>> = {
   焼: 'SEAR',
   炒: 'SAUTE',
   煮: 'STEW',
+  陽: 'YANG',
+  陰: 'YIN',
+  牛: 'COW',
+  豚: 'PIG',
+  鶏: 'CHICKEN',
 };
 
 const OPAQUE_CAPTURE_CODE_TO_HAND_CODE: Readonly<Record<string, string>> = {
@@ -239,6 +251,11 @@ const OPAQUE_CAPTURE_CODE_TO_HAND_CODE: Readonly<Record<string, string>> = {
   PIECE_FDC83CF95746: 'SEAR',
   PIECE_1732246A37D8: 'SAUTE',
   PIECE_8DE5676A5E92: 'STEW',
+  PIECE_313B9456C8AC: 'YANG',
+  PIECE_A67CE76969F7: 'YIN',
+  PIECE_F75D88C48D6D: 'COW',
+  PIECE_3EFA5702E75B: 'PIG',
+  PIECE_F1A6EF3B99DF: 'CHICKEN',
 };
 
 function opaqueCapturedCodeToHandCode(rawCode: string | null): string | null {
@@ -277,6 +294,16 @@ function opaqueCapturedCodeToHandCode(rawCode: string | null): string | null {
   if (upper.includes('SEAR')) return 'SEAR';
   if (upper.includes('SAUTE')) return 'SAUTE';
   if (upper.includes('STEW')) return 'STEW';
+  if (upper.includes('313B9456C8AC')) return 'YANG';
+  if (upper.includes('A67CE76969F7')) return 'YIN';
+  if (upper.includes('F75D88C48D6D')) return 'COW';
+  if (upper.includes('3EFA5702E75B')) return 'PIG';
+  if (upper.includes('F1A6EF3B99DF')) return 'CHICKEN';
+  if (upper.includes('YANG')) return 'YANG';
+  if (upper.includes('YIN')) return 'YIN';
+  if (upper.includes('COW')) return 'COW';
+  if (upper.includes('PIG')) return 'PIG';
+  if (upper.includes('CHICKEN')) return 'CHICKEN';
   if (upper.includes('BLUEONI')) return 'BLUEONI';
   if (upper.includes('BLACKONI')) return 'BLACKONI';
   if (upper.includes('REDONI')) return 'REDONI';
@@ -366,7 +393,12 @@ export function capturedToHandPieceCode(piece: BoardPiece) {
   const rawCode = normalizePieceCode(piece.pieceCode);
   const isOpaque = Boolean(rawCode && /^PIECE_[A-Z0-9_]+$/i.test(rawCode));
   const mappedOpaque = opaqueCapturedCodeToHandCode(rawCode);
-  const code = rawCode && !isOpaque ? rawCode : (codeFromChar ?? mappedOpaque);
+  const fromStandardChar =
+    normalizedChar.length > 0 ? (CHAR_TO_CODE[normalizedChar] ?? null) : null;
+  const code =
+    rawCode && !isOpaque
+      ? rawCode
+      : (codeFromChar ?? mappedOpaque ?? fromStandardChar);
   if (!code) return null;
   const upper = code.toUpperCase();
   if (

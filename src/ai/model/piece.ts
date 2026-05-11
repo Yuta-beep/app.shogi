@@ -58,6 +58,35 @@ function applyClientEnginePieceCatalogOverrides(item: PieceCatalogItem): PieceCa
     };
   }
 
+  if (ch === '牛' || baseCode === 'COW') {
+    return {
+      ...item,
+      moveVectors: [
+        { dx: 0, dy: -1, maxStep: 1 },
+        { dx: 0, dy: 1, maxStep: 1 },
+      ],
+      move: '前方1マス、または後方1マスに進める。',
+      skill:
+        '後ろに動くたびにチャージが1溜まり、前に進める最大マス数がその分だけ増える。通ったマスの敵駒はすべて取れる。前に1回でも進むとチャージは0になる。',
+    };
+  }
+
+  if (ch === '豚' || baseCode === 'PIG') {
+    return {
+      ...item,
+      moveVectors: [{ dx: 0, dy: -1, maxStep: 1 }],
+      move: '前方1マス。',
+      skill: '敵駒を取ると、その駒の移動範囲を自分のものとして使える。',
+    };
+  }
+
+  if (ch === '鶏' || baseCode === 'CHICKEN') {
+    return {
+      ...item,
+      skill: 'なし',
+    };
+  }
+
   return item;
 }
 

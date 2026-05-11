@@ -1,7 +1,16 @@
 import { Image } from 'expo-image';
 import { Crown, Shield } from 'lucide-react-native';
-import { memo } from 'react';
+import { memo, useEffect } from 'react';
 import { Pressable, Text, View } from 'react-native';
+import Animated, {
+  cancelAnimation,
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
 import Svg, { Line, Polygon, Rect } from 'react-native-svg';
 
 import {
@@ -43,6 +52,90 @@ export type PromotionImageFlash = {
   flashKey: string;
 };
 
+const YangSkillSparkleRing = memo(function YangSkillSparkleRing() {
+  const pulse = useSharedValue(0.42);
+  useEffect(() => {
+    pulse.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: 480, easing: Easing.inOut(Easing.sin) }),
+        withTiming(0.34, { duration: 480, easing: Easing.inOut(Easing.sin) }),
+      ),
+      -1,
+      false,
+    );
+    return () => {
+      cancelAnimation(pulse);
+    };
+  }, []);
+  const animatedStyle = useAnimatedStyle(() => ({ opacity: pulse.value }));
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[
+        {
+          position: 'absolute',
+          left: '4%',
+          right: '4%',
+          top: '5%',
+          bottom: '5%',
+          borderRadius: 999,
+          borderWidth: 2.5,
+          borderColor: 'rgba(250, 204, 21, 0.98)',
+          backgroundColor: 'rgba(254, 249, 195, 0.18)',
+          shadowColor: '#facc15',
+          shadowOpacity: 0.92,
+          shadowRadius: 12,
+          shadowOffset: { width: 0, height: 0 },
+          elevation: 8,
+        },
+        animatedStyle,
+      ]}
+    />
+  );
+});
+
+const YinSkillSparkleRing = memo(function YinSkillSparkleRing() {
+  const pulse = useSharedValue(0.38);
+  useEffect(() => {
+    pulse.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: 520, easing: Easing.inOut(Easing.sin) }),
+        withTiming(0.3, { duration: 520, easing: Easing.inOut(Easing.sin) }),
+      ),
+      -1,
+      false,
+    );
+    return () => {
+      cancelAnimation(pulse);
+    };
+  }, []);
+  const animatedStyle = useAnimatedStyle(() => ({ opacity: pulse.value }));
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[
+        {
+          position: 'absolute',
+          left: '11%',
+          right: '11%',
+          top: '12%',
+          bottom: '12%',
+          borderRadius: 999,
+          borderWidth: 2,
+          borderColor: 'rgba(192, 132, 252, 0.98)',
+          backgroundColor: 'rgba(139, 92, 246, 0.2)',
+          shadowColor: '#a78bfa',
+          shadowOpacity: 0.92,
+          shadowRadius: 10,
+          shadowOffset: { width: 0, height: 0 },
+          elevation: 6,
+        },
+        animatedStyle,
+      ]}
+    />
+  );
+});
+
 type BoardPieceSpriteProps = {
   piece: BoardPiece;
   failed: boolean;
@@ -58,6 +151,8 @@ type BoardPieceSpriteProps = {
   deathCurseAura?: boolean;
   deathCurseCountdown?: number | null;
   chrysanthemumRevivalMark?: boolean;
+  yangSkillSparkle?: boolean;
+  yinSkillSparkle?: boolean;
 };
 
 const BoardPieceSprite = memo(function BoardPieceSprite({
@@ -75,6 +170,8 @@ const BoardPieceSprite = memo(function BoardPieceSprite({
   deathCurseAura = false,
   deathCurseCountdown = null,
   chrysanthemumRevivalMark = false,
+  yangSkillSparkle = false,
+  yinSkillSparkle = false,
 }: BoardPieceSpriteProps) {
   const rowIndex = normalizeCellIndex(piece.row);
   const colIndex = normalizeCellIndex(piece.col);
@@ -333,6 +430,8 @@ const BoardPieceSprite = memo(function BoardPieceSprite({
               />
             </View>
           ) : null}
+          {yinSkillSparkle && !darkVeiled ? <YinSkillSparkleRing /> : null}
+          {yangSkillSparkle && !darkVeiled ? <YangSkillSparkleRing /> : null}
         </View>
       </View>
     </View>
@@ -647,12 +746,14 @@ const BoardPiecesLayer = memo(function BoardPiecesLayer({
             darkVeiled={Boolean(placement.darkVeiled)}
             aTransformed={Boolean(placement.aTransformed)}
             prisonChained={Boolean(placement.prisonChained)}
-            stunnedAura={Boolean((placement as any).stunnedAura)}
-            abyssAura={Boolean((placement as any).abyssAura)}
-            lightProtectionAura={Boolean((placement as any).lightProtectionAura)}
-            deathCurseAura={Boolean((placement as any).deathCurseAura)}
-            deathCurseCountdown={(placement as any).deathCurseCountdown ?? null}
-            chrysanthemumRevivalMark={Boolean((placement as any).chrysanthemumRevivalMark)}
+            stunnedAura={Boolean(placement.stunnedAura)}
+            abyssAura={Boolean(placement.abyssAura)}
+            lightProtectionAura={Boolean(placement.lightProtectionAura)}
+            deathCurseAura={Boolean(placement.deathCurseAura)}
+            deathCurseCountdown={placement.deathCurseCountdown ?? null}
+            chrysanthemumRevivalMark={Boolean(placement.chrysanthemumRevivalMark)}
+            yangSkillSparkle={Boolean(placement.yangSkillSparkle)}
+            yinSkillSparkle={Boolean(placement.yinSkillSparkle)}
           />
         );
       })}

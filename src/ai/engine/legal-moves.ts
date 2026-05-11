@@ -97,6 +97,13 @@ function isGunPiece(piece: AiBoardPiece): boolean {
   return false;
 }
 
+function isCowPiece(piece: AiBoardPiece): boolean {
+  if (normKanjiForEngineRules(piece.char) === '牛') return true;
+  const code = toBasePieceCode(piece.pieceCode);
+  if (code === 'COW') return true;
+  return (piece.pieceCode ?? '').toUpperCase().includes('F75D88C48D6D');
+}
+
 function normalizedPieceCodeUpper(piece: AiBoardPiece): string {
   return (toBasePieceCode(piece.pieceCode) ?? piece.pieceCode ?? '').toUpperCase();
 }
@@ -460,6 +467,31 @@ function isBookPiece(piece: AiBoardPiece): boolean {
   return code === 'BOOK';
 }
 
+function isPigPiece(piece: AiBoardPiece): boolean {
+  if (normKanjiForEngineRules(piece.char) === '豚') return true;
+  const code = toBasePieceCode(piece.pieceCode);
+  if (code === 'PIG') return true;
+  return (piece.pieceCode ?? '').toUpperCase().includes('3EFA5702E75B');
+}
+
+/** 豚: 直近捕獲の敵駒の code/見た目で移動定義を解決（盤上の座標・先後は豚のまま）。「書」は特殊ループのため除外。 */
+function pigInheritedMoveOverlay(piece: AiBoardPiece): AiBoardPiece | null {
+  if (!isPigPiece(piece)) return null;
+  const raw = piece.pigInheritedPieceCode;
+  if (!raw || typeof raw !== 'string' || !raw.trim()) return null;
+  const code = raw.trim().toUpperCase();
+  const inheritedChar =
+    piece.pigInheritedChar ?? CODE_TO_CHAR[code as keyof typeof CODE_TO_CHAR] ?? piece.char;
+  const synthetic: AiBoardPiece = {
+    ...piece,
+    pieceCode: code,
+    char: inheritedChar,
+    promoted: piece.pigInheritedPromoted ?? false,
+  };
+  if (isBookPiece(synthetic)) return null;
+  return synthetic;
+}
+
 /** 聖者「聖」— 嶺(REI) とは別物 */
 function isSaintPieceForLegal(piece: AiBoardPiece): boolean {
   if (normKanjiForEngineRules(piece.char) === '聖') return true;
@@ -641,6 +673,21 @@ function resolvePieceCodeForLegalMove(piece: AiBoardPiece, lookups: AiPieceLooku
   }
   if (ch === '煮' || rawUp.includes('8DE5676A5E92') || rawUp.includes('STEW')) {
     return 'STEW';
+  }
+  if (ch === '陽' || rawUp.includes('313B9456C8AC') || rawUp.includes('YANG')) {
+    return 'YANG';
+  }
+  if (ch === '陰' || rawUp.includes('A67CE76969F7') || rawUp.includes('YIN')) {
+    return 'YIN';
+  }
+  if (ch === '牛' || rawUp.includes('F75D88C48D6D') || rawUp.includes('COW')) {
+    return 'COW';
+  }
+  if (ch === '豚' || rawUp.includes('3EFA5702E75B') || rawUp.includes('PIG')) {
+    return 'PIG';
+  }
+  if (ch === '鶏' || rawUp.includes('F1A6EF3B99DF') || rawUp.includes('CHICKEN')) {
+    return 'CHICKEN';
   }
   const legacy = toBasePieceCode(CHAR_TO_CODE[piece.char]);
   if (legacy) return legacy;
@@ -1056,6 +1103,78 @@ function buildPathPiecesWithRockObstaclesOnEmptyCells(
 
 function findPieceAtFast(occupancy: OccupancyMap, row: number, col: number): AiBoardPiece | null {
   return occupancy.get(occupancyKey(row, col)) ?? null;
+}
+
+/** 牛: チャージ分だけ前方の直線に延び、道の敵マスをすべて通過して着く。 */
+function generateCowForwardChargedTargets(input: {
+  occupancy: OccupancyMap;
+  piece: AiBoardPiece;
+  skillView: SkillRuntimeView;
+  pieces: AiBoardPiece[];
+}): { row: number; col: number }[] {
+  const { occupancy, piece, skillView, pieces } = input;
+  const charge = Math.min(8, Math.max(0, Math.floor(piece.cowChargeCount ?? 0)));
+  const maxDist = Math.min(8, 1 + charge);
+  const d = gunForwardRowDelta(piece.side);
+  const fromRow = piece.row;
+  const fromCol = piece.col;
+  const out: { row: number; col: number }[] = [];
+  const seen = new Set<string>();
+
+  for (let dist = 1; dist <= maxDist; dist += 1) {
+    let ok = true;
+    for (let s = 1; s <= dist; s += 1) {
+      const r = fromRow + d * s;
+      const c = fromCol;
+      if (r < 0 || r > 8 || c < 0 || c > 8) {
+        ok = false;
+        break;
+      }
+      if (isBlockedByRockObstacle(skillView, r, c)) {
+        ok = false;
+        break;
+      }
+      const p = findPieceAtFast(occupancy, r, c);
+      if (p && isRockObstacleVirtualPiece(p)) {
+        ok = false;
+        break;
+      }
+      if (p && p.side === piece.side) {
+        ok = false;
+        break;
+      }
+      if (p && p.side !== piece.side) {
+        if (isArmorPiece(p)) {
+          ok = false;
+          break;
+        }
+        if (isKingPiece(p) && hasSoulOnBoardForSide(pieces, p.side)) {
+          ok = false;
+          break;
+        }
+        if (skillView.captureImmunityCells.has(`${p.side}:${p.row}:${p.col}`)) {
+          ok = false;
+          break;
+        }
+        if (skillView.darkBlindCells.has(`${p.side}:${p.row}:${p.col}`)) {
+          ok = false;
+          break;
+        }
+        if (isKbossPieceForGun(p) && kbossEffectiveLivesForGunFilter(p) > 1) {
+          ok = false;
+          break;
+        }
+      }
+    }
+    if (!ok) continue;
+    const landR = fromRow + d * dist;
+    const landC = fromCol;
+    const key = `${landR}:${landC}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ row: landR, col: landC });
+  }
+  return out;
 }
 
 function generateReflectiveTargets(
@@ -1681,9 +1800,10 @@ function generateBoardPieceMoves(input: {
     );
   }
 
-  const pieceForDef = effectivePieceForRulesAfterSpring(input.piece, input.pieces, input.lookups);
-  let pieceDef = resolvePieceDef(pieceForDef, input.lookups);
-  if (isMachinePiece(input.piece)) {
+  const pieceAfterSpring = effectivePieceForRulesAfterSpring(input.piece, input.pieces, input.lookups);
+  const mover = pigInheritedMoveOverlay(pieceAfterSpring) ?? pieceAfterSpring;
+  let pieceDef = resolvePieceDef(mover, input.lookups);
+  if (isMachinePiece(mover)) {
     const donor = pickMachineDonorAlly(input.pieces, input.piece);
     if (donor) {
       const donorDef = resolvePieceDef(donor, input.lookups);
@@ -1694,36 +1814,38 @@ function generateBoardPieceMoves(input: {
   }
   if (
     !pieceDef &&
-    (isGunPiece(input.piece) ||
-      isKatanaPiece(input.piece) ||
-      isAnyOniVariantPiece(input.piece) ||
-      isBeastPieceForLegal(input.piece) ||
-      isBirdPieceForLegal(input.piece) ||
-      isConcavePieceForLegal(input.piece))
+    (isGunPiece(mover) ||
+      isKatanaPiece(mover) ||
+      isAnyOniVariantPiece(mover) ||
+      isBeastPieceForLegal(mover) ||
+      isBirdPieceForLegal(mover) ||
+      isConcavePieceForLegal(mover) ||
+      isCowPiece(mover))
   ) {
-    pieceDef = { ...MINIMAL_SPECIAL_PIECE_DEF, char: input.piece.char };
+    pieceDef = { ...MINIMAL_SPECIAL_PIECE_DEF, char: mover.char };
   }
   if (!pieceDef) return [];
   // 銃・刀はエンジン側でベクトルを上書きするため、カタログの moveVectors が空でも合法手を生成する。
   if (
     pieceDef.moveVectors.length === 0 &&
-    !isGunPiece(input.piece) &&
-    !isKatanaPiece(input.piece) &&
-    !isAnyOniVariantPiece(input.piece) &&
-    !isBeastPieceForLegal(input.piece) &&
-    !isBirdPieceForLegal(input.piece) &&
-    !isConcavePieceForLegal(input.piece)
+    !isGunPiece(mover) &&
+    !isKatanaPiece(mover) &&
+    !isAnyOniVariantPiece(mover) &&
+    !isBeastPieceForLegal(mover) &&
+    !isBirdPieceForLegal(mover) &&
+    !isConcavePieceForLegal(mover) &&
+    !isCowPiece(mover)
   ) {
     return [];
   }
   let effectiveVectors = resolveEffectiveVectorsForPiece(
-    input.piece,
+    mover,
     pieceDef,
     input.position,
     input.pieces,
     input.lookups,
   );
-  if (isGunPiece(input.piece)) {
+  if (isGunPiece(mover)) {
     effectiveVectors = [
       { dx: 0, dy: -1, maxStep: 2 },
       { dx: -1, dy: 1, maxStep: 2 },
@@ -1732,11 +1854,11 @@ function generateBoardPieceMoves(input: {
   }
   let effectiveCanJump = pieceDef.canJump === true;
 
-  if (isMirrorPiece(input.piece)) {
+  if (isMirrorPiece(mover)) {
     const enemyCandidates = input.pieces.filter(
       (piece) => piece.side !== input.piece.side && !isMirrorPiece(piece),
     );
-    const selected = selectMirrorTarget(input.position, input.piece, enemyCandidates);
+    const selected = selectMirrorTarget(input.position, mover, enemyCandidates);
     if (selected) {
       const selectedDef = resolvePieceDef(selected, input.lookups);
       if (selectedDef && selectedDef.moveVectors.length > 0) {
@@ -1767,7 +1889,9 @@ function generateBoardPieceMoves(input: {
     if (isLeapOverOneMode(v.captureMode)) return false;
     // 銃の前方ちょうど2マス（1マス目に敵がいても2マス目へ）: generateGunForwardTargets が担当する。
     // テンプレ (0,-1) maxStep 2 を getLegalTargetsFromVectors に渡すと、1マス目の敵で打ち切られ 2マス目が出ない。
-    if (isGunPiece(input.piece) && v.dx === 0 && v.dy === -1) return false;
+    if (isGunPiece(mover) && v.dx === 0 && v.dy === -1) return false;
+    // 牛の前方チャージ直進は generateCowForwardChargedTargets が担当（道中の敵を通過）。
+    if (isCowPiece(mover) && v.dx === 0 && v.dy === -1) return false;
     return true;
   });
   const pathPieces = buildPathPiecesWithRockObstaclesOnEmptyCells(
@@ -1776,12 +1900,12 @@ function generateBoardPieceMoves(input: {
     input.piece.side,
   );
   const pathOccupancy = buildOccupancyMap(pathPieces);
-  let normalTargets = isCloudPiece(input.piece)
+  let normalTargets = isCloudPiece(mover)
     ? generateCloudTargetsFromVectors(pathOccupancy, input.piece, normalVectors)
     : getLegalTargetsFromVectors(pathPieces, input.piece, normalVectors, 9, {
         canJump: effectiveCanJump,
       });
-  if (isConcavePieceForLegal(input.piece)) {
+  if (isConcavePieceForLegal(mover)) {
     const pierce = generateConcaveEdgePierceTargets(pathOccupancy, input.piece);
     const seenN = new Set(normalTargets.map((t) => `${t.row}:${t.col}`));
     for (const t of pierce) {
@@ -1792,7 +1916,7 @@ function generateBoardPieceMoves(input: {
     }
   }
   const gunLineTargets =
-    isGunPiece(input.piece) && !isMirrorPiece(input.piece)
+    isGunPiece(mover) && !isMirrorPiece(mover)
       ? [
           ...generateGunForwardTargets(pathOccupancy, input.piece),
           ...generateGunBackDiagonalTargets(pathOccupancy, input.piece),
@@ -1800,11 +1924,30 @@ function generateBoardPieceMoves(input: {
       : [];
   const gunLineKeySet =
     gunLineTargets.length > 0 ? new Set(gunLineTargets.map((t) => `${t.row}:${t.col}`)) : null;
+  const cowForwardTargets =
+    isCowPiece(mover) && !isMirrorPiece(mover)
+      ? generateCowForwardChargedTargets({
+          occupancy: pathOccupancy,
+          piece: input.piece,
+          skillView: input.skillView,
+          pieces: input.pieces,
+        })
+      : [];
+  const cowForwardKeySet =
+    cowForwardTargets.length > 0
+      ? new Set(cowForwardTargets.map((t) => `${t.row}:${t.col}`))
+      : null;
   const leapTargets = generateLeapOverOneTargets(pathOccupancy, input.piece, leapVectors);
-  const reflectiveTargets = isReflectivePiece(input.piece)
+  const reflectiveTargets = isReflectivePiece(mover)
     ? generateReflectiveTargets(pathOccupancy, input.piece)
     : [];
-  const targetsRaw = [...normalTargets, ...gunLineTargets, ...leapTargets, ...reflectiveTargets];
+  const targetsRaw = [
+    ...normalTargets,
+    ...gunLineTargets,
+    ...cowForwardTargets,
+    ...leapTargets,
+    ...reflectiveTargets,
+  ];
   const seenTargetKeys = new Set<string>();
   const targets = targetsRaw.filter((t) => {
     const k = `${t.row}:${t.col}`;
@@ -1836,19 +1979,27 @@ function generateBoardPieceMoves(input: {
           })
         : targets;
 
-  // 銃の前方2マス貫通・斜め後ろ2マスは 2 歩相当のため、縦1マス／直交1マス制限だけだと誤って除外される。貫通先だけ復元する。
+  // 銃の前方2マス貫通・斜め後ろ2マス／牛の前方チャージは 2 マス以上のため、縦1マス／直交1マス制限だけだと誤って除外される。復元する。
   if (
-    gunLineKeySet &&
-    isGunPiece(input.piece) &&
     !isMirrorPiece(input.piece) &&
     (movementRule === 'vertical_step_only' || movementRule === 'orthogonal_step_only')
   ) {
     const seenF = new Set(filteredTargets.map((t) => `${t.row}:${t.col}`));
-    for (const t of targets) {
-      const k = `${t.row}:${t.col}`;
-      if (!gunLineKeySet.has(k) || seenF.has(k)) continue;
-      seenF.add(k);
-      filteredTargets.push(t);
+    if (gunLineKeySet && isGunPiece(mover)) {
+      for (const t of targets) {
+        const k = `${t.row}:${t.col}`;
+        if (!gunLineKeySet.has(k) || seenF.has(k)) continue;
+        seenF.add(k);
+        filteredTargets.push(t);
+      }
+    }
+    if (cowForwardKeySet && isCowPiece(mover)) {
+      for (const t of targets) {
+        const k = `${t.row}:${t.col}`;
+        if (!cowForwardKeySet.has(k) || seenF.has(k)) continue;
+        seenF.add(k);
+        filteredTargets.push(t);
+      }
     }
   }
 
@@ -1856,7 +2007,7 @@ function generateBoardPieceMoves(input: {
     const captured = findPieceAtFast(input.occupancy, target.row, target.col);
     if (!captured) return true;
     if (input.noCaptureOnly === true) return false;
-    if (isCloudPiece(input.piece)) {
+    if (isCloudPiece(mover)) {
       // 雲: 敵は取れず、味方のみ取れる（ただし味方王/玉は不可）。
       return captured.side === input.piece.side && !isKingPiece(captured);
     }
@@ -1865,7 +2016,7 @@ function generateBoardPieceMoves(input: {
       return false;
     }
     if (isArmorPiece(captured)) return false;
-    if (captured.side !== input.piece.side && isArmorPiece(input.piece)) return false;
+    if (captured.side !== input.piece.side && isArmorPiece(mover)) return false;
     if (
       input.skillView.captureImmunityCells.has(`${captured.side}:${captured.row}:${captured.col}`)
     ) {
@@ -1886,7 +2037,7 @@ function generateBoardPieceMoves(input: {
   );
   const pieceCode = resolvePieceCodeForLegalMove(input.piece, input.lookups);
 
-  if (isGunPiece(input.piece)) {
+  if (isGunPiece(mover)) {
     gunPieceDebugLog('合法手パイプライン', {
       at: [input.piece.row, input.piece.col],
       side: input.piece.side,
