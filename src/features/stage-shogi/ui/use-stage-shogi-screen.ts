@@ -47,6 +47,7 @@ import {
   findPieceAt,
   getDisplayChar,
   getPieceImageSource,
+  handKeyToDisplayPieceCode,
   hasAdjacentEnemyPiece,
   isGameAlreadyFinishedError,
   isSelfCaptureLikeMove,
@@ -1854,10 +1855,7 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
     setPendingTimeActionCell(null);
   }
 
-  function handleCellLongPress(row: number, col: number) {
-    const target = findPieceAt(pieces, row, col);
-    if (!target) return;
-
+  function openInspectingPieceFromPlacement(target: BoardPiece) {
     const lookupChar =
       target.promoted && target.pieceCode
         ? (PROMOTED_CODE_TO_CHAR[target.pieceCode] ?? target.char)
@@ -1925,6 +1923,31 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
       desc: resolveInspectSkillDescription(displayChar, detail?.desc, target.pieceCode),
       move: resolveInspectMoveDescription(displayChar, detail?.move, target.pieceCode),
       imageSignedUrl: detail?.imageSignedUrl ?? target.imageSignedUrl ?? null,
+    });
+  }
+
+  function handleCellLongPress(row: number, col: number) {
+    const target = findPieceAt(pieces, row, col);
+    if (!target) return;
+    openInspectingPieceFromPlacement(target);
+  }
+
+  function handleHandPieceLongPress(pieceCode: string, side: Side) {
+    const codeKey = handKeyToDisplayPieceCode(pieceCode, pieceCatalog).toUpperCase();
+    if (getHandCount(hands, side, codeKey) <= 0) return;
+    const char =
+      CODE_TO_CHAR[codeKey] ??
+      pieceDefsByCode[codeKey]?.char ??
+      pieceCharFromCode(codeKey, side, false) ??
+      '?';
+    openInspectingPieceFromPlacement({
+      side,
+      row: 0,
+      col: 0,
+      pieceCode: codeKey,
+      char,
+      promoted: false,
+      imageSignedUrl: pieceDefsByCode[codeKey]?.imageSignedUrl ?? null,
     });
   }
 
@@ -2022,6 +2045,7 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
     inspectingPiece,
     handleBoardCellPress,
     handleCellLongPress,
+    handleHandPieceLongPress,
     handleHandPiecePress,
     handlePieceImageError,
     confirmTimeAction,

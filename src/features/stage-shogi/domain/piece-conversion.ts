@@ -484,6 +484,8 @@ export const CODE_TO_CHAR: Readonly<Record<string, string>> = {
   COW: '牛',
   PIG: '豚',
   CHICKEN: '鶏',
+  SEN: '銭',
+  ZAI: '財',
 };
 
 export const PROMOTED_CODE_TO_CHAR: Readonly<Record<string, string>> = {

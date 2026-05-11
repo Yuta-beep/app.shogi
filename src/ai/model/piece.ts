@@ -87,6 +87,20 @@ function applyClientEnginePieceCatalogOverrides(item: PieceCatalogItem): PieceCa
     };
   }
 
+  if (ch === '銭' || baseCode === 'SEN') {
+    return {
+      ...item,
+      skill: '移動するたびに20％の確率で「金」に、10％の確率で「宝」に変化する。',
+    };
+  }
+
+  if (ch === '財' || baseCode === 'ZAI') {
+    return {
+      ...item,
+      skill: '敵駒を取ったとき、味方の「銭」駒を1体、取った敵駒と同じ駒へ変化させる。',
+    };
+  }
+
   return item;
 }
 

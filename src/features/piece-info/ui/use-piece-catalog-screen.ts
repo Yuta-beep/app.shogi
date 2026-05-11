@@ -65,6 +65,12 @@ function normalizeCatalogSkillText(piece: PieceCatalogItem): string {
     return '敵駒を取ったとき、盤上のランダムな空きマスに味方の「炎」駒または「火」駒のどちらかをランダムに1体召喚する。';
   }
   const pc = (piece.pieceCode ?? '').toUpperCase();
+  if (piece.char === '銭' || pc.includes('SEN') || pc.includes('EACC7F540399')) {
+    return '移動するたびに20％の確率で「金」に、10％の確率で「宝」に変化する。';
+  }
+  if (piece.char === '財' || pc.includes('ZAI') || pc.includes('7FC715661514')) {
+    return '敵駒を取ったとき、味方の「銭」駒を1体、取った敵駒と同じ駒へ変化させる。';
+  }
   if (piece.char === '鶏' || pc.includes('CHICKEN') || pc.includes('F1A6EF3B99DF')) {
     return 'なし';
   }

@@ -205,6 +205,22 @@ export function resolveInspectSkillDescription(
   }
   if (char === '山') return '嶺のスキルで召喚される補助駒。';
   if (
+    char === '銭' ||
+    (pieceCode &&
+      (pieceCode.toUpperCase().includes('SEN') ||
+        pieceCode.toUpperCase().includes('EACC7F540399')))
+  ) {
+    return '移動するたびに20％の確率で「金」に、10％の確率で「宝」に変化する。';
+  }
+  if (
+    char === '財' ||
+    (pieceCode &&
+      (pieceCode.toUpperCase().includes('ZAI') ||
+        pieceCode.toUpperCase().includes('7FC715661514')))
+  ) {
+    return '敵駒を取ったとき、味方の「銭」駒を1体、取った敵駒と同じ駒へ変化させる。';
+  }
+  if (
     char === '鶏' ||
     (pieceCode &&
       (pieceCode.toUpperCase().includes('CHICKEN') ||
@@ -262,6 +278,22 @@ export function resolveInspectMoveDescription(
     return 'TURN数を4で割った余りが0または1のときは全方位に1マス、余りが2または3のときは全方位に2マスまで移動できる。';
   }
   if (char === '異') return '移動しない。';
+  if (
+    char === '銭' ||
+    (pieceCode && pieceCode.toUpperCase().includes('SEN')) ||
+    (pieceCode && pieceCode.toUpperCase().includes('EACC7F540399'))
+  ) {
+    const normalized = (move ?? '').trim();
+    return normalized.length > 0 ? normalized : 'カタログの駒情報に記載された通りに動ける。';
+  }
+  if (
+    char === '財' ||
+    (pieceCode && pieceCode.toUpperCase().includes('ZAI')) ||
+    (pieceCode && pieceCode.toUpperCase().includes('7FC715661514'))
+  ) {
+    const normalized = (move ?? '').trim();
+    return normalized.length > 0 ? normalized : 'カタログの駒情報に記載された通りに動ける。';
+  }
   const normalized = (move ?? '').trim();
   return normalized.length > 0 ? normalized : '準備中';
 }

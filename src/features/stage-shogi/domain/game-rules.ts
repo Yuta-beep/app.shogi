@@ -220,6 +220,8 @@ const CAPTURE_CHAR_TO_HAND_CODE: Readonly<Record<string, string>> = {
   牛: 'COW',
   豚: 'PIG',
   鶏: 'CHICKEN',
+  銭: 'SEN',
+  財: 'ZAI',
 };
 
 const OPAQUE_CAPTURE_CODE_TO_HAND_CODE: Readonly<Record<string, string>> = {
@@ -256,6 +258,8 @@ const OPAQUE_CAPTURE_CODE_TO_HAND_CODE: Readonly<Record<string, string>> = {
   PIECE_F75D88C48D6D: 'COW',
   PIECE_3EFA5702E75B: 'PIG',
   PIECE_F1A6EF3B99DF: 'CHICKEN',
+  PIECE_EACC7F540399: 'SEN',
+  PIECE_7FC715661514: 'ZAI',
 };
 
 function opaqueCapturedCodeToHandCode(rawCode: string | null): string | null {
@@ -299,11 +303,15 @@ function opaqueCapturedCodeToHandCode(rawCode: string | null): string | null {
   if (upper.includes('F75D88C48D6D')) return 'COW';
   if (upper.includes('3EFA5702E75B')) return 'PIG';
   if (upper.includes('F1A6EF3B99DF')) return 'CHICKEN';
+  if (upper.includes('EACC7F540399')) return 'SEN';
+  if (upper.includes('7FC715661514')) return 'ZAI';
   if (upper.includes('YANG')) return 'YANG';
   if (upper.includes('YIN')) return 'YIN';
   if (upper.includes('COW')) return 'COW';
   if (upper.includes('PIG')) return 'PIG';
   if (upper.includes('CHICKEN')) return 'CHICKEN';
+  if (upper.includes('SEN')) return 'SEN';
+  if (upper.includes('ZAI')) return 'ZAI';
   if (upper.includes('BLUEONI')) return 'BLUEONI';
   if (upper.includes('BLACKONI')) return 'BLACKONI';
   if (upper.includes('REDONI')) return 'REDONI';

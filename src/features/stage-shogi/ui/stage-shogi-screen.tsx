@@ -93,6 +93,7 @@ export function StageShogiScreen() {
               pieceCatalog={vm.pieceCatalog}
               compact
               onPressPiece={vm.handleHandPiecePress}
+              onLongPressPiece={vm.handleHandPieceLongPress}
             />
           </View>
           <View className="pointer-events-none rounded-md border border-blue-700 bg-white/80 px-2 py-1">
@@ -115,6 +116,7 @@ export function StageShogiScreen() {
               pieceCatalog={vm.pieceCatalog}
               compact
               onPressPiece={vm.handleHandPiecePress}
+              onLongPressPiece={vm.handleHandPieceLongPress}
             />
           </View>
           <View className="pointer-events-none rounded-md border border-blue-700 bg-white/80 px-2 py-1">

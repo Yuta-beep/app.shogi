@@ -23,6 +23,7 @@ export function StageShogiHandsRow(props: {
   pieceCatalog: readonly PieceCatalogItem[];
   compact?: boolean;
   onPressPiece: (pieceCode: string) => void;
+  onLongPressPiece?: (pieceCode: string, side: Side) => void;
 }) {
   const {
     side,
@@ -38,6 +39,7 @@ export function StageShogiHandsRow(props: {
     pieceCatalog,
     compact = false,
     onPressPiece,
+    onLongPressPiece,
   } = props;
   const orderedCodes = [
     ...pieceSfenMapping.handOrder,
@@ -59,7 +61,7 @@ export function StageShogiHandsRow(props: {
       {entries.map((entry) => {
         const isPlayer = side === 'player';
         const codeKey = handKeyToDisplayPieceCode(entry.code, pieceCatalog).toUpperCase();
-        const disabled =
+        const dropDisabled =
           !isPlayer ||
           sideToMove !== 'player' ||
           isAiThinking ||
@@ -87,9 +89,14 @@ export function StageShogiHandsRow(props: {
           <Pressable
             key={`${side}-${codeKey}`}
             testID={`hand-${side}-${codeKey}`}
-            disabled={disabled}
+            delayLongPress={350}
             onPress={() => {
+              if (dropDisabled) return;
               onPressPiece(codeKey);
+            }}
+            onLongPress={() => {
+              if (entry.count <= 0 || !onLongPressPiece) return;
+              onLongPressPiece(codeKey, side);
             }}
             className="px-0 py-0.5"
           >

@@ -208,4 +208,25 @@ describe('stage shogi game rules', () => {
       }),
     ).toBe('YIN');
   });
+
+  it('maps captured 銭／財 from kanji or opaque piece id', () => {
+    expect(
+      capturedToHandPieceCode({
+        side: 'enemy',
+        row: 0,
+        col: 0,
+        pieceCode: 'PIECE_EACC7F540399',
+        char: '銭',
+      }),
+    ).toBe('SEN');
+    expect(
+      capturedToHandPieceCode({
+        side: 'player',
+        row: 0,
+        col: 0,
+        pieceCode: 'piece_7fc715661514',
+        char: '財',
+      }),
+    ).toBe('ZAI');
+  });
 });

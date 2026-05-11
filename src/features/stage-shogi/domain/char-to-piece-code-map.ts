@@ -93,5 +93,8 @@ export const CHAR_TO_CODE: Readonly<Record<string, string>> = {
   牛: 'COW',
   豚: 'PIG',
   鶏: 'CHICKEN',
+  /** `lib/piece-image-registry` piece_eacc7f540399 / piece_7fc715661514 と整合 */
+  銭: 'SEN',
+  財: 'ZAI',
   /** 刀／剣／銃／鎧／盾は載せない（`piecesFromBoardState` の canonical 寄せ用）。手駒は `game-rules` の CAPTURE_CHAR_TO_HAND_CODE。 */
 };

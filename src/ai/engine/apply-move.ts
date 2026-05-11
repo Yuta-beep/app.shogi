@@ -352,6 +352,12 @@ function resolveCapturedHandCode(
   if (capturedChar === '鶏' || rawCapturedCode.includes('F1A6EF3B99DF')) {
     return 'CHICKEN';
   }
+  if (capturedChar === '銭' || rawCapturedCode.includes('EACC7F540399')) {
+    return 'SEN';
+  }
+  if (capturedChar === '財' || rawCapturedCode.includes('7FC715661514')) {
+    return 'ZAI';
+  }
   if (rawCapturedCode.includes('SATORI')) {
     return 'SATORI';
   }
@@ -403,6 +409,12 @@ function resolveCapturedHandCode(
   if (rawCapturedCode.includes('CHICKEN')) {
     return 'CHICKEN';
   }
+  if (rawCapturedCode.includes('SEN')) {
+    return 'SEN';
+  }
+  if (rawCapturedCode.includes('ZAI')) {
+    return 'ZAI';
+  }
   const fromCaptured = toBasePieceCode(capturedToHandPieceCode(captured));
   if (fromCaptured) return fromCaptured;
   const fb = toBasePieceCode(fallbackCapturedCode);
@@ -432,6 +444,8 @@ function resolveCapturedHandCode(
   if (fb.includes('COW') || fb.includes('F75D88C48D6D')) return 'COW';
   if (fb.includes('PIG') || fb.includes('3EFA5702E75B')) return 'PIG';
   if (fb.includes('CHICKEN') || fb.includes('F1A6EF3B99DF')) return 'CHICKEN';
+  if (fb.includes('SEN') || fb.includes('EACC7F540399')) return 'SEN';
+  if (fb.includes('ZAI') || fb.includes('7FC715661514')) return 'ZAI';
   // opaque id をそのまま手駒キーにしない（手駒表示不能の原因）。
   if (/^PIECE_[A-Z0-9_]+$/i.test(fb)) return null;
   return fb;
@@ -783,6 +797,76 @@ function isPigPieceForApply(piece: { pieceCode: string | null; char: string }): 
   const b = toBasePieceCode(piece.pieceCode);
   if (b === 'PIG') return true;
   return (piece.pieceCode ?? '').toUpperCase().includes('3EFA5702E75B');
+}
+
+function isSenPieceForApply(piece: { pieceCode: string | null; char: string }): boolean {
+  if (normKanjiForEngineRules(piece.char) === '銭') return true;
+  const b = toBasePieceCode(piece.pieceCode);
+  if (b === 'SEN') return true;
+  return (piece.pieceCode ?? '').toUpperCase().includes('EACC7F540399');
+}
+
+function isZaiPieceForApply(piece: { pieceCode: string | null; char: string }): boolean {
+  if (normKanjiForEngineRules(piece.char) === '財') return true;
+  const b = toBasePieceCode(piece.pieceCode);
+  if (b === 'ZAI') return true;
+  return (piece.pieceCode ?? '').toUpperCase().includes('7FC715661514');
+}
+
+/** 財: 敵を取ったとき、味方の銭1体を取った駒の姿へ変える（着手駒のマスは除外して探索）。 */
+function applyZaiSkillReplaceAllySenWithCaptured(
+  pieces: AiBoardPiece[],
+  actorSide: Side,
+  capturedEnemy: AiBoardPiece,
+  zaiLandingRow: number,
+  zaiLandingCol: number,
+): AiBoardPiece[] | null {
+  const idx = pieces.findIndex(
+    (p) =>
+      p.side === actorSide &&
+      isSenPieceForApply(p) &&
+      !(p.row === zaiLandingRow && p.col === zaiLandingCol),
+  );
+  if (idx < 0) return null;
+  const sen = pieces[idx]!;
+  const next = pieces.map((p) => ({ ...p }));
+  next[idx] = {
+    ...capturedEnemy,
+    row: sen.row,
+    col: sen.col,
+    side: actorSide,
+  };
+  return next;
+}
+
+/** 銭: 移動のたびに 20% で金、10% で宝（排他・残り70%は銭のまま）。 */
+function maybeApplySenMoveSkillTransform(piece: AiBoardPiece): AiBoardPiece {
+  const roll = Math.random();
+  if (roll < 0.2) {
+    return {
+      ...piece,
+      pieceCode: 'KI',
+      char: '金',
+      promoted: false,
+      imageSignedUrl: null,
+      pigInheritedPieceCode: null,
+      pigInheritedChar: undefined,
+      pigInheritedPromoted: undefined,
+    };
+  }
+  if (roll < 0.3) {
+    return {
+      ...piece,
+      pieceCode: 'TREASURE',
+      char: '宝',
+      promoted: false,
+      imageSignedUrl: null,
+      pigInheritedPieceCode: null,
+      pigInheritedChar: undefined,
+      pigInheritedPromoted: undefined,
+    };
+  }
+  return piece;
 }
 
 function computeCowForwardPathDistanceForApply(
@@ -1280,6 +1364,8 @@ export function applyMove(input: {
 
     const captured = findPieceAt(nextPieces, move.toRow, move.toCol);
     let pigInheritVictim: AiBoardPiece | null = null;
+    /** 財スキル用: 盤上から消す直前の敵駒スナップショット */
+    let zaiCapturedEnemySnapshot: AiBoardPiece | null = null;
     let rebuffKboss = false;
     if (captured) {
       const captureOwnPiece = captured.side === actorSide;
@@ -1437,6 +1523,9 @@ export function applyMove(input: {
             move.toRow,
             move.toCol,
           );
+        if (!captureOwnPiece && isZaiPieceForApply(movingPiece)) {
+          zaiCapturedEnemySnapshot = { ...captured };
+        }
         nextPieces = nextPieces.filter(
           (piece) => !(piece.row === move.toRow && piece.col === move.toCol),
         );
@@ -1597,7 +1686,42 @@ export function applyMove(input: {
               }
           : {}),
       };
-      movedPieceAfterApply = nextPieces[movingIndexAfterCapture] ?? null;
+      let landedAfterMove = nextPieces[movingIndexAfterCapture]!;
+      if (
+        move.fromRow != null &&
+        move.fromCol != null &&
+        isSenPieceForApply(movingPiece)
+      ) {
+        const transformed = maybeApplySenMoveSkillTransform(landedAfterMove);
+        if (
+          transformed.pieceCode !== landedAfterMove.pieceCode ||
+          transformed.char !== landedAfterMove.char
+        ) {
+          nextPieces[movingIndexAfterCapture] = transformed;
+          landedAfterMove = transformed;
+          intrinsicCombatSkillTriggered = true;
+        }
+      }
+      if (
+        zaiCapturedEnemySnapshot &&
+        isZaiPieceForApply(movingPiece) &&
+        didCapture &&
+        move.fromRow != null &&
+        move.fromCol != null
+      ) {
+        const zaiNext = applyZaiSkillReplaceAllySenWithCaptured(
+          nextPieces,
+          actorSide,
+          zaiCapturedEnemySnapshot,
+          move.toRow,
+          move.toCol,
+        );
+        if (zaiNext) {
+          nextPieces = zaiNext;
+          intrinsicCombatSkillTriggered = true;
+        }
+      }
+      movedPieceAfterApply = landedAfterMove;
     } else {
       movedPieceAfterApply = nextPieces[movingIndexAfterCapture] ?? null;
     }

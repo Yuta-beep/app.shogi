@@ -38,6 +38,16 @@ const MINIMAL_SPECIAL_PIECE_DEF: AiPieceDefinition = {
   isRepeatable: false,
 };
 
+/** 銭・財でカタログ moveVectors が空のときの救済（金の1マス移動相当）。 */
+const SEN_ZAI_FALLBACK_MOVE_VECTORS: AiPieceDefinition['moveVectors'] = [
+  { dx: -1, dy: -1, maxStep: 1 },
+  { dx: 0, dy: -1, maxStep: 1 },
+  { dx: 1, dy: -1, maxStep: 1 },
+  { dx: -1, dy: 0, maxStep: 1 },
+  { dx: 1, dy: 0, maxStep: 1 },
+  { dx: 0, dy: 1, maxStep: 1 },
+];
+
 function isKingPiece(piece: AiBoardPiece): boolean {
   const code = toBasePieceCode(piece.pieceCode);
   return code === 'OU' || piece.char === '王' || piece.char === '玉';
@@ -102,6 +112,20 @@ function isCowPiece(piece: AiBoardPiece): boolean {
   const code = toBasePieceCode(piece.pieceCode);
   if (code === 'COW') return true;
   return (piece.pieceCode ?? '').toUpperCase().includes('F75D88C48D6D');
+}
+
+function isSenPiece(piece: AiBoardPiece): boolean {
+  if (normKanjiForEngineRules(piece.char) === '銭') return true;
+  const code = toBasePieceCode(piece.pieceCode);
+  if (code === 'SEN') return true;
+  return (piece.pieceCode ?? '').toUpperCase().includes('EACC7F540399');
+}
+
+function isZaiPiece(piece: AiBoardPiece): boolean {
+  if (normKanjiForEngineRules(piece.char) === '財') return true;
+  const code = toBasePieceCode(piece.pieceCode);
+  if (code === 'ZAI') return true;
+  return (piece.pieceCode ?? '').toUpperCase().includes('7FC715661514');
 }
 
 function normalizedPieceCodeUpper(piece: AiBoardPiece): string {
@@ -688,6 +712,12 @@ function resolvePieceCodeForLegalMove(piece: AiBoardPiece, lookups: AiPieceLooku
   }
   if (ch === '鶏' || rawUp.includes('F1A6EF3B99DF') || rawUp.includes('CHICKEN')) {
     return 'CHICKEN';
+  }
+  if (ch === '銭' || rawUp.includes('EACC7F540399') || rawUp.includes('SEN')) {
+    return 'SEN';
+  }
+  if (ch === '財' || rawUp.includes('7FC715661514') || rawUp.includes('ZAI')) {
+    return 'ZAI';
   }
   const legacy = toBasePieceCode(CHAR_TO_CODE[piece.char]);
   if (legacy) return legacy;
@@ -1598,7 +1628,11 @@ function resolveEffectiveVectorsForPiece(
   if (isConcavePieceForLegal(piece)) {
     return CONCAVE_SLIDE_VECTORS;
   }
-  const bishopNormalized = normalizeVectorsForBishop(piece, pieceDef.moveVectors);
+  const baseMoveVectors =
+    pieceDef.moveVectors.length === 0 && (isSenPiece(piece) || isZaiPiece(piece))
+      ? SEN_ZAI_FALLBACK_MOVE_VECTORS
+      : pieceDef.moveVectors;
+  const bishopNormalized = normalizeVectorsForBishop(piece, baseMoveVectors);
   const goldNormalized = normalizeVectorsForGold(piece, bishopNormalized);
   const fixedHouseField = normalizeVectorsForFixedHouseField(piece, goldNormalized);
   const timeNormalized = normalizeVectorsForTime(piece, fixedHouseField);
@@ -1820,7 +1854,9 @@ function generateBoardPieceMoves(input: {
       isBeastPieceForLegal(mover) ||
       isBirdPieceForLegal(mover) ||
       isConcavePieceForLegal(mover) ||
-      isCowPiece(mover))
+      isCowPiece(mover) ||
+      isSenPiece(mover) ||
+      isZaiPiece(mover))
   ) {
     pieceDef = { ...MINIMAL_SPECIAL_PIECE_DEF, char: mover.char };
   }
@@ -1834,7 +1870,9 @@ function generateBoardPieceMoves(input: {
     !isBeastPieceForLegal(mover) &&
     !isBirdPieceForLegal(mover) &&
     !isConcavePieceForLegal(mover) &&
-    !isCowPiece(mover)
+    !isCowPiece(mover) &&
+    !isSenPiece(mover) &&
+    !isZaiPiece(mover)
   ) {
     return [];
   }
