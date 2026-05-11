@@ -203,6 +203,8 @@ const CAPTURE_CHAR_TO_HAND_CODE: Readonly<Record<string, string>> = {
   薔: 'ROSE',
   菊: 'CHRYSANTHEMUM',
   桜: 'CHERRY',
+  凹: 'CONCAVE',
+  凸: 'CONVEX',
 };
 
 const OPAQUE_CAPTURE_CODE_TO_HAND_CODE: Readonly<Record<string, string>> = {
@@ -229,6 +231,8 @@ const OPAQUE_CAPTURE_CODE_TO_HAND_CODE: Readonly<Record<string, string>> = {
   PIECE_A49C1E52B47A: 'ROSE',
   PIECE_8254C41BA326: 'CHRYSANTHEMUM',
   PIECE_124C31EA5D7A: 'CHERRY',
+  PIECE_48204DCCFA56: 'CONCAVE',
+  PIECE_94B641477E72: 'CONVEX',
 };
 
 function opaqueCapturedCodeToHandCode(rawCode: string | null): string | null {
@@ -259,6 +263,8 @@ function opaqueCapturedCodeToHandCode(rawCode: string | null): string | null {
   if (upper.includes('A49C1E52B47A')) return 'ROSE';
   if (upper.includes('8254C41BA326')) return 'CHRYSANTHEMUM';
   if (upper.includes('124C31EA5D7A')) return 'CHERRY';
+  if (upper.includes('48204DCCFA56')) return 'CONCAVE';
+  if (upper.includes('94B641477E72')) return 'CONVEX';
   if (upper.includes('BLUEONI')) return 'BLUEONI';
   if (upper.includes('BLACKONI')) return 'BLACKONI';
   if (upper.includes('REDONI')) return 'REDONI';
@@ -282,6 +288,8 @@ function opaqueCapturedCodeToHandCode(rawCode: string | null): string | null {
   if (upper.includes('ROSE')) return 'ROSE';
   if (upper.includes('CHRYSANTHEMUM')) return 'CHRYSANTHEMUM';
   if (upper.includes('CHERRY')) return 'CHERRY';
+  if (upper.includes('CONCAVE')) return 'CONCAVE';
+  if (upper.includes('CONVEX')) return 'CONVEX';
   if (upper.includes('0F14ABCC6E5E')) return 'HOLY_SWORD';
   return null;
 }

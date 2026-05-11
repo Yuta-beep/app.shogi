@@ -6,6 +6,25 @@ import { createLoadDeckBuilderUseCase } from '@/usecases/deck-builder/create-dec
 import { supabase } from '@/lib/supabase/supabase-client';
 import { isApiDataSource } from '@/lib/config/data-source';
 
+/** `legal-moves.ts` の CONCAVE_SLIDE_VECTORS と同一（図鑑グリッド用）。 */
+const CONCAVE_CATALOG_MOVE_VECTORS: PieceCatalogItem['moveVectors'] = [
+  { dx: -1, dy: -1, maxStep: 9 },
+  { dx: 1, dy: -1, maxStep: 9 },
+  { dx: -1, dy: 0, maxStep: 9 },
+  { dx: 1, dy: 0, maxStep: 9 },
+  { dx: 0, dy: 1, maxStep: 9 },
+  { dx: -1, dy: 1, maxStep: 9 },
+  { dx: 1, dy: 1, maxStep: 9 },
+];
+
+const CONCAVE_CATALOG_MOVE_TEXT =
+  '斜め前・左右・後ろ・斜め後の各筋に何マスでも進める。盤の端が空マスで、進路上に敵駒がいないとき、味方駒を飛び越えてその端まで進める（前方への直進の筋を除く）。貫通で端へ入る着手では敵駒を取れない。';
+
+function isConcaveCatalogPiece(piece: PieceCatalogItem): boolean {
+  const code = (piece.pieceCode ?? '').toUpperCase();
+  return piece.char === '凹' || code.includes('CONCAVE') || code.includes('48204DCCFA56');
+}
+
 function normalizeCatalogSkillText(piece: PieceCatalogItem): string {
   const code = (piece.pieceCode ?? '').toUpperCase();
   const isDepressionPiece =
@@ -18,7 +37,17 @@ function normalizeCatalogSkillText(piece: PieceCatalogItem): string {
   if (isChrysanthemumPiece) {
     return '移動後、周囲8マスにいる味方駒1体（玉除く）に2ターンの復活効果を付与する。復活中は敵に取られても元の陣営の手駒に戻る。';
   }
+  if (isConcaveCatalogPiece(piece)) {
+    return 'なし。';
+  }
   return piece.skill;
+}
+
+function normalizeCatalogMoveText(piece: PieceCatalogItem): string {
+  if (isConcaveCatalogPiece(piece)) {
+    return CONCAVE_CATALOG_MOVE_TEXT;
+  }
+  return piece.move;
 }
 
 function normalizeCatalogMoveVectors(piece: PieceCatalogItem): PieceCatalogItem['moveVectors'] {
@@ -33,6 +62,9 @@ function normalizeCatalogMoveVectors(piece: PieceCatalogItem): PieceCatalogItem[
       { dx: -1, dy: 1, maxStep: 1 },
       { dx: 1, dy: 1, maxStep: 1 },
     ];
+  }
+  if (isConcaveCatalogPiece(piece)) {
+    return CONCAVE_CATALOG_MOVE_VECTORS;
   }
   return piece.moveVectors;
 }
@@ -57,6 +89,7 @@ export function usePieceCatalogScreen() {
             catalog.map((piece) => ({
               ...piece,
               skill: normalizeCatalogSkillText(piece),
+              move: normalizeCatalogMoveText(piece),
               moveVectors: normalizeCatalogMoveVectors(piece),
             })),
           );
@@ -99,6 +132,7 @@ export function usePieceCatalogScreen() {
           return {
             ...piece,
             skill: normalizeCatalogSkillText(piece),
+            move: normalizeCatalogMoveText(piece),
             moveVectors: normalizeCatalogMoveVectors(piece),
             pieceId: owned?.pieceId,
             imageSignedUrl: owned?.imageSignedUrl ?? null,

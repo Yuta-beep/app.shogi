@@ -154,6 +154,77 @@ function isBirdPieceForLegal(piece: AiBoardPiece): boolean {
   return b === 'BIRD';
 }
 
+/** 「凹」: 斜め前・左右・後・斜め後のみ何マスでも（前方直進なし）。貫通は別処理。 */
+function isConcavePieceForLegal(piece: AiBoardPiece): boolean {
+  if (normKanjiForEngineRules(piece.char) === '凹') return true;
+  const raw = pieceRawUpperForLegal(piece);
+  if (raw.includes('CONCAVE')) return true;
+  if (raw.includes('48204DCCFA56')) return true;
+  const b = toBasePieceCode(piece.pieceCode);
+  return b === 'CONCAVE';
+}
+
+const CONCAVE_SLIDE_VECTORS: AiPieceDefinition['moveVectors'] = [
+  { dx: -1, dy: -1, maxStep: 9 },
+  { dx: 1, dy: -1, maxStep: 9 },
+  { dx: -1, dy: 0, maxStep: 9 },
+  { dx: 1, dy: 0, maxStep: 9 },
+  { dx: 0, dy: 1, maxStep: 9 },
+  { dx: -1, dy: 1, maxStep: 9 },
+  { dx: 1, dy: 1, maxStep: 9 },
+];
+
+/** 貫通: 前方直進以外の各筋で、盤の端マスが空きかつ端までの経路上に敵がいないとき、味方を飛び越えて端へ入れる（取りは発生しない）。 */
+const CONCAVE_PIERCE_TEMPLATE_DIRS: ReadonlyArray<readonly [number, number]> = [
+  [-1, -1],
+  [1, -1],
+  [-1, 0],
+  [1, 0],
+  [0, 1],
+  [-1, 1],
+  [1, 1],
+];
+
+function generateConcaveEdgePierceTargets(
+  occupancy: OccupancyMap,
+  piece: AiBoardPiece,
+): { row: number; col: number }[] {
+  const out: { row: number; col: number }[] = [];
+  const orient = piece.side === 'player' ? 1 : -1;
+  for (const [tvx, tvy] of CONCAVE_PIERCE_TEMPLATE_DIRS) {
+    const dc = tvx * orient;
+    const dr = tvy * orient;
+    let er = piece.row;
+    let ec = piece.col;
+    for (;;) {
+      const nr = er + dr;
+      const nc = ec + dc;
+      if (nr < 0 || nr > 8 || nc < 0 || nc > 8) break;
+      er = nr;
+      ec = nc;
+    }
+    if (er === piece.row && ec === piece.col) continue;
+    if (findPieceAtFast(occupancy, er, ec)) continue;
+    let r = piece.row + dr;
+    let c = piece.col + dc;
+    let ok = true;
+    while (true) {
+      const occ = findPieceAtFast(occupancy, r, c);
+      if (occ && occ.side !== piece.side) {
+        ok = false;
+        break;
+      }
+      if (r === er && c === ec) break;
+      r += dr;
+      c += dc;
+    }
+    if (ok) {
+      out.push({ row: er, col: ec });
+    }
+  }
+  return out;
+}
+
 function isSatoriPieceForLegal(piece: AiBoardPiece): boolean {
   if (normKanjiForEngineRules(piece.char) === '悟') return true;
   const raw = pieceRawUpperForLegal(piece);
@@ -559,6 +630,9 @@ function resolvePieceCodeForLegalMove(piece: AiBoardPiece, lookups: AiPieceLooku
   if (ch === '乙' || rawUp.includes('5A07CA59B158') || rawUp.includes('OTSU')) {
     return 'OTSU';
   }
+  if (ch === '凸' || rawUp.includes('94B641477E72') || rawUp.includes('CONVEX')) {
+    return 'CONVEX';
+  }
   const legacy = toBasePieceCode(CHAR_TO_CODE[piece.char]);
   if (legacy) return legacy;
   return 'FU';
@@ -591,6 +665,32 @@ function activeOtsuFollowupForSide(
     const st = (raw ?? {}) as Record<string, unknown>;
     const statusType = String(st.status_type ?? st.statusType ?? '');
     if (statusType !== 'otsu_followup') continue;
+    const side = String(st.side ?? 'player') === 'enemy' ? 'enemy' : 'player';
+    if (side !== position.sideToMove) continue;
+    const remaining = Number(st.remaining_turns ?? st.remainingTurns ?? 0);
+    if (!Number.isFinite(remaining) || remaining <= 0) continue;
+    const row = Number(st.row);
+    const col = Number(st.col);
+    if (!Number.isFinite(row) || !Number.isFinite(col)) continue;
+    return { row, col };
+  }
+  return null;
+}
+
+function activeConvexFollowupForSide(
+  position: AiBattlePosition,
+): { row: number; col: number } | null {
+  const boardState = (position.boardState ?? {}) as Record<string, unknown>;
+  const skillState = (boardState.skill_state ?? boardState.skillState ?? {}) as Record<
+    string,
+    unknown
+  >;
+  const rawStatuses = (skillState.piece_statuses ?? skillState.pieceStatuses) as unknown;
+  if (!Array.isArray(rawStatuses)) return null;
+  for (const raw of rawStatuses) {
+    const st = (raw ?? {}) as Record<string, unknown>;
+    const statusType = String(st.status_type ?? st.statusType ?? '');
+    if (statusType !== 'convex_followup') continue;
     const side = String(st.side ?? 'player') === 'enemy' ? 'enemy' : 'player';
     if (side !== position.sideToMove) continue;
     const remaining = Number(st.remaining_turns ?? st.remainingTurns ?? 0);
@@ -1367,6 +1467,9 @@ function resolveEffectiveVectorsForPiece(
   if (isKatanaPiece(piece)) {
     return [{ dx: 0, dy: -1, maxStep: 1 }];
   }
+  if (isConcavePieceForLegal(piece)) {
+    return CONCAVE_SLIDE_VECTORS;
+  }
   const bishopNormalized = normalizeVectorsForBishop(piece, pieceDef.moveVectors);
   const goldNormalized = normalizeVectorsForGold(piece, bishopNormalized);
   const fixedHouseField = normalizeVectorsForFixedHouseField(piece, goldNormalized);
@@ -1586,7 +1689,8 @@ function generateBoardPieceMoves(input: {
       isKatanaPiece(input.piece) ||
       isAnyOniVariantPiece(input.piece) ||
       isBeastPieceForLegal(input.piece) ||
-      isBirdPieceForLegal(input.piece))
+      isBirdPieceForLegal(input.piece) ||
+      isConcavePieceForLegal(input.piece))
   ) {
     pieceDef = { ...MINIMAL_SPECIAL_PIECE_DEF, char: input.piece.char };
   }
@@ -1598,7 +1702,8 @@ function generateBoardPieceMoves(input: {
     !isKatanaPiece(input.piece) &&
     !isAnyOniVariantPiece(input.piece) &&
     !isBeastPieceForLegal(input.piece) &&
-    !isBirdPieceForLegal(input.piece)
+    !isBirdPieceForLegal(input.piece) &&
+    !isConcavePieceForLegal(input.piece)
   ) {
     return [];
   }
@@ -1662,11 +1767,21 @@ function generateBoardPieceMoves(input: {
     input.piece.side,
   );
   const pathOccupancy = buildOccupancyMap(pathPieces);
-  const normalTargets = isCloudPiece(input.piece)
+  let normalTargets = isCloudPiece(input.piece)
     ? generateCloudTargetsFromVectors(pathOccupancy, input.piece, normalVectors)
     : getLegalTargetsFromVectors(pathPieces, input.piece, normalVectors, 9, {
         canJump: effectiveCanJump,
       });
+  if (isConcavePieceForLegal(input.piece)) {
+    const pierce = generateConcaveEdgePierceTargets(pathOccupancy, input.piece);
+    const seenN = new Set(normalTargets.map((t) => `${t.row}:${t.col}`));
+    for (const t of pierce) {
+      const k = `${t.row}:${t.col}`;
+      if (seenN.has(k)) continue;
+      seenN.add(k);
+      normalTargets = [...normalTargets, t];
+    }
+  }
   const gunLineTargets =
     isGunPiece(input.piece) && !isMirrorPiece(input.piece)
       ? [
@@ -1863,12 +1978,14 @@ export function generateLegalMoves(input: {
   const lookups = buildPieceLookups(input.pieceCatalog);
   const skillView = createSkillRuntimeView(position);
   const activePiecesRaw = pieces.filter((piece) => piece.side === position.sideToMove);
+  const convexFollowup = activeConvexFollowupForSide(position);
   const otsuFollowup = activeOtsuFollowupForSide(position);
+  const lockedFollowup = convexFollowup ?? otsuFollowup;
   const activePieces =
-    otsuFollowup == null
+    lockedFollowup == null
       ? activePiecesRaw
       : activePiecesRaw.filter(
-          (piece) => piece.row === otsuFollowup.row && piece.col === otsuFollowup.col,
+          (piece) => piece.row === lockedFollowup.row && piece.col === lockedFollowup.col,
         );
 
   const boardMoves = activePieces
@@ -1888,7 +2005,7 @@ export function generateLegalMoves(input: {
         noCaptureOnly: otsuFollowup != null,
       }),
     );
-  const timeSkillOnlyMoves = (otsuFollowup == null ? activePieces : [])
+  const timeSkillOnlyMoves = (lockedFollowup == null ? activePieces : [])
     .filter((piece) => {
       const code = toBasePieceCode(piece.pieceCode);
       return code === 'TIME' || piece.char === '時';
@@ -1905,7 +2022,7 @@ export function generateLegalMoves(input: {
     );
   const peopleCount = countPeoplePiecesOnBoard(pieces);
   const houseSkillOnlyMoves =
-    otsuFollowup != null
+    lockedFollowup != null
       ? []
       : peopleCount < 5
         ? activePieces
@@ -1920,7 +2037,7 @@ export function generateLegalMoves(input: {
               }),
             )
         : [];
-  const dropMoves = otsuFollowup != null ? [] : generateDropMoves({ pieces, position, skillView });
+  const dropMoves = lockedFollowup != null ? [] : generateDropMoves({ pieces, position, skillView });
 
   const combined = [...boardMoves, ...timeSkillOnlyMoves, ...houseSkillOnlyMoves, ...dropMoves];
   const legalMoves = expandHeartProtectSkillMovesForLegalListing(

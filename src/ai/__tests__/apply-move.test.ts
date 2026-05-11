@@ -3009,4 +3009,89 @@ describe('ai engine apply move', () => {
     );
     expect(enemiesOnRow4).toHaveLength(0);
   });
+
+  it('凸は1手目の後も手番が続き、2手目でも取れる', () => {
+    const convexDef: AiPieceDefinition = {
+      pieceCode: 'CONVEX',
+      canonicalCode: 'CONVEX',
+      sfenCode: '+',
+      char: '凸',
+      name: '凸',
+      unlock: 'default',
+      desc: '',
+      skill: '',
+      move: '',
+      moveVectors: [
+        { dx: 0, dy: -1, maxStep: 9 },
+        { dx: 0, dy: 1, maxStep: 9 },
+        { dx: -1, dy: 0, maxStep: 9 },
+        { dx: 1, dy: 0, maxStep: 9 },
+      ],
+      isRepeatable: true,
+    };
+    const catalog: AiPieceDefinition[] = [...pieceCatalog, convexDef];
+
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: 'seed',
+      stateHash: 'seed',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'enemy', row: 5, col: 4, pieceCode: 'FU', char: '歩', promoted: false },
+          { side: 'enemy', row: 4, col: 4, pieceCode: 'FU', char: '歩', promoted: false },
+          { side: 'player', row: 7, col: 4, pieceCode: 'CONVEX', char: '凸', promoted: false },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+      },
+      hands: { player: {}, enemy: {} },
+    };
+
+    const first = applyMove({
+      position,
+      pieceCatalog: catalog,
+      move: {
+        fromRow: 7,
+        fromCol: 4,
+        toRow: 5,
+        toCol: 4,
+        pieceCode: 'CONVEX',
+        promote: false,
+        dropPieceCode: null,
+        capturedPieceCode: 'FU',
+        notation: null,
+      },
+    });
+
+    expect(first.turnConsumed).toBe(false);
+    expect(first.position.sideToMove).toBe('player');
+    expect(first.position.moveCount).toBe(0);
+    const skillState = (first.position.boardState as { skill_state?: Record<string, unknown> })
+      .skill_state;
+    const statuses = (skillState?.piece_statuses ?? []) as Record<string, unknown>[];
+    expect(statuses.some((s) => String(s.status_type) === 'convex_followup')).toBe(true);
+
+    const second = applyMove({
+      position: first.position,
+      pieceCatalog: catalog,
+      move: {
+        fromRow: 5,
+        fromCol: 4,
+        toRow: 4,
+        toCol: 4,
+        pieceCode: 'CONVEX',
+        promote: false,
+        dropPieceCode: null,
+        capturedPieceCode: 'FU',
+        notation: null,
+      },
+    });
+
+    expect(second.turnConsumed).toBe(true);
+    expect(second.position.sideToMove).toBe('enemy');
+    expect(second.position.moveCount).toBe(1);
+    expect(Math.max(0, second.position.hands.player.FU ?? 0)).toBeGreaterThanOrEqual(2);
+  });
 });

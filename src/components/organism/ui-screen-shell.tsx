@@ -1,5 +1,6 @@
 import { useRouter } from 'expo-router';
 import { ReactNode } from 'react';
+import type { StyleProp, ViewStyle } from 'react-native';
 import {
   ImageBackground,
   ImageSourcePropType,
@@ -27,6 +28,8 @@ type UiScreenShellProps = {
   fullBleedBackgroundSource?: ImageSourcePropType;
   useBlackBackgroundWhenNoImage?: boolean;
   noImageBackgroundClassName?: string;
+  /** 画像なし時の下地色（`noImageBackgroundClassName` より確実に反映させたいとき） */
+  noImageBackgroundColor?: string;
 };
 
 export function UiScreenShell({
@@ -41,6 +44,7 @@ export function UiScreenShell({
   fullBleedBackgroundSource,
   useBlackBackgroundWhenNoImage = false,
   noImageBackgroundClassName,
+  noImageBackgroundColor,
 }: UiScreenShellProps) {
   const router = useRouter();
 
@@ -96,17 +100,23 @@ export function UiScreenShell({
     </ScrollView>
   );
 
+  const shellBackgroundStyle: StyleProp<ViewStyle> | undefined =
+    !fullBleedBackgroundSource && noImageBackgroundColor
+      ? { backgroundColor: noImageBackgroundColor }
+      : undefined;
+
+  const shellClassName = (() => {
+    if (fullBleedBackgroundSource) return 'flex-1 bg-black';
+    if (noImageBackgroundColor) return 'flex-1';
+    if (noImageBackgroundClassName) return `flex-1 ${noImageBackgroundClassName}`;
+    if (useBlackBackgroundWhenNoImage) return 'flex-1 bg-black';
+    return 'flex-1 bg-paper';
+  })();
+
   return (
     <SafeAreaView
-      className={`flex-1 ${
-        fullBleedBackgroundSource
-          ? 'bg-black'
-          : noImageBackgroundClassName
-            ? noImageBackgroundClassName
-            : useBlackBackgroundWhenNoImage
-              ? 'bg-black'
-              : 'bg-paper'
-      }`}
+      className={shellClassName}
+      style={shellBackgroundStyle}
       edges={['left', 'right', 'bottom']}
     >
       <GlobalHomeHud />

@@ -42,6 +42,11 @@ const HEART_SKILL_DESCRIPTION =
   '移動後、味方駒を1つ選び、その駒を2ターン、敵に取られないようにする。（王・玉は選べない）';
 const DEPRESSION_SKILL_DESCRIPTION = '移動後、左右1マスの空きマスを2ターン侵入禁止の×マスにする。';
 
+const CONCAVE_SKILL_INSPECT = 'なし。';
+
+const CONCAVE_MOVE_INSPECT =
+  '斜め前・左右・後ろ・斜め後の各筋に何マスでも進める（前方への直進は不可）。盤の端マスが空で、その筋の進路上に敵がいないとき、味方駒を飛び越えてその端まで進める（前方への直進の筋を除く）。貫通で端へ入る着手では敵駒を取れない。';
+
 export type InspectingPieceState = {
   char: string;
   pieceCode?: string | null;
@@ -161,6 +166,13 @@ export function resolveInspectSkillDescription(
   ) {
     return DEPRESSION_SKILL_DESCRIPTION;
   }
+  if (
+    char === '凹' ||
+    (pieceCode && pieceCode.toUpperCase().includes('CONCAVE')) ||
+    (pieceCode && pieceCode.toUpperCase().includes('48204DCCFA56'))
+  ) {
+    return CONCAVE_SKILL_INSPECT;
+  }
   if (char === '山') return '嶺のスキルで召喚される補助駒。';
   const normalized = (desc ?? '').trim();
   return normalized.length > 0 ? normalized : '詳細は準備中です。';
@@ -174,6 +186,13 @@ export function resolveInspectMoveDescription(
   const byCode = inspectPieceFlagsByCode(pieceCode);
   if (char === '刀') return '前方1マス。';
   if (char === '銃') return '前1～2マス、または斜め後ろ2マス。';
+  if (
+    char === '凹' ||
+    (pieceCode && pieceCode.toUpperCase().includes('CONCAVE')) ||
+    (pieceCode && pieceCode.toUpperCase().includes('48204DCCFA56'))
+  ) {
+    return CONCAVE_MOVE_INSPECT;
+  }
   if (char === '書' || byCode.book) return '周囲8マスの味方駒が動ける範囲の和集合。';
   if (char === '封' || byCode.seal) return '通常移動 + 斜め4方向に移動不能オーラ。';
   if (char === '聖' || byCode.saint) return '全方向に1マス。';

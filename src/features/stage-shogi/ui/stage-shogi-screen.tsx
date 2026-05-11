@@ -33,11 +33,24 @@ export function StageShogiScreen() {
     return <AppLoadingScreen imageSource={homeAssets.loadingImage} />;
   }
 
-  const stageNo = Number(stageParam);
+  const stageNoFromParam = Number(stageParam);
+  const stageNoFromLabel = (() => {
+    const raw = (vm.snapshot.stageLabel ?? '').replace(/\s+/g, ' ').trim();
+    const m = /^STAGE\s+(\d+)$/i.exec(raw) ?? /^ステージ\s*(\d+)$/i.exec(raw);
+    return m ? Number(m[1]) : Number.NaN;
+  })();
+  const stageNo =
+    Number.isFinite(stageNoFromParam) && stageNoFromParam > 0
+      ? stageNoFromParam
+      : Number.isFinite(stageNoFromLabel) && stageNoFromLabel > 0
+        ? stageNoFromLabel
+        : Number.NaN;
+
   const forceBlackBackground = Number.isFinite(stageNo) && stageNo === 33;
   const forceBlueBackground = Number.isFinite(stageNo) && stageNo === 43;
+  const forceGreenBackground = Number.isFinite(stageNo) && stageNo === 45;
   const stageBattleBackgroundSource =
-    Number.isFinite(stageNo) && stageNo > 0 && stageNo !== 33 && stageNo !== 43
+    Number.isFinite(stageNo) && stageNo > 0 && stageNo !== 33 && stageNo !== 43 && stageNo !== 45
       ? getNormalDungeonStagePreviewSource(stageNo)
       : null;
 
@@ -50,7 +63,9 @@ export function StageShogiScreen() {
       homeButtonTextClassName="text-white"
       fullBleedBackgroundSource={stageBattleBackgroundSource ?? undefined}
       useBlackBackgroundWhenNoImage={forceBlackBackground}
-      noImageBackgroundClassName={forceBlueBackground ? 'bg-blue-800' : undefined}
+      noImageBackgroundColor={
+        forceGreenBackground ? '#166534' : forceBlueBackground ? '#1e40af' : undefined
+      }
     >
       <View className="rounded-xl border-2 border-accent bg-[#f3ead3] p-3">
         <Text className="text-sm font-bold text-[#6b4532]">{`TURN ${vm.moveNo}`}</Text>

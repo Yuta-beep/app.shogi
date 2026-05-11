@@ -125,6 +125,41 @@ function readOtsuFollowupForSide(
   return null;
 }
 
+function isConvexPieceForApply(piece: { pieceCode: string | null; char: string }): boolean {
+  const ch = normKanjiForEngineRules(piece.char);
+  if (ch === '凸') return true;
+  const base = toBasePieceCode(piece.pieceCode);
+  if (base === 'CONVEX') return true;
+  const raw = (piece.pieceCode ?? '').toUpperCase();
+  return raw.includes('94B641477E72') || raw.includes('CONVEX');
+}
+
+function readConvexFollowupForSide(
+  boardState: Record<string, unknown> | undefined,
+  side: Side,
+): { row: number; col: number } | null {
+  if (!boardState) return null;
+  const skillState = (boardState.skill_state ?? boardState.skillState) as
+    | Record<string, unknown>
+    | undefined;
+  const rawStatuses = (skillState?.piece_statuses ?? skillState?.pieceStatuses) as unknown;
+  if (!Array.isArray(rawStatuses)) return null;
+  for (const raw of rawStatuses) {
+    const st = (raw ?? {}) as Record<string, unknown>;
+    const statusType = String(st.status_type ?? st.statusType ?? '');
+    if (statusType !== 'convex_followup') continue;
+    const stSide = String(st.side ?? 'player') === 'enemy' ? 'enemy' : 'player';
+    if (stSide !== side) continue;
+    const remaining = Number(st.remaining_turns ?? st.remainingTurns ?? 0);
+    if (!Number.isFinite(remaining) || remaining <= 0) continue;
+    const row = Number(st.row);
+    const col = Number(st.col);
+    if (!Number.isFinite(row) || !Number.isFinite(col)) continue;
+    return { row, col };
+  }
+  return null;
+}
+
 const CHRYSANTHEMUM_REVIVAL_STATUS = 'chrysanthemum_revival';
 
 function readSkillStatePieceStatuses(
@@ -286,6 +321,12 @@ function resolveCapturedHandCode(
   if (capturedChar === '桜' || rawCapturedCode.includes('124C31EA5D7A')) {
     return 'CHERRY';
   }
+  if (capturedChar === '凹' || rawCapturedCode.includes('48204DCCFA56')) {
+    return 'CONCAVE';
+  }
+  if (capturedChar === '凸' || rawCapturedCode.includes('94B641477E72')) {
+    return 'CONVEX';
+  }
   if (rawCapturedCode.includes('SATORI')) {
     return 'SATORI';
   }
@@ -307,6 +348,12 @@ function resolveCapturedHandCode(
   if (rawCapturedCode.includes('CHERRY')) {
     return 'CHERRY';
   }
+  if (rawCapturedCode.includes('CONCAVE')) {
+    return 'CONCAVE';
+  }
+  if (rawCapturedCode.includes('CONVEX')) {
+    return 'CONVEX';
+  }
   const fromCaptured = toBasePieceCode(capturedToHandPieceCode(captured));
   if (fromCaptured) return fromCaptured;
   const fb = toBasePieceCode(fallbackCapturedCode);
@@ -326,6 +373,8 @@ function resolveCapturedHandCode(
   if (fb.includes('ROSE') || fb.includes('A49C1E52B47A')) return 'ROSE';
   if (fb.includes('CHRYSANTHEMUM') || fb.includes('8254C41BA326')) return 'CHRYSANTHEMUM';
   if (fb.includes('CHERRY') || fb.includes('124C31EA5D7A')) return 'CHERRY';
+  if (fb.includes('CONCAVE') || fb.includes('48204DCCFA56')) return 'CONCAVE';
+  if (fb.includes('CONVEX') || fb.includes('94B641477E72')) return 'CONVEX';
   // opaque id をそのまま手駒キーにしない（手駒表示不能の原因）。
   if (/^PIECE_[A-Z0-9_]+$/i.test(fb)) return null;
   return fb;
@@ -954,6 +1003,10 @@ export function applyMove(input: {
     current.boardState as Record<string, unknown> | undefined,
     actorSide,
   );
+  const convexFollowupBefore = readConvexFollowupForSide(
+    current.boardState as Record<string, unknown> | undefined,
+    actorSide,
+  );
   const preMoveSkillView = createSkillRuntimeView(current);
   assertMoveAllowedBySessionCatalog({
     position: current,
@@ -975,6 +1028,7 @@ export function applyMove(input: {
   /** 盾の intrinsic：着手全体を巻き戻す。 */
   let shieldAbortedMove = false;
   let movedByOtsu = false;
+  let movedByConvex = false;
 
   if (move.notation === 'time_skill_only' || move.notation === 'house_skill_only') {
     // no-op on board（スキルのみ）
@@ -1007,6 +1061,7 @@ export function applyMove(input: {
     }
     const movingPiece = nextPieces[movingIndex];
     movedByOtsu = isOtsuPieceForApply(movingPiece);
+    movedByConvex = isConvexPieceForApply(movingPiece);
     const movingCode = toBasePieceCode(movingPiece?.pieceCode);
     const isCloudMover = movingCode === 'CLOUD' || movingPiece?.char === '雲';
     const combatBoardSnapshot = cloneCombatBoardSnapshot({ pieces: nextPieces, hands });
@@ -1411,8 +1466,57 @@ export function applyMove(input: {
       generateLegalMoves({ position: followupPreview, pieceCatalog: input.pieceCatalog }).legalMoves
         .length > 0;
   }
+
+  let grantsConvexFollowup = false;
+  if (
+    !convexFollowupBefore &&
+    !otsuFollowupBefore &&
+    movedByConvex &&
+    !shieldAbortedMove &&
+    movedPieceAfterApply &&
+    move.fromRow != null &&
+    move.fromCol != null &&
+    !move.dropPieceCode
+  ) {
+    const convexPreview = createPosition({
+      pieces: nextPieces,
+      hands,
+      sideToMove: actorSide,
+      moveCount: current.moveCount,
+      pieceCatalog: input.pieceCatalog,
+    });
+    convexPreview.boardState = {
+      ...(current.boardState ?? {}),
+      ...(convexPreview.boardState ?? {}),
+    };
+    const convexBoard = (convexPreview.boardState ?? {}) as Record<string, unknown>;
+    const convexSkillStateRaw = (convexBoard.skill_state ?? convexBoard.skillState) as
+      | Record<string, unknown>
+      | undefined;
+    const convexSkillState =
+      convexSkillStateRaw && typeof convexSkillStateRaw === 'object'
+        ? { ...convexSkillStateRaw }
+        : {};
+    const convexStatusesRaw = (convexSkillState.piece_statuses ??
+      convexSkillState.pieceStatuses) as unknown;
+    const convexStatuses = Array.isArray(convexStatusesRaw) ? [...convexStatusesRaw] : [];
+    convexStatuses.push({
+      side: actorSide,
+      row: movedPieceAfterApply.row,
+      col: movedPieceAfterApply.col,
+      status_type: 'convex_followup',
+      remaining_turns: 1,
+    });
+    (convexSkillState as Record<string, unknown>).piece_statuses = convexStatuses;
+    convexBoard.skill_state = convexSkillState;
+    convexPreview.boardState = convexBoard;
+    grantsConvexFollowup =
+      generateLegalMoves({ position: convexPreview, pieceCatalog: input.pieceCatalog }).legalMoves
+        .length > 0;
+  }
+
   // 盾で取りが無効化されても着手は1手として消化し、攻撃側の手番を終える。
-  const turnAdvanced = !grantsOtsuFollowup;
+  const turnAdvanced = !grantsOtsuFollowup && !grantsConvexFollowup;
   const applyLandingDerivedEffects = !shieldAbortedMove;
   const nextSide: Side = turnAdvanced ? (actorSide === 'player' ? 'enemy' : 'player') : actorSide;
   const nextMoveCount = current.moveCount + (turnAdvanced ? 1 : 0);
@@ -1627,15 +1731,15 @@ export function applyMove(input: {
   {
     const rawStatuses = (skillState.piece_statuses ?? skillState.pieceStatuses) as unknown;
     const statuses = Array.isArray(rawStatuses) ? [...rawStatuses] : [];
-    const withoutOtsuFollowup = statuses.filter((raw) => {
+    const withoutPieceFollowups = statuses.filter((raw) => {
       const st = (raw ?? {}) as Record<string, unknown>;
       const statusType = String(st.status_type ?? st.statusType ?? '');
-      if (statusType !== 'otsu_followup') return true;
+      if (statusType !== 'otsu_followup' && statusType !== 'convex_followup') return true;
       const side = String(st.side ?? 'player') === 'enemy' ? 'enemy' : 'player';
       return side !== actorSide;
     });
     if (grantsOtsuFollowup && movedPieceAfterApply) {
-      withoutOtsuFollowup.push({
+      withoutPieceFollowups.push({
         side: actorSide,
         row: movedPieceAfterApply.row,
         col: movedPieceAfterApply.col,
@@ -1643,7 +1747,16 @@ export function applyMove(input: {
         remaining_turns: 1,
       });
     }
-    (skillState as Record<string, unknown>).piece_statuses = withoutOtsuFollowup;
+    if (grantsConvexFollowup && movedPieceAfterApply) {
+      withoutPieceFollowups.push({
+        side: actorSide,
+        row: movedPieceAfterApply.row,
+        col: movedPieceAfterApply.col,
+        status_type: 'convex_followup',
+        remaining_turns: 1,
+      });
+    }
+    (skillState as Record<string, unknown>).piece_statuses = withoutPieceFollowups;
   }
   if (turnAdvanced && applyLandingDerivedEffects && movedPieceAfterApply) {
     const key = actorSide === 'player' ? 'last_player_moved_piece' : 'last_enemy_moved_piece';
