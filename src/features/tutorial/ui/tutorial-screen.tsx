@@ -114,7 +114,7 @@ export function TutorialScreen() {
       resizeMode="cover"
       className="flex-1 bg-black"
     >
-      <StatusBar style="light" />
+      <StatusBar style="light" translucent backgroundColor="transparent" />
       <View className="flex-1">
         <Pressable
           accessibilityRole="button"

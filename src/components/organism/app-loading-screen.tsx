@@ -2,7 +2,6 @@ import { Image } from 'expo-image';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef } from 'react';
 import { ActivityIndicator, Animated, Easing, StyleSheet, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { homeAssets } from '@/constants/home-assets';
 
@@ -70,25 +69,9 @@ export function AppLoadingScreen({
   label = 'Loading',
   imageSource = homeAssets.loadingImage,
 }: AppLoadingScreenProps) {
-  const insets = useSafeAreaInsets();
-
   return (
     <View className="flex-1 bg-black">
-      <StatusBar style="light" backgroundColor="#000000" />
-      {insets.top > 0 ? (
-        <View
-          pointerEvents="none"
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            height: insets.top,
-            backgroundColor: '#000000',
-            zIndex: 10,
-          }}
-        />
-      ) : null}
+      <StatusBar style="light" translucent backgroundColor="transparent" />
 
       <View className="flex-1 items-center justify-center px-6">
         {imageSource ? (

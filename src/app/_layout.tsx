@@ -58,7 +58,7 @@ function RootLayoutInner() {
   return (
     <>
       <Stack screenOptions={{ headerShown: false }} />
-      <StatusBar style="light" />
+      <StatusBar style="light" translucent backgroundColor="transparent" />
     </>
   );
 }

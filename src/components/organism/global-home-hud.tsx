@@ -13,7 +13,7 @@ export function GlobalHomeHud({ pawnCurrency, goldCurrency }: GlobalHomeHudProps
 
   return (
     <>
-      <SafeAreaView edges={['top']} className="bg-black" />
+      <SafeAreaView edges={['top']} />
       <HomeCommonHeader
         userName={snapshot.playerName}
         rank={snapshot.playerRank}

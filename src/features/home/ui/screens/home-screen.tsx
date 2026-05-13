@@ -215,8 +215,7 @@ export function HomeScreen() {
   }
 
   return (
-    <View className="flex-1 bg-black">
-      <SafeAreaView edges={['top']} className="bg-black" />
+    <ImageBackground source={homeAssets.background} resizeMode="stretch" className="flex-1">
       <HomeHeaderSection
         onPressBackToTitle={() => {
           void playSe('tap');
@@ -244,31 +243,29 @@ export function HomeScreen() {
         maxStamina={snapshot.maxStamina}
         nextRecoveryAt={snapshot.nextRecoveryAt}
       />
-      <ImageBackground source={homeAssets.background} resizeMode="stretch" className="flex-1">
-        <SafeAreaView edges={['left', 'right', 'bottom']} className="flex-1 bg-black/10">
-          <View className="flex-1">
-            <HomeBackgroundSection />
-            {currentDeckPiece ? (
-              <View pointerEvents="none" style={styles.deckCarouselLayer}>
-                <Animated.View style={[styles.deckCarouselCard, { opacity: fadeAnim }]}>
-                  {currentDeckPieceImageSource ? (
-                    <Image
-                      source={currentDeckPieceImageSource}
-                      contentFit="contain"
-                      style={styles.deckCarouselImage}
-                    />
-                  ) : (
-                    <View style={styles.deckFallbackBadge}>
-                      <Text style={styles.deckFallbackChar}>{currentDeckPiece.char}</Text>
-                    </View>
-                  )}
-                </Animated.View>
-              </View>
-            ) : null}
-            <HomeActionGridSection />
-          </View>
-        </SafeAreaView>
-      </ImageBackground>
+      <SafeAreaView edges={['left', 'right', 'bottom']} className="flex-1 bg-black/10">
+        <View className="flex-1">
+          <HomeBackgroundSection />
+          {currentDeckPiece ? (
+            <View pointerEvents="none" style={styles.deckCarouselLayer}>
+              <Animated.View style={[styles.deckCarouselCard, { opacity: fadeAnim }]}>
+                {currentDeckPieceImageSource ? (
+                  <Image
+                    source={currentDeckPieceImageSource}
+                    contentFit="contain"
+                    style={styles.deckCarouselImage}
+                  />
+                ) : (
+                  <View style={styles.deckFallbackBadge}>
+                    <Text style={styles.deckFallbackChar}>{currentDeckPiece.char}</Text>
+                  </View>
+                )}
+              </Animated.View>
+            </View>
+          ) : null}
+          <HomeActionGridSection />
+        </View>
+      </SafeAreaView>
 
       <Modal
         visible={gachaModalOpen}
@@ -368,7 +365,7 @@ export function HomeScreen() {
           </SafeAreaView>
         </View>
       </Modal>
-    </View>
+    </ImageBackground>
   );
 }
 
