@@ -1,3 +1,4 @@
+import { ZodError } from 'zod';
 import { HomeApiDataSource } from '../home-api-datasource';
 
 const mockGetSession: jest.Mock = jest.fn();
@@ -30,6 +31,7 @@ describe('HomeApiDataSource', () => {
       playerExp: 0,
       stamina: 50,
       maxStamina: 50,
+      nextRecoveryAt: null,
     });
 
     const result = await ds.getSnapshot();
@@ -42,5 +44,25 @@ describe('HomeApiDataSource', () => {
   it('throws when no active session exists', async () => {
     mockGetSession.mockResolvedValueOnce({ data: { session: null }, error: null });
     await expect(ds.getSnapshot()).rejects.toThrow('No active session');
+  });
+
+  it('throws ZodError when snapshot response is invalid', async () => {
+    mockGetSession.mockResolvedValueOnce({
+      data: { session: { access_token: 'token-123' } },
+      error: null,
+    });
+    mockGetJson.mockResolvedValueOnce({
+      playerName: '将棋太郎',
+      rating: '1500',
+      pawnCurrency: 0,
+      goldCurrency: 0,
+      playerRank: 1,
+      playerExp: 0,
+      stamina: 50,
+      maxStamina: 50,
+      nextRecoveryAt: null,
+    });
+
+    await expect(ds.getSnapshot()).rejects.toBeInstanceOf(ZodError);
   });
 });

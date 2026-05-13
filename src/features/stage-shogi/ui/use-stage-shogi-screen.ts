@@ -367,6 +367,8 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
       optimisticBaseline,
     });
     setPromotionImageFlash(null);
+    piecesRef.current = synced.pieces;
+    handsRef.current = synced.hands;
     setPieces(synced.pieces);
     persistentHazardsRef.current = synced.persistentHazards;
     setPoisonHazardCells(synced.poisonHazardCells);
@@ -701,21 +703,23 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
   }
 
   function applyOptimisticMove(actorSide: Side, move: BattleMove) {
-    setPieces((prev) =>
-      enforcePersistentHazardCells(
-        computePiecesAfterOptimisticMove(
-          prev,
-          actorSide,
-          move,
-          pieceDefsByCode,
-          pieceDefsByChar,
-          promotedPieceDefsByCode,
-        ),
-        persistentHazardsRef.current,
+    const nextPieces = enforcePersistentHazardCells(
+      computePiecesAfterOptimisticMove(
+        piecesRef.current,
+        actorSide,
+        move,
+        pieceDefsByCode,
+        pieceDefsByChar,
+        promotedPieceDefsByCode,
       ),
+      persistentHazardsRef.current,
     );
+    piecesRef.current = nextPieces;
+    setPieces(nextPieces);
     if (move.dropPieceCode) {
-      setHands((prev) => addHandPiece(prev, actorSide, move.dropPieceCode!, -1));
+      const nextHands = addHandPiece(handsRef.current, actorSide, move.dropPieceCode!, -1);
+      handsRef.current = nextHands;
+      setHands(nextHands);
     }
   }
 

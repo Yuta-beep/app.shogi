@@ -3,10 +3,10 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { useUsernameSetupScreen } from '@/features/username-setup/ui/use-username-setup-screen';
 
 const mockReplace = jest.fn();
-const mockGetSession = jest.fn();
 const mockSignOut = jest.fn();
 const mockSignInAnonymously = jest.fn();
 const mockSetupUsername = jest.fn();
+const mockUseAuthSession = jest.fn();
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({
@@ -14,10 +14,13 @@ jest.mock('expo-router', () => ({
   }),
 }));
 
+jest.mock('@/hooks/common/auth-session-context', () => ({
+  useAuthSession: () => mockUseAuthSession(),
+}));
+
 jest.mock('@/lib/supabase/supabase-client', () => ({
   supabase: {
     auth: {
-      getSession: (...args: unknown[]) => mockGetSession(...args),
       signOut: (...args: unknown[]) => mockSignOut(...args),
       signInAnonymously: (...args: unknown[]) => mockSignInAnonymously(...args),
     },
@@ -33,8 +36,13 @@ describe('useUsernameSetupScreen', () => {
   const refreshedToken = 'token-refreshed';
 
   beforeEach(() => {
-    mockGetSession.mockResolvedValue({
-      data: { session: { user: { id: 'user-current' }, access_token: currentToken } },
+    jest.clearAllMocks();
+    mockUseAuthSession.mockReturnValue({
+      isReady: true,
+      userId: 'user-current',
+      accessToken: currentToken,
+      needsUsernameSetup: true,
+      error: null,
     });
     mockSignOut.mockResolvedValue({ error: null });
     mockSignInAnonymously.mockResolvedValue({
@@ -64,7 +72,13 @@ describe('useUsernameSetupScreen', () => {
   });
 
   it('token が取得できない場合は送信しても何もしない', async () => {
-    mockGetSession.mockResolvedValueOnce({ data: { session: null } });
+    mockUseAuthSession.mockReturnValue({
+      isReady: true,
+      userId: null,
+      accessToken: null,
+      needsUsernameSetup: true,
+      error: null,
+    });
 
     const { result } = renderHook(() => useUsernameSetupScreen());
 

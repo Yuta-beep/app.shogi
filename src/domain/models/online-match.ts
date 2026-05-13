@@ -1,30 +1,38 @@
-export type BattleSetupPlacement = {
-  row: number;
-  col: number;
-  pieceId: number;
-  pieceCode: string;
-};
+import { z } from 'zod';
 
-export type BattleSetupHandPiece = {
-  pieceId: number;
-  pieceCode: string;
-  count: number;
-};
+export const BattleSetupPlacementSchema = z.object({
+  row: z.number(),
+  col: z.number(),
+  pieceId: z.number(),
+  pieceCode: z.string(),
+});
 
-export type SaveOnlineMatchSetupPayload = {
-  name?: string;
-  boardLayout: BattleSetupPlacement[];
-  handsLayout: BattleSetupHandPiece[];
-  selectedPieceIds: number[];
-};
+export const BattleSetupHandPieceSchema = z.object({
+  pieceId: z.number(),
+  pieceCode: z.string(),
+  count: z.number(),
+});
 
-export type SaveOnlineMatchSetupResult = {
-  battleSetupId: string;
-  status: 'draft' | 'validated' | 'locked' | 'consumed';
-};
+export const SaveOnlineMatchSetupPayloadSchema = z.object({
+  name: z.string().optional(),
+  boardLayout: z.array(BattleSetupPlacementSchema),
+  handsLayout: z.array(BattleSetupHandPieceSchema),
+  selectedPieceIds: z.array(z.number()),
+});
 
-export type MatchingSnapshot = {
-  title: string;
-  status: string;
-  progress: number;
-};
+export const SaveOnlineMatchSetupResultSchema = z.object({
+  battleSetupId: z.string(),
+  status: z.enum(['draft', 'validated', 'locked', 'consumed']),
+});
+
+export const MatchingSnapshotSchema = z.object({
+  title: z.string(),
+  status: z.string(),
+  progress: z.number(),
+});
+
+export type BattleSetupPlacement = z.infer<typeof BattleSetupPlacementSchema>;
+export type BattleSetupHandPiece = z.infer<typeof BattleSetupHandPieceSchema>;
+export type SaveOnlineMatchSetupPayload = z.infer<typeof SaveOnlineMatchSetupPayloadSchema>;
+export type SaveOnlineMatchSetupResult = z.infer<typeof SaveOnlineMatchSetupResultSchema>;
+export type MatchingSnapshot = z.infer<typeof MatchingSnapshotSchema>;

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import type { OwnedPiece, SavedDeck } from '@/domain/models/deck-builder';
+import { useAuthSession } from '@/hooks/common/auth-session-context';
 import {
   createDeleteDeckUseCase,
   createLoadDeckBuilderUseCase,
@@ -407,6 +408,7 @@ function boardPlacementsFromSavedDeck(
 
 export function useDeckBuilderScreen() {
   const isApiMode = isApiDataSource();
+  const { accessToken } = useAuthSession();
   const [ownedPieces, setOwnedPieces] = useState<OwnedPiece[]>([]);
   const [savedDecks, setSavedDecks] = useState<SavedDeck[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -424,12 +426,8 @@ export function useDeckBuilderScreen() {
 
   useEffect(() => {
     let active = true;
-
-    supabase.auth.getSession().then(({ data }) => {
-      if (!active) return;
-      setToken(data.session?.access_token);
-      setIsSessionResolved(true);
-    });
+    setToken(accessToken ?? undefined);
+    setIsSessionResolved(true);
 
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!active) return;
@@ -441,7 +439,7 @@ export function useDeckBuilderScreen() {
       active = false;
       authListener.subscription.unsubscribe();
     };
-  }, []);
+  }, [accessToken]);
 
   useEffect(() => {
     if (isApiMode && !isSessionResolved) {

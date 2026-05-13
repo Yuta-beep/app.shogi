@@ -4,6 +4,7 @@ import { ApiClientError } from '@/infra/http/api-client';
 
 export type EnsureSessionResult = {
   userId: string;
+  accessToken: string;
   isNewUser: boolean;
   needsUsernameSetup: boolean;
 };
@@ -58,5 +59,5 @@ export async function ensureSession(): Promise<EnsureSessionResult> {
     displayName = await playerDataSource.getDisplayName(token);
   }
 
-  return { userId, isNewUser, needsUsernameSetup: displayName === null };
+  return { userId, accessToken: token, isNewUser, needsUsernameSetup: displayName === null };
 }

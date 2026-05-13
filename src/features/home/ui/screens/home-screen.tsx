@@ -22,6 +22,7 @@ import { HomeBackgroundSection } from '@/features/home/ui/sections/home-backgrou
 import { gachaBallColorIndexForCurrentPeriod } from '@/features/home/lib/gacha-ball-schedule';
 import { HomeHeaderSection } from '@/features/home/ui/sections/home-header-section';
 import { useHomeScreen } from '@/features/home/ui/use-home-screen';
+import { useAuthSession } from '@/hooks/common/auth-session-context';
 import { useAssetPreload } from '@/hooks/common/use-asset-preload';
 import { useScreenBgm } from '@/hooks/common/use-screen-bgm';
 import { playSe } from '@/lib/audio/audio-manager';
@@ -54,6 +55,7 @@ type DeckCarouselPiece = {
 export function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { accessToken } = useAuthSession();
   const [gachaModalOpen, setGachaModalOpen] = useState(false);
   const [gachaModalPanel, setGachaModalPanel] = useState<GachaModalPanel>('viewer');
   const [viewerBallSource, setViewerBallSource] = useState<number | null>(null);
@@ -101,12 +103,16 @@ export function HomeScreen() {
   useEffect(() => {
     let active = true;
 
-    const loadDeckPieces = async () => {
+    const loadDeckPieces = async (nextToken: string | null) => {
       try {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-        const loadDeckUseCase = createLoadDeckBuilderUseCase(session?.access_token);
+        if (!nextToken) {
+          if (active) {
+            setDeckPieces([]);
+            setCarouselIndex(0);
+          }
+          return;
+        }
+        const loadDeckUseCase = createLoadDeckBuilderUseCase(nextToken);
         const deckSnapshot = await loadDeckUseCase.execute();
         const targetDeck =
           deckSnapshot.savedDecks.find(
@@ -133,17 +139,17 @@ export function HomeScreen() {
       }
     };
 
-    void loadDeckPieces();
+    void loadDeckPieces(accessToken);
 
-    const { data: authListener } = supabase.auth.onAuthStateChange(() => {
-      void loadDeckPieces();
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      void loadDeckPieces(session?.access_token ?? null);
     });
 
     return () => {
       active = false;
       authListener.subscription.unsubscribe();
     };
-  }, []);
+  }, [accessToken]);
 
   useEffect(() => {
     if (deckPieces.length === 0) return;

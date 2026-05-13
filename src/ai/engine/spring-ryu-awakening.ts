@@ -2,7 +2,7 @@ import type { AiBoardPiece, AiPieceLookups } from '@/ai/model';
 import { toBasePieceCode } from '@/ai/model';
 
 export function hasAllySpringPieceOnBoard(
-  pieces: ReadonlyArray<{ side: string; char: string; [key: string]: unknown }>,
+  pieces: readonly { side: string; char: string; [key: string]: unknown }[],
   side: 'player' | 'enemy',
 ): boolean {
   return pieces.some((p) => p.side === side && p.char === '泉');

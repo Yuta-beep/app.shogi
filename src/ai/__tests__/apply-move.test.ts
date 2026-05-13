@@ -2021,7 +2021,7 @@ describe('ai engine apply move', () => {
     });
     const skillState = (
       committed.position.boardState as {
-        skill_state?: { piece_statuses?: Array<Record<string, unknown>> };
+        skill_state?: { piece_statuses?: Record<string, unknown>[] };
       }
     ).skill_state;
     const stuns = (skillState?.piece_statuses ?? []).filter(
@@ -2068,7 +2068,7 @@ describe('ai engine apply move', () => {
     });
     const skillState = (
       committed.position.boardState as {
-        skill_state?: { piece_statuses?: Array<Record<string, unknown>> };
+        skill_state?: { piece_statuses?: Record<string, unknown>[] };
       }
     ).skill_state;
     const stuns = (skillState?.piece_statuses ?? []).filter(
@@ -2358,7 +2358,7 @@ describe('ai engine apply move', () => {
       },
     });
     const boardState = committed.position.boardState as {
-      skill_state?: { board_hazards?: Array<Record<string, unknown>> };
+      skill_state?: { board_hazards?: Record<string, unknown>[] };
     };
     const hazards = boardState.skill_state?.board_hazards ?? [];
     const rockObstacles = hazards.filter((h) => h.hazard_type === 'rock_obstacle');
@@ -3074,7 +3074,7 @@ describe('ai engine apply move', () => {
     expect(statuses.some((s) => String(s.status_type) === 'convex_followup')).toBe(true);
 
     const second = applyMove({
-      position: first.position,
+      position: first.position as AiBattlePosition,
       pieceCatalog: catalog,
       move: {
         fromRow: 5,

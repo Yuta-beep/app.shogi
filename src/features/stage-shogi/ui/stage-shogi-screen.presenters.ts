@@ -207,16 +207,14 @@ export function resolveInspectSkillDescription(
   if (
     char === '銭' ||
     (pieceCode &&
-      (pieceCode.toUpperCase().includes('SEN') ||
-        pieceCode.toUpperCase().includes('EACC7F540399')))
+      (pieceCode.toUpperCase().includes('SEN') || pieceCode.toUpperCase().includes('EACC7F540399')))
   ) {
     return '移動するたびに20％の確率で「金」に、10％の確率で「宝」に変化する。';
   }
   if (
     char === '財' ||
     (pieceCode &&
-      (pieceCode.toUpperCase().includes('ZAI') ||
-        pieceCode.toUpperCase().includes('7FC715661514')))
+      (pieceCode.toUpperCase().includes('ZAI') || pieceCode.toUpperCase().includes('7FC715661514')))
   ) {
     return '敵駒を取ったとき、味方の「銭」駒を1体、取った敵駒と同じ駒へ変化させる。';
   }

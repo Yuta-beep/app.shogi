@@ -578,10 +578,8 @@ describe('useStageShogiScreen', () => {
     });
 
     await waitFor(() => expect(mockLoadGameStateExecute).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(mockLoadGameLegalMovesExecute).toHaveBeenCalledTimes(2));
-    await waitFor(() =>
-      expect(result.current.aiError).toBe('局面を自動更新しました。対局を続行します。'),
-    );
+    await waitFor(() => expect(mockLoadGameLegalMovesExecute).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(result.current.aiError).toBeNull());
     expect(result.current.pieces).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

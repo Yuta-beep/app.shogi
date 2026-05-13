@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 
 import type { MatchingSnapshot } from '@/domain/models/online-match';
+import { useAuthSession } from '@/hooks/common/auth-session-context';
 import { getMatchingServerWsBaseUrl } from '@/lib/config/online-match';
 import { loadCurrentBattleSetupId } from '@/lib/online-match/current-battle-setup';
-import { supabase } from '@/lib/supabase/supabase-client';
 
 const emptySnapshot: MatchingSnapshot = {
   title: 'オンライン対戦',
@@ -12,21 +12,28 @@ const emptySnapshot: MatchingSnapshot = {
 };
 
 export function useMatchingScreen() {
+  const { isReady, userId } = useAuthSession();
   const [snapshot, setSnapshot] = useState<MatchingSnapshot>(emptySnapshot);
   const [isLoading, setIsLoading] = useState(true);
   const [startedMatchId, setStartedMatchId] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  const startedMatchIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    startedMatchIdRef.current = startedMatchId;
+  }, [startedMatchId]);
 
   useEffect(() => {
     let active = true;
-    setIsLoading(true);
+    if (!isReady) {
+      setIsLoading(true);
+      return () => {
+        active = false;
+      };
+    }
 
     const start = async () => {
       const wsBaseUrl = getMatchingServerWsBaseUrl();
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      const userId = session?.user?.id ?? null;
       const battleSetupId = await loadCurrentBattleSetupId();
 
       if (!active) return;
@@ -110,6 +117,7 @@ export function useMatchingScreen() {
             });
             return;
           case 'game_started':
+            startedMatchIdRef.current = payload.matchId;
             setSnapshot({
               title: 'オンライン対戦',
               status: '対局を開始します',
@@ -145,7 +153,7 @@ export function useMatchingScreen() {
       });
 
       ws.addEventListener('close', () => {
-        if (!active || startedMatchId) return;
+        if (!active || startedMatchIdRef.current) return;
         setSnapshot((current) => ({
           ...current,
           status: current.progress > 0 ? '接続が終了しました' : current.status,
@@ -161,7 +169,7 @@ export function useMatchingScreen() {
       wsRef.current?.close();
       wsRef.current = null;
     };
-  }, []);
+  }, [isReady, userId]);
 
   async function cancel() {
     wsRef.current?.close();

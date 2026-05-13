@@ -13,7 +13,7 @@ export class OnlineMatchApiDataSource {
       payload,
       { token: this.token },
     );
-    const validated = await postJson<{
+    await postJson<{
       battleSetupId: string;
       status: 'validated';
       summary: Record<string, unknown>;

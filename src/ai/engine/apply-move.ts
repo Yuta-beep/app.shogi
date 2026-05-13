@@ -11,8 +11,8 @@ import type {
   AiPieceDefinition,
   Side,
 } from '@/ai/model';
-import type { BattleMove } from '@/usecases/stage-battle/game-move-contract';
 import type {
+  BattleMove,
   BattleCommittedMove,
   BattleGameStatus,
 } from '@/usecases/stage-battle/game-move-contract';
@@ -35,6 +35,33 @@ import {
   resolveEvadeCaptureProcChanceForPiece,
   pieceHasActiveCaptureImmunityFromBoardState,
 } from '@/ai/engine/skill-runtime';
+import {
+  isArmorPiece as isArmorPieceForApply,
+  isConvexPiece as isConvexPieceForApply,
+  isCowPiece as isCowPieceForApply,
+  isDeathPiece as isDeathPieceForApply,
+  isGunPiece as isGunPieceForApply,
+  isHolePiece as isHolePieceForApply,
+  isKatanaPiece as isKatanaPieceForApply,
+  isKbossPiece,
+  isKenSwordPiece as isKenSwordPieceForApply,
+  isKingPiece as isKingPieceForApply,
+  isOboroPiece as isOboroPieceForApply,
+  isOtsuPiece as isOtsuPieceForApply,
+  isPigPiece as isPigPieceForApply,
+  isReiRitualPiece,
+  isSenPiece as isSenPieceForApply,
+  isShieldPiece as isShieldPieceForApply,
+  isSoulPiece as isSoulPieceForApply,
+  isSpiritPiece,
+  isVanishOnCapturePiece,
+  isZaiPiece as isZaiPieceForApply,
+} from '@/ai/engine/piece-identifiers';
+import {
+  hasActiveCellStatus,
+  readFollowupCellForSide,
+  removeCellStatus,
+} from '@/ai/engine/skill-state-selectors';
 
 function createGameStatus(winnerSide: Side | null): BattleGameStatus {
   if (winnerSide === 'player') {
@@ -46,133 +73,7 @@ function createGameStatus(winnerSide: Side | null): BattleGameStatus {
   return { status: 'in_progress', result: null, winnerSide: null };
 }
 
-function isSpiritPiece(piece: { pieceCode: string | null; char: string }): boolean {
-  if (piece.char === '霊') return true;
-  const base = toBasePieceCode(piece.pieceCode);
-  if (base === 'SPIRIT') return true;
-  const raw = (piece.pieceCode ?? '').toUpperCase();
-  return raw.includes('9D7397390E77');
-}
-
-function isDeathPieceForApply(piece: { pieceCode: string | null; char: string }): boolean {
-  const ch = normKanjiForEngineRules(piece.char);
-  if (ch === '死') return true;
-  const b = toBasePieceCode(piece.pieceCode);
-  return b === 'DEATH';
-}
-
-function isSoulPieceForApply(piece: { pieceCode: string | null; char: string }): boolean {
-  const ch = normKanjiForEngineRules(piece.char);
-  if (ch === '魂') return true;
-  const b = toBasePieceCode(piece.pieceCode);
-  return b === 'SOUL';
-}
-
-function isKbossPiece(piece: { pieceCode: string | null; char: string }): boolean {
-  const base = toBasePieceCode(piece.pieceCode);
-  if (base === 'KBOSS') return true;
-  if (piece.char === 'K') return true;
-  return false;
-}
-
-/** K・実・異: 取っても手駒にならず消滅（霊と同系）。 */
-function isVanishOnCapturePiece(piece: { pieceCode: string | null; char: string }): boolean {
-  if (piece.char === 'K' || piece.char === '実' || piece.char === '異') return true;
-  const base = toBasePieceCode(piece.pieceCode);
-  if (base === 'KBOSS' || base === 'EXPERIMENT' || base === 'MUTANT') return true;
-  return false;
-}
-
-function isHolePieceForApply(piece: { pieceCode: string | null; char: string }): boolean {
-  if (normKanjiForEngineRules(piece.char) === '穴') return true;
-  const base = toBasePieceCode(piece.pieceCode);
-  if (base === 'HOLE') return true;
-  const raw = (piece.pieceCode ?? '').toUpperCase();
-  return raw.includes('E381DFA07A3D');
-}
-
-function isOtsuPieceForApply(piece: { pieceCode: string | null; char: string }): boolean {
-  const ch = normKanjiForEngineRules(piece.char);
-  if (ch === '乙') return true;
-  const base = toBasePieceCode(piece.pieceCode);
-  if (base === 'OTSU') return true;
-  const raw = (piece.pieceCode ?? '').toUpperCase();
-  return raw.includes('5A07CA59B158');
-}
-
-function readOtsuFollowupForSide(
-  boardState: Record<string, unknown> | undefined,
-  side: Side,
-): { row: number; col: number } | null {
-  if (!boardState) return null;
-  const skillState = (boardState.skill_state ?? boardState.skillState) as
-    | Record<string, unknown>
-    | undefined;
-  const rawStatuses = (skillState?.piece_statuses ?? skillState?.pieceStatuses) as unknown;
-  if (!Array.isArray(rawStatuses)) return null;
-  for (const raw of rawStatuses) {
-    const st = (raw ?? {}) as Record<string, unknown>;
-    const statusType = String(st.status_type ?? st.statusType ?? '');
-    if (statusType !== 'otsu_followup') continue;
-    const stSide = String(st.side ?? 'player') === 'enemy' ? 'enemy' : 'player';
-    if (stSide !== side) continue;
-    const remaining = Number(st.remaining_turns ?? st.remainingTurns ?? 0);
-    if (!Number.isFinite(remaining) || remaining <= 0) continue;
-    const row = Number(st.row);
-    const col = Number(st.col);
-    if (!Number.isFinite(row) || !Number.isFinite(col)) continue;
-    return { row, col };
-  }
-  return null;
-}
-
-function isConvexPieceForApply(piece: { pieceCode: string | null; char: string }): boolean {
-  const ch = normKanjiForEngineRules(piece.char);
-  if (ch === '凸') return true;
-  const base = toBasePieceCode(piece.pieceCode);
-  if (base === 'CONVEX') return true;
-  const raw = (piece.pieceCode ?? '').toUpperCase();
-  return raw.includes('94B641477E72') || raw.includes('CONVEX');
-}
-
-function readConvexFollowupForSide(
-  boardState: Record<string, unknown> | undefined,
-  side: Side,
-): { row: number; col: number } | null {
-  if (!boardState) return null;
-  const skillState = (boardState.skill_state ?? boardState.skillState) as
-    | Record<string, unknown>
-    | undefined;
-  const rawStatuses = (skillState?.piece_statuses ?? skillState?.pieceStatuses) as unknown;
-  if (!Array.isArray(rawStatuses)) return null;
-  for (const raw of rawStatuses) {
-    const st = (raw ?? {}) as Record<string, unknown>;
-    const statusType = String(st.status_type ?? st.statusType ?? '');
-    if (statusType !== 'convex_followup') continue;
-    const stSide = String(st.side ?? 'player') === 'enemy' ? 'enemy' : 'player';
-    if (stSide !== side) continue;
-    const remaining = Number(st.remaining_turns ?? st.remainingTurns ?? 0);
-    if (!Number.isFinite(remaining) || remaining <= 0) continue;
-    const row = Number(st.row);
-    const col = Number(st.col);
-    if (!Number.isFinite(row) || !Number.isFinite(col)) continue;
-    return { row, col };
-  }
-  return null;
-}
-
 const CHRYSANTHEMUM_REVIVAL_STATUS = 'chrysanthemum_revival';
-
-function readSkillStatePieceStatuses(
-  boardState: Record<string, unknown> | undefined,
-): Record<string, unknown>[] {
-  if (!boardState) return [];
-  const skillState = (boardState.skill_state ?? boardState.skillState) as
-    | Record<string, unknown>
-    | undefined;
-  const raw = (skillState?.piece_statuses ?? skillState?.pieceStatuses) as unknown;
-  return Array.isArray(raw) ? [...raw] : [];
-}
 
 function hasActiveChrysanthemumRevival(
   boardState: Record<string, unknown> | undefined,
@@ -180,20 +81,7 @@ function hasActiveChrysanthemumRevival(
   row: number,
   col: number,
 ): boolean {
-  for (const raw of readSkillStatePieceStatuses(boardState)) {
-    const st = (raw ?? {}) as Record<string, unknown>;
-    const statusType = String(st.status_type ?? st.statusType ?? '');
-    if (statusType !== CHRYSANTHEMUM_REVIVAL_STATUS) continue;
-    const stSide = String(st.side ?? 'player') === 'enemy' ? 'enemy' : 'player';
-    if (stSide !== side) continue;
-    const remaining = Number(st.remaining_turns ?? st.remainingTurns ?? 0);
-    if (!Number.isFinite(remaining) || remaining <= 0) continue;
-    const r = Number(st.row);
-    const c = Number(st.col);
-    if (!Number.isFinite(r) || !Number.isFinite(c)) continue;
-    if (r === row && c === col) return true;
-  }
-  return false;
+  return hasActiveCellStatus(boardState, side, CHRYSANTHEMUM_REVIVAL_STATUS, row, col);
 }
 
 /** 盤上の復活マーカーを除去（着手後の座標追従前に呼ぶ想定でも可） */
@@ -203,26 +91,7 @@ function removeChrysanthemumRevivalAtCell(
   row: number,
   col: number,
 ): void {
-  if (!boardState) return;
-  const skillStateRaw = boardState.skill_state ?? boardState.skillState;
-  const skillState =
-    skillStateRaw && typeof skillStateRaw === 'object'
-      ? ({ ...(skillStateRaw as Record<string, unknown>) } as Record<string, unknown>)
-      : ({} as Record<string, unknown>);
-  const prev = (skillState.piece_statuses ?? skillState.pieceStatuses) as unknown;
-  const list = Array.isArray(prev) ? [...prev] : [];
-  const filtered = list.filter((entry) => {
-    const st = (entry ?? {}) as Record<string, unknown>;
-    const statusType = String(st.status_type ?? st.statusType ?? '');
-    if (statusType !== CHRYSANTHEMUM_REVIVAL_STATUS) return true;
-    const stSide = String(st.side ?? 'player') === 'enemy' ? 'enemy' : 'player';
-    const r = Number(st.row);
-    const c = Number(st.col);
-    if (stSide === side && r === row && c === col) return false;
-    return true;
-  });
-  skillState.piece_statuses = filtered;
-  boardState.skill_state = skillState;
+  removeCellStatus(boardState, side, CHRYSANTHEMUM_REVIVAL_STATUS, row, col);
 }
 
 function resolveCapturedHandCode(
@@ -486,67 +355,22 @@ function kbossEffectiveLives(piece: { kbossLivesRemaining?: number }): number {
   return 2;
 }
 
-function normKanjiForEngineRules(ch: string): string {
-  try {
-    return ch.normalize('NFKC');
-  } catch {
-    return ch;
-  }
-}
-
-function isGunPieceForApply(piece: { pieceCode: string | null; char: string }): boolean {
-  if (normKanjiForEngineRules(piece.char) === '銃') return true;
-  const b = toBasePieceCode(piece.pieceCode);
-  return b === 'GUN';
-}
-
 function gunApplyDebugLog(payload: Record<string, unknown>): void {
   void payload;
-}
-
-function isKatanaPieceForApply(piece: { pieceCode: string | null; char: string }): boolean {
-  if (normKanjiForEngineRules(piece.char) === '剣') return false;
-  if (normKanjiForEngineRules(piece.char) === '刀') return true;
-  const b = toBasePieceCode(piece.pieceCode);
-  return b === 'KATANA' || b === 'SWORD';
-}
-
-/** 聖剣「剣」。`SWORD` 基底の名刀「刀」とは `char`／opaque で区別する。 */
-function isKenSwordPieceForApply(piece: { pieceCode: string | null; char: string }): boolean {
-  if (normKanjiForEngineRules(piece.char) === '剣') return true;
-  const b = toBasePieceCode(piece.pieceCode);
-  if (b === 'HOLY_SWORD') return true;
-  const raw = (piece.pieceCode ?? '').toUpperCase();
-  return raw.includes('0F14ABCC6E5E');
-}
-
-function isShieldPieceForApply(piece: { pieceCode: string | null; char: string }): boolean {
-  if (normKanjiForEngineRules(piece.char) === '盾') return true;
-  const b = toBasePieceCode(piece.pieceCode);
-  return b === 'SHIELD';
-}
-
-function isOboroPieceForApply(piece: { pieceCode: string | null; char: string }): boolean {
-  if (normKanjiForEngineRules(piece.char) === '朧') return true;
-  const b = toBasePieceCode(piece.pieceCode);
-  return b === 'OBORO';
 }
 
 function isDeathOrSoulPieceForOboroTrigger(piece: {
   pieceCode: string | null;
   char: string;
 }): boolean {
-  const ch = normKanjiForEngineRules(piece.char);
-  if (ch === '死' || ch === '魂') return true;
-  const b = toBasePieceCode(piece.pieceCode);
-  return b === 'DEATH' || b === 'SOUL';
+  return isDeathPieceForApply(piece) || isSoulPieceForApply(piece);
 }
 
 function collectAllEmptyCells(
-  pieces: Array<{ row: number; col: number }>,
-): Array<{ row: number; col: number }> {
+  pieces: { row: number; col: number }[],
+): { row: number; col: number }[] {
   const occupied = new Set(pieces.map((p) => `${p.row}:${p.col}`));
-  const out: Array<{ row: number; col: number }> = [];
+  const out: { row: number; col: number }[] = [];
   for (let row = 0; row <= 8; row += 1) {
     for (let col = 0; col <= 8; col += 1) {
       if (occupied.has(`${row}:${col}`)) continue;
@@ -578,11 +402,11 @@ function resolveOboroEvadeWarpCell(input: {
  * 同一段の左右（筋の ±1）の空きマス。剣の捕獲回避専用。
  */
 function collectHorizontalAdjacentEmptyCells(
-  pieces: Array<{ row: number; col: number }>,
+  pieces: { row: number; col: number }[],
   row: number,
   col: number,
-): Array<{ row: number; col: number }> {
-  const out: Array<{ row: number; col: number }> = [];
+): { row: number; col: number }[] {
+  const out: { row: number; col: number }[] = [];
   for (const dc of [-1, 1]) {
     const c = col + dc;
     if (c < 0 || c > 8) continue;
@@ -691,28 +515,8 @@ function applyIntrinsicKatanaSideCaptures(input: {
   return { nextPieces, hands, starReturnProcTriggered, didSideSweep };
 }
 
-function isArmorPieceForApply(piece: { pieceCode: string | null; char: string }): boolean {
-  const b = toBasePieceCode(piece.pieceCode);
-  return piece.char === '鎧' || b === 'ARMOR';
-}
-
-function isKingPieceForApply(piece: { pieceCode: string | null; char: string }): boolean {
-  const b = toBasePieceCode(piece.pieceCode);
-  return b === 'OU' || piece.char === '王' || piece.char === '玉';
-}
-
 function hasSoulOnBoardForSide(pieces: AiBoardPiece[], side: Side): boolean {
   return pieces.some((p) => p.side === side && isSoulPieceForApply(p));
-}
-
-/** 礼拝者「礼」（嶺の REI コードとは別） */
-function isReiRitualPiece(piece: { pieceCode: string | null; char: string }): boolean {
-  const ch = normKanjiForEngineRules(piece.char);
-  if (ch === '礼') return true;
-  const raw = (piece.pieceCode ?? '').toUpperCase();
-  if (raw.includes('4FCDDF14D08D')) return true;
-  const b = toBasePieceCode(piece.pieceCode);
-  return b === 'RITUAL';
 }
 
 /** 他の味方が取られたとき、盤上に別の「礼」がいれば1体を身代わりで消す */
@@ -783,34 +587,6 @@ function computeGunPenetrationMidpoint(
 
 function gunForwardRowDeltaForApply(side: Side): number {
   return side === 'player' ? -1 : 1;
-}
-
-function isCowPieceForApply(piece: { pieceCode: string | null; char: string }): boolean {
-  if (normKanjiForEngineRules(piece.char) === '牛') return true;
-  const b = toBasePieceCode(piece.pieceCode);
-  if (b === 'COW') return true;
-  return (piece.pieceCode ?? '').toUpperCase().includes('F75D88C48D6D');
-}
-
-function isPigPieceForApply(piece: { pieceCode: string | null; char: string }): boolean {
-  if (normKanjiForEngineRules(piece.char) === '豚') return true;
-  const b = toBasePieceCode(piece.pieceCode);
-  if (b === 'PIG') return true;
-  return (piece.pieceCode ?? '').toUpperCase().includes('3EFA5702E75B');
-}
-
-function isSenPieceForApply(piece: { pieceCode: string | null; char: string }): boolean {
-  if (normKanjiForEngineRules(piece.char) === '銭') return true;
-  const b = toBasePieceCode(piece.pieceCode);
-  if (b === 'SEN') return true;
-  return (piece.pieceCode ?? '').toUpperCase().includes('EACC7F540399');
-}
-
-function isZaiPieceForApply(piece: { pieceCode: string | null; char: string }): boolean {
-  if (normKanjiForEngineRules(piece.char) === '財') return true;
-  const b = toBasePieceCode(piece.pieceCode);
-  if (b === 'ZAI') return true;
-  return (piece.pieceCode ?? '').toUpperCase().includes('7FC715661514');
 }
 
 /** 財: 敵を取ったとき、味方の銭1体を取った駒の姿へ変える（着手駒のマスは除外して探索）。 */
@@ -998,7 +774,7 @@ function applyHostileCaptureAtCell(input: {
   }
 
   let phantomEvaded = false;
-  let adjacentEmpty: Array<{ row: number; col: number }> = [];
+  let adjacentEmpty: { row: number; col: number }[] = [];
   const evadeChance = resolveEvadeCaptureProcChanceForPiece(input.boardState, captured);
   adjacentEmpty = collectAdjacentEmptyCells(nextPieces, input.row, input.col);
   if (evadeChance != null && adjacentEmpty.length > 0) {
@@ -1054,7 +830,9 @@ function applyHostileCaptureAtCell(input: {
   }
   const consumeReiSubstitute = shouldConsumeReiSubstituteAfterAllyCapture(nextPieces, captured);
   if (hasActiveChrysanthemumRevival(input.boardState, captured.side, input.row, input.col)) {
-    nextPieces = nextPieces.filter((piece) => !(piece.row === input.row && piece.col === input.col));
+    nextPieces = nextPieces.filter(
+      (piece) => !(piece.row === input.row && piece.col === input.col),
+    );
     removeChrysanthemumRevivalAtCell(input.boardState, captured.side, input.row, input.col);
     if (!isSpiritPiece(captured)) {
       const capturedCode = resolveCapturedHandCode(captured, input.fallbackCapturedCode);
@@ -1144,11 +922,11 @@ function applyHostileCaptureAtCell(input: {
 }
 
 function collectAdjacentEmptyCells(
-  pieces: Array<{ row: number; col: number }>,
+  pieces: { row: number; col: number }[],
   row: number,
   col: number,
-): Array<{ row: number; col: number }> {
-  const out: Array<{ row: number; col: number }> = [];
+): { row: number; col: number }[] {
+  const out: { row: number; col: number }[] = [];
   for (let dr = -1; dr <= 1; dr += 1) {
     for (let dc = -1; dc <= 1; dc += 1) {
       if (dr === 0 && dc === 0) continue;
@@ -1175,13 +953,15 @@ export function applyMove(input: {
     enemy: sanitizeHandsBag(current.hands.enemy),
   });
   const actorSide = current.sideToMove;
-  const otsuFollowupBefore = readOtsuFollowupForSide(
+  const otsuFollowupBefore = readFollowupCellForSide(
     current.boardState as Record<string, unknown> | undefined,
     actorSide,
+    'otsu_followup',
   );
-  const convexFollowupBefore = readConvexFollowupForSide(
+  const convexFollowupBefore = readFollowupCellForSide(
     current.boardState as Record<string, unknown> | undefined,
     actorSide,
+    'convex_followup',
   );
   const preMoveSkillView = createSkillRuntimeView(current);
   assertMoveAllowedBySessionCatalog({
@@ -1197,7 +977,7 @@ export function applyMove(input: {
   let diseaseCapturedByActor = false;
   let abyssCapturedByActor = false;
   let deathCapturedByActor = false;
-  const capturedHoleCellsByActor: Array<{ row: number; col: number }> = [];
+  const capturedHoleCellsByActor: { row: number; col: number }[] = [];
   let starReturnProcTriggered = false;
   /** 刀の隣取り・銃の貫通取りなど、エンジン内在スキル（skill_definitions_v2 の 52/54 非依存）。 */
   let intrinsicCombatSkillTriggered = false;
@@ -1408,7 +1188,7 @@ export function applyMove(input: {
       }
 
       let phantomEvaded = false;
-      let adjacentEmpty: Array<{ row: number; col: number }> = [];
+      let adjacentEmpty: { row: number; col: number }[] = [];
       let kenSwordEvadeTo: { row: number; col: number } | null = null;
       if (!shieldAbortedMove && !captureOwnPiece && isKenSwordPieceForApply(captured)) {
         const horizKen = collectHorizontalAdjacentEmptyCells(nextPieces, move.toRow, move.toCol);
@@ -1687,11 +1467,7 @@ export function applyMove(input: {
           : {}),
       };
       let landedAfterMove = nextPieces[movingIndexAfterCapture]!;
-      if (
-        move.fromRow != null &&
-        move.fromCol != null &&
-        isSenPieceForApply(movingPiece)
-      ) {
+      if (move.fromRow != null && move.fromCol != null && isSenPieceForApply(movingPiece)) {
         const transformed = maybeApplySenMoveSkillTransform(landedAfterMove);
         if (
           transformed.pieceCode !== landedAfterMove.pieceCode ||
@@ -1868,9 +1644,18 @@ export function applyMove(input: {
     moveCount: nextMoveCount,
     pieceCatalog: input.pieceCatalog,
   });
+  const currentBoardState = (current.boardState ?? {}) as Record<string, unknown>;
+  const generatedBoardState = (nextPosition.boardState ?? {}) as Record<string, unknown>;
   nextPosition.boardState = {
-    ...(current.boardState ?? {}),
-    ...(nextPosition.boardState ?? {}),
+    ...generatedBoardState,
+    ...currentBoardState,
+    pieces: generatedBoardState.pieces,
+    custom_move_vectors:
+      generatedBoardState.custom_move_vectors ?? currentBoardState.custom_move_vectors,
+    skill_definitions_v2:
+      currentBoardState.skill_definitions_v2 ?? generatedBoardState.skill_definitions_v2,
+    skillDefinitionsV2:
+      currentBoardState.skillDefinitionsV2 ?? generatedBoardState.skillDefinitionsV2,
   };
 
   if (turnAdvanced) {

@@ -1,6 +1,7 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 
+import { useAuthSession } from '@/hooks/common/auth-session-context';
 import { supabase } from '@/lib/supabase/supabase-client';
 import { setupUsername } from '@/usecases/player/setup-username-usecase';
 
@@ -33,6 +34,7 @@ async function refreshAnonymousSession(): Promise<string> {
 
 export function useUsernameSetupScreen() {
   const router = useRouter();
+  const { accessToken } = useAuthSession();
   const [token, setToken] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
   const [username, setUsername] = useState('');
@@ -40,15 +42,9 @@ export function useUsernameSetupScreen() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    supabase.auth
-      .getSession()
-      .then(({ data }) => {
-        setToken(data.session?.access_token ?? null);
-      })
-      .finally(() => {
-        setIsInitializing(false);
-      });
-  }, []);
+    setToken(accessToken);
+    setIsInitializing(false);
+  }, [accessToken]);
 
   const handleSubmit = async () => {
     if (!token) return;

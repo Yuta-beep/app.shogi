@@ -1,5 +1,6 @@
 import React from 'react';
 import { renderHook, waitFor } from '@testing-library/react-native';
+
 import { AuthSessionProvider } from '../auth-session-context';
 import { useAuthSession } from '../use-auth-session';
 
@@ -15,11 +16,12 @@ function wrapper({ children }: { children: React.ReactNode }) {
 
 describe('useAuthSession', () => {
   it('初期状態は isReady: false', () => {
-    mockEnsureSession.mockReturnValue(new Promise(() => {})); // pending
+    mockEnsureSession.mockReturnValue(new Promise(() => {}));
     const { result } = renderHook(() => useAuthSession(), { wrapper });
 
     expect(result.current.isReady).toBe(false);
     expect(result.current.userId).toBeNull();
+    expect(result.current.accessToken).toBeNull();
     expect(result.current.needsUsernameSetup).toBe(false);
     expect(result.current.error).toBeNull();
   });
@@ -27,6 +29,7 @@ describe('useAuthSession', () => {
   it('ensureSessionが成功したら isReady: true になる', async () => {
     mockEnsureSession.mockResolvedValueOnce({
       userId: 'user-uuid-123',
+      accessToken: 'token-123',
       isNewUser: false,
       needsUsernameSetup: false,
     });
@@ -36,6 +39,7 @@ describe('useAuthSession', () => {
     await waitFor(() => expect(result.current.isReady).toBe(true));
 
     expect(result.current.userId).toBe('user-uuid-123');
+    expect(result.current.accessToken).toBe('token-123');
     expect(result.current.needsUsernameSetup).toBe(false);
     expect(result.current.error).toBeNull();
   });
@@ -43,6 +47,7 @@ describe('useAuthSession', () => {
   it('needsUsernameSetup: true が正しく反映される', async () => {
     mockEnsureSession.mockResolvedValueOnce({
       userId: 'user-uuid-new',
+      accessToken: 'token-new',
       isNewUser: true,
       needsUsernameSetup: true,
     });
@@ -53,6 +58,7 @@ describe('useAuthSession', () => {
 
     expect(result.current.needsUsernameSetup).toBe(true);
     expect(result.current.userId).toBe('user-uuid-new');
+    expect(result.current.accessToken).toBe('token-new');
   });
 
   it('ensureSessionがエラーをthrowしたら error にセットされる', async () => {
@@ -65,6 +71,7 @@ describe('useAuthSession', () => {
 
     expect(result.current.error).toBe(err);
     expect(result.current.userId).toBeNull();
+    expect(result.current.accessToken).toBeNull();
     expect(result.current.needsUsernameSetup).toBe(false);
   });
 

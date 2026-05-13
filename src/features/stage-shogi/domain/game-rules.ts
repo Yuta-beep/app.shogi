@@ -1,5 +1,5 @@
-import { MoveVector } from '@/usecases/piece-info/load-piece-catalog-usecase';
 import { CHAR_TO_CODE } from '@/features/stage-shogi/domain/char-to-piece-code-map';
+import type { MoveVector } from '@/domain/models/piece';
 
 export type Side = 'player' | 'enemy';
 export type Hands = Record<string, number>;
@@ -403,10 +403,7 @@ export function capturedToHandPieceCode(piece: BoardPiece) {
   const mappedOpaque = opaqueCapturedCodeToHandCode(rawCode);
   const fromStandardChar =
     normalizedChar.length > 0 ? (CHAR_TO_CODE[normalizedChar] ?? null) : null;
-  const code =
-    rawCode && !isOpaque
-      ? rawCode
-      : (codeFromChar ?? mappedOpaque ?? fromStandardChar);
+  const code = rawCode && !isOpaque ? rawCode : (codeFromChar ?? mappedOpaque ?? fromStandardChar);
   if (!code) return null;
   const upper = code.toUpperCase();
   if (

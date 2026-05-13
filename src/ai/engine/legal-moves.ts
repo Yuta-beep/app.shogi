@@ -25,6 +25,30 @@ import { CHAR_TO_CODE, CODE_TO_CHAR } from '@/features/stage-shogi/domain/piece-
 import { createMove, resolvePieceDef } from '@/ai/engine/shared';
 import { effectivePieceForRulesAfterSpring } from '@/ai/engine/spring-ryu-awakening';
 import { createSkillRuntimeView, type SkillRuntimeView } from '@/ai/engine/skill-runtime';
+import {
+  isAnyOniVariantPiece,
+  isBeastPiece as isBeastPieceForLegal,
+  isBirdPiece as isBirdPieceForLegal,
+  isBlackOniPiece,
+  isBlueOniPiece,
+  isCloudPiece,
+  isConcavePiece as isConcavePieceForLegal,
+  isCowPiece,
+  isDeathPiece as isDeathPieceForLegal,
+  isGunPiece,
+  isKatanaPiece,
+  isKingPiece,
+  isMachinePiece,
+  isMirrorPiece,
+  isOpaquePieceInstanceId,
+  isRedOniPiece,
+  isReflectivePiece,
+  isSenPiece,
+  isSoulPiece as isSoulPieceForLegal,
+  isZaiPiece,
+  normKanjiForEngineRules,
+} from '@/ai/engine/piece-identifiers';
+import { readFollowupCellForSide } from '@/ai/engine/skill-state-selectors';
 
 /** カタログ欠損時でも銃・刀の合法手を生成するためのプレースホルダー */
 const MINIMAL_SPECIAL_PIECE_DEF: AiPieceDefinition = {
@@ -48,151 +72,12 @@ const SEN_ZAI_FALLBACK_MOVE_VECTORS: AiPieceDefinition['moveVectors'] = [
   { dx: 0, dy: 1, maxStep: 1 },
 ];
 
-function isKingPiece(piece: AiBoardPiece): boolean {
-  const code = toBasePieceCode(piece.pieceCode);
-  return code === 'OU' || piece.char === '王' || piece.char === '玉';
-}
-
-function isReflectivePiece(piece: AiBoardPiece): boolean {
-  const code = toBasePieceCode(piece.pieceCode);
-  return code === 'HIK' || piece.char === '光';
-}
-
-function isCloudPiece(piece: AiBoardPiece): boolean {
-  const code = toBasePieceCode(piece.pieceCode);
-  return code === 'CLOUD' || piece.char === '雲';
-}
-
-function isMirrorPiece(piece: AiBoardPiece): boolean {
-  const code = toBasePieceCode(piece.pieceCode);
-  return (
-    piece.char === '映' ||
-    piece.char === '鏡' ||
-    code === 'EI' ||
-    code === 'KAGAMI' ||
-    code === 'MIRROR'
-  );
-}
-
-function isMachinePiece(piece: AiBoardPiece): boolean {
-  const code = toBasePieceCode(piece.pieceCode);
-  return code === 'MACHINE' || piece.char === '機';
-}
-
-function normKanjiForEngineRules(ch: string): string {
-  try {
-    return ch.normalize('NFKC');
-  } catch {
-    return ch;
-  }
-}
-
-function isOpaquePieceInstanceId(value: string | null | undefined): boolean {
-  if (!value) return false;
-  return /^piece_[a-z0-9]+$/i.test(value.trim());
-}
-
-/** 「刀」名刀のみ。聖剣「剣」は従来の sword パターンのまま。 */
-function isKatanaPiece(piece: AiBoardPiece): boolean {
-  if (normKanjiForEngineRules(piece.char) === '剣') return false;
-  if (normKanjiForEngineRules(piece.char) === '刀') return true;
-  const code = toBasePieceCode(piece.pieceCode);
-  return code === 'SWORD' || code === 'KATANA';
-}
-
-function isGunPiece(piece: AiBoardPiece): boolean {
-  if (normKanjiForEngineRules(piece.char) === '銃') return true;
-  const code = toBasePieceCode(piece.pieceCode);
-  if (code === 'GUN') return true;
-  return false;
-}
-
-function isCowPiece(piece: AiBoardPiece): boolean {
-  if (normKanjiForEngineRules(piece.char) === '牛') return true;
-  const code = toBasePieceCode(piece.pieceCode);
-  if (code === 'COW') return true;
-  return (piece.pieceCode ?? '').toUpperCase().includes('F75D88C48D6D');
-}
-
-function isSenPiece(piece: AiBoardPiece): boolean {
-  if (normKanjiForEngineRules(piece.char) === '銭') return true;
-  const code = toBasePieceCode(piece.pieceCode);
-  if (code === 'SEN') return true;
-  return (piece.pieceCode ?? '').toUpperCase().includes('EACC7F540399');
-}
-
-function isZaiPiece(piece: AiBoardPiece): boolean {
-  if (normKanjiForEngineRules(piece.char) === '財') return true;
-  const code = toBasePieceCode(piece.pieceCode);
-  if (code === 'ZAI') return true;
-  return (piece.pieceCode ?? '').toUpperCase().includes('7FC715661514');
-}
-
-function normalizedPieceCodeUpper(piece: AiBoardPiece): string {
-  return (toBasePieceCode(piece.pieceCode) ?? piece.pieceCode ?? '').toUpperCase();
-}
-
-function isRedOniPiece(piece: AiBoardPiece): boolean {
-  return normalizedPieceCodeUpper(piece) === 'REDONI';
-}
-
-function isBlueOniPiece(piece: AiBoardPiece): boolean {
-  return normalizedPieceCodeUpper(piece) === 'BLUEONI';
-}
-
-function isBlackOniPiece(piece: AiBoardPiece): boolean {
-  return normalizedPieceCodeUpper(piece) === 'BLACKONI';
-}
-
-function isAnyOniVariantPiece(piece: AiBoardPiece): boolean {
-  return isRedOniPiece(piece) || isBlueOniPiece(piece) || isBlackOniPiece(piece);
-}
-
-function isDeathPieceForLegal(piece: AiBoardPiece): boolean {
-  const base = toBasePieceCode(piece.pieceCode);
-  return base === 'DEATH' || piece.char === '死';
-}
-
-function isSoulPieceForLegal(piece: AiBoardPiece): boolean {
-  const base = toBasePieceCode(piece.pieceCode);
-  return base === 'SOUL' || piece.char === '魂';
-}
-
 function hasSoulOnBoardForSide(pieces: AiBoardPiece[], side: Side): boolean {
   return pieces.some((p) => p.side === side && isSoulPieceForLegal(p));
 }
 
 function pieceRawUpperForLegal(piece: AiBoardPiece): string {
   return (piece.pieceCode ?? '').toUpperCase();
-}
-
-/** 不透明 pieceId でも盤上移動できるよう識別（カタログ moveVectors が空のときエンジンが補う） */
-function isBeastPieceForLegal(piece: AiBoardPiece): boolean {
-  if (normKanjiForEngineRules(piece.char) === '獣') return true;
-  const raw = pieceRawUpperForLegal(piece);
-  if (raw.includes('BEAST')) return true;
-  if (raw.includes('05E4EFB89DAE')) return true;
-  const b = toBasePieceCode(piece.pieceCode);
-  return b === 'BEAST';
-}
-
-function isBirdPieceForLegal(piece: AiBoardPiece): boolean {
-  if (normKanjiForEngineRules(piece.char) === '禽') return true;
-  const raw = pieceRawUpperForLegal(piece);
-  if (raw.includes('BIRD')) return true;
-  if (raw.includes('29ECAB1EF3C3')) return true;
-  const b = toBasePieceCode(piece.pieceCode);
-  return b === 'BIRD';
-}
-
-/** 「凹」: 斜め前・左右・後・斜め後のみ何マスでも（前方直進なし）。貫通は別処理。 */
-function isConcavePieceForLegal(piece: AiBoardPiece): boolean {
-  if (normKanjiForEngineRules(piece.char) === '凹') return true;
-  const raw = pieceRawUpperForLegal(piece);
-  if (raw.includes('CONCAVE')) return true;
-  if (raw.includes('48204DCCFA56')) return true;
-  const b = toBasePieceCode(piece.pieceCode);
-  return b === 'CONCAVE';
 }
 
 const CONCAVE_SLIDE_VECTORS: AiPieceDefinition['moveVectors'] = [
@@ -206,7 +91,7 @@ const CONCAVE_SLIDE_VECTORS: AiPieceDefinition['moveVectors'] = [
 ];
 
 /** 貫通: 前方直進以外の各筋で、盤の端マスが空きかつ端までの経路上に敵がいないとき、味方を飛び越えて端へ入れる（取りは発生しない）。 */
-const CONCAVE_PIERCE_TEMPLATE_DIRS: ReadonlyArray<readonly [number, number]> = [
+const CONCAVE_PIERCE_TEMPLATE_DIRS: readonly (readonly [number, number])[] = [
   [-1, -1],
   [1, -1],
   [-1, 0],
@@ -544,7 +429,7 @@ function isCherryPieceForLegal(piece: AiBoardPiece): boolean {
 
 /** この駒が前後左右に味方の「聖」と隣接しているとき、移動ベクトル各方向の maxStep を +1 */
 function hasOrthogonalAdjacentAllySaint(pieces: AiBoardPiece[], piece: AiBoardPiece): boolean {
-  const ortho: ReadonlyArray<{ dr: number; dc: number }> = [
+  const ortho: readonly { dr: number; dc: number }[] = [
     { dr: -1, dc: 0 },
     { dr: 1, dc: 0 },
     { dr: 0, dc: -1 },
@@ -629,21 +514,18 @@ function lastMovedPieceForBook(
 ): AiBoardPiece | null {
   const boardState = asRecord(position.boardState);
   const skillState = asRecord(boardState?.skill_state ?? boardState?.skillState);
-  // 「書」は“自分が直前に動かした駒”の移動範囲を継承する。
-  // 評価対象の駒 side を基準に参照することで、敵駒プレビュー時でも意図どおり解決する。
-  const key = piece.side === 'player' ? 'last_player_moved_piece' : 'last_enemy_moved_piece';
+  // 「書」は“相手が直前に動かした駒”の移動範囲を継承する。
+  const key = piece.side === 'player' ? 'last_enemy_moved_piece' : 'last_player_moved_piece';
   const raw = asRecord(skillState?.[key]);
   if (!raw) return null;
   const row = typeof raw.row === 'number' ? raw.row : null;
   const col = typeof raw.col === 'number' ? raw.col : null;
   if (row == null || col == null) return null;
-  const side = raw.side === 'enemy' ? 'enemy' : 'player';
-  if (side !== piece.side) return null;
   const pieceCode = typeof raw.pieceCode === 'string' ? raw.pieceCode : null;
   const char = typeof raw.char === 'string' ? raw.char : '';
   const copiedMoveVectors = Array.isArray(raw.copiedMoveVectors) ? raw.copiedMoveVectors : null;
   return {
-    side,
+    side: piece.side,
     row,
     col,
     pieceCode,
@@ -740,53 +622,21 @@ function resolveCapturedPieceCodeForLegalMove(
 function activeOtsuFollowupForSide(
   position: AiBattlePosition,
 ): { row: number; col: number } | null {
-  const boardState = (position.boardState ?? {}) as Record<string, unknown>;
-  const skillState = (boardState.skill_state ?? boardState.skillState ?? {}) as Record<
-    string,
-    unknown
-  >;
-  const rawStatuses = (skillState.piece_statuses ?? skillState.pieceStatuses) as unknown;
-  if (!Array.isArray(rawStatuses)) return null;
-  for (const raw of rawStatuses) {
-    const st = (raw ?? {}) as Record<string, unknown>;
-    const statusType = String(st.status_type ?? st.statusType ?? '');
-    if (statusType !== 'otsu_followup') continue;
-    const side = String(st.side ?? 'player') === 'enemy' ? 'enemy' : 'player';
-    if (side !== position.sideToMove) continue;
-    const remaining = Number(st.remaining_turns ?? st.remainingTurns ?? 0);
-    if (!Number.isFinite(remaining) || remaining <= 0) continue;
-    const row = Number(st.row);
-    const col = Number(st.col);
-    if (!Number.isFinite(row) || !Number.isFinite(col)) continue;
-    return { row, col };
-  }
-  return null;
+  return readFollowupCellForSide(
+    (position.boardState ?? {}) as Record<string, unknown>,
+    position.sideToMove,
+    'otsu_followup',
+  );
 }
 
 function activeConvexFollowupForSide(
   position: AiBattlePosition,
 ): { row: number; col: number } | null {
-  const boardState = (position.boardState ?? {}) as Record<string, unknown>;
-  const skillState = (boardState.skill_state ?? boardState.skillState ?? {}) as Record<
-    string,
-    unknown
-  >;
-  const rawStatuses = (skillState.piece_statuses ?? skillState.pieceStatuses) as unknown;
-  if (!Array.isArray(rawStatuses)) return null;
-  for (const raw of rawStatuses) {
-    const st = (raw ?? {}) as Record<string, unknown>;
-    const statusType = String(st.status_type ?? st.statusType ?? '');
-    if (statusType !== 'convex_followup') continue;
-    const side = String(st.side ?? 'player') === 'enemy' ? 'enemy' : 'player';
-    if (side !== position.sideToMove) continue;
-    const remaining = Number(st.remaining_turns ?? st.remainingTurns ?? 0);
-    if (!Number.isFinite(remaining) || remaining <= 0) continue;
-    const row = Number(st.row);
-    const col = Number(st.col);
-    if (!Number.isFinite(row) || !Number.isFinite(col)) continue;
-    return { row, col };
-  }
-  return null;
+  return readFollowupCellForSide(
+    (position.boardState ?? {}) as Record<string, unknown>,
+    position.sideToMove,
+    'convex_followup',
+  );
 }
 
 function resolvePieceDefForBookCopy(
@@ -841,21 +691,6 @@ function isKbossPieceForGun(piece: AiBoardPiece): boolean {
 function isGunFullyBlockingAllyOnMid(p: AiBoardPiece, gun: AiBoardPiece): boolean {
   if (p.side !== gun.side) return false;
   return isKingPiece(p) || isArmorPiece(p) || isKbossPieceForGun(p);
-}
-
-/** 銃の「前方ちょうど2マス」への直線移動（貫通取り用）。同一列で2マス先のみ。 */
-function gunForwardTwoLandingCoords(
-  piece: AiBoardPiece,
-  fromRow: number,
-  fromCol: number,
-  toRow: number,
-  toCol: number,
-): { midRow: number; midCol: number } | null {
-  if (!isGunPiece(piece)) return null;
-  if (fromCol !== toCol) return null;
-  const d = gunForwardRowDelta(piece.side);
-  if (toRow - fromRow !== 2 * d) return null;
-  return { midRow: fromRow + d, midCol: fromCol };
 }
 
 function generateGunForwardTargets(
@@ -1793,48 +1628,11 @@ function generateBoardPieceMoves(input: {
   skillView: SkillRuntimeView;
   noCaptureOnly?: boolean;
 }): AiBattleMove[] {
-  if (isBookPiece(input.piece)) {
-    const aroundAllies = input.pieces.filter((ally) => {
-      if (ally.side !== input.piece.side) return false;
-      if (ally.row === input.piece.row && ally.col === input.piece.col) return false;
-      const dr = Math.abs(ally.row - input.piece.row);
-      const dc = Math.abs(ally.col - input.piece.col);
-      return dr <= 1 && dc <= 1;
-    });
-    const targetKeys = new Set<string>();
-    const targets: { row: number; col: number }[] = [];
-    for (const ally of aroundAllies) {
-      // 「書」同士の相互参照ループを避けるため、隣接書は参照対象から除外する。
-      if (isBookPiece(ally)) continue;
-      const allyMoves = generateBoardPieceMoves({
-        ...input,
-        piece: ally,
-      });
-      for (const mv of allyMoves) {
-        const row = mv.toRow;
-        const col = mv.toCol;
-        const key = `${row}:${col}`;
-        if (targetKeys.has(key)) continue;
-        targetKeys.add(key);
-        targets.push({ row, col });
-      }
-    }
-    const from = { row: input.piece.row, col: input.piece.col };
-    const pieceCode = resolvePieceCodeForLegalMove(input.piece, input.lookups);
-    return targets.map((to) =>
-      createMove({
-        from,
-        to,
-        pieceCode,
-        promote: false,
-        capturedPieceCode: resolveCapturedPieceCodeForLegalMove(
-          findPieceAtFast(input.occupancy, to.row, to.col),
-        ),
-      }),
-    );
-  }
-
-  const pieceAfterSpring = effectivePieceForRulesAfterSpring(input.piece, input.pieces, input.lookups);
+  const pieceAfterSpring = effectivePieceForRulesAfterSpring(
+    input.piece,
+    input.pieces,
+    input.lookups,
+  );
   const mover = pigInheritedMoveOverlay(pieceAfterSpring) ?? pieceAfterSpring;
   let pieceDef = resolvePieceDef(mover, input.lookups);
   if (isMachinePiece(mover)) {
@@ -1850,6 +1648,7 @@ function generateBoardPieceMoves(input: {
     !pieceDef &&
     (isGunPiece(mover) ||
       isKatanaPiece(mover) ||
+      isBookPiece(mover) ||
       isAnyOniVariantPiece(mover) ||
       isBeastPieceForLegal(mover) ||
       isBirdPieceForLegal(mover) ||
@@ -1860,10 +1659,20 @@ function generateBoardPieceMoves(input: {
   ) {
     pieceDef = { ...MINIMAL_SPECIAL_PIECE_DEF, char: mover.char };
   }
+  const bookCopiedPieceDef = isBookPiece(mover)
+    ? (() => {
+        const copied = lastMovedPieceForBook(input.position, mover);
+        return copied ? resolvePieceDefForBookCopy(copied, input.lookups) : null;
+      })()
+    : null;
+  if (bookCopiedPieceDef) {
+    pieceDef = { ...bookCopiedPieceDef };
+  }
   if (!pieceDef) return [];
   // 銃・刀はエンジン側でベクトルを上書きするため、カタログの moveVectors が空でも合法手を生成する。
   if (
     pieceDef.moveVectors.length === 0 &&
+    !isBookPiece(mover) &&
     !isGunPiece(mover) &&
     !isKatanaPiece(mover) &&
     !isAnyOniVariantPiece(mover) &&
@@ -1883,6 +1692,14 @@ function generateBoardPieceMoves(input: {
     input.pieces,
     input.lookups,
   );
+  if (bookCopiedPieceDef) {
+    effectiveVectors = bookCopiedPieceDef.moveVectors.map((v) => ({
+      dx: v.dx,
+      dy: v.dy,
+      maxStep: v.maxStep,
+      ...(v.captureMode ? { captureMode: v.captureMode } : {}),
+    }));
+  }
   if (isGunPiece(mover)) {
     effectiveVectors = [
       { dx: 0, dy: -1, maxStep: 2 },
@@ -1890,7 +1707,14 @@ function generateBoardPieceMoves(input: {
       { dx: 1, dy: 1, maxStep: 2 },
     ];
   }
-  let effectiveCanJump = pieceDef.canJump === true;
+  let effectiveCanJump = pieceDef.canJump === true || bookCopiedPieceDef?.canJump === true;
+  if (isBookPiece(mover)) {
+    const copied = lastMovedPieceForBook(input.position, mover);
+    const copiedDef = copied ? resolvePieceDefForBookCopy(copied, input.lookups) : null;
+    if (copiedDef?.canJump === true) {
+      effectiveCanJump = true;
+    }
+  }
 
   if (isMirrorPiece(mover)) {
     const enemyCandidates = input.pieces.filter(
@@ -2130,7 +1954,9 @@ function generateDropMoves(input: {
         if (input.skillView.rockObstacleCells.has(`${row}:${col}`)) {
           continue;
         }
-        if (input.skillView.thornDropBlockedCells.has(`${input.position.sideToMove}:${row}:${col}`)) {
+        if (
+          input.skillView.thornDropBlockedCells.has(`${input.position.sideToMove}:${row}:${col}`)
+        ) {
           continue;
         }
         if (
@@ -2235,7 +2061,8 @@ export function generateLegalMoves(input: {
               }),
             )
         : [];
-  const dropMoves = lockedFollowup != null ? [] : generateDropMoves({ pieces, position, skillView });
+  const dropMoves =
+    lockedFollowup != null ? [] : generateDropMoves({ pieces, position, skillView });
 
   const combined = [...boardMoves, ...timeSkillOnlyMoves, ...houseSkillOnlyMoves, ...dropMoves];
   const legalMoves = expandHeartProtectSkillMovesForLegalListing(

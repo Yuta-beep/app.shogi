@@ -3,6 +3,12 @@ import { capturedToHandPieceCode } from '@/features/stage-shogi/domain/game-rule
 import { CHAR_TO_CODE } from '@/features/stage-shogi/domain/piece-conversion';
 import type { AiBattleMove, AiBattlePosition, AiBoardPiece } from '@/ai/model';
 import { piecesFromBoardState, toBasePieceCode } from '@/ai/model';
+import {
+  buildSkillMoverFlags,
+  isAPieceInstance,
+  isSpecialTenPlusPiece,
+  normalizeSkillPieceCode,
+} from '@/ai/engine/piece-identifiers';
 
 type SkillStateRecord = {
   board_hazards: Record<string, unknown>[];
@@ -25,55 +31,9 @@ export type SkillRuntimeView = {
   thornDropBlockedCells: Set<string>;
 };
 
-const FLAME_PIECE_CODES = new Set(['ENN', 'FLAME', '炎']);
-const FIRE_PIECE_CODES = new Set(['FIRE', 'FIR', '火']);
-const WATER_PIECE_CODES = new Set(['WATER', 'SUI', '水']);
-const TREASURE_PIECE_CODES = new Set(['TREASURE', '宝']);
-const IRON_PIECE_CODES = new Set(['IRON', '鉄']);
-const WAVE_PIECE_CODES = new Set(['WAVE', 'NAM', '波']);
-const TIN_PIECE_CODES = new Set(['TIN', '錫']);
-const ELECTRIC_PIECE_CODES = new Set(['ELECTRIC', '電']);
-const THUNDER_PIECE_CODES = new Set(['THUNDER', '雷']);
 const TIME_PIECE_CODES = new Set(['TIME', '時']);
-const ICE_PIECE_CODES = new Set(['ICE', '氷']);
-const SNOW_PIECE_CODES = new Set(['SNOW', '雪']);
 const SAND_PIECE_CODES = new Set(['SAND', '砂']);
-const WIND_PIECE_CODES = new Set(['WIND', '風']);
-const FISH_PIECE_CODES = new Set(['FISH', '魚']);
-const MOSS_PIECE_CODES = new Set(['MOSS', '苔']);
-const RAINBOW_PIECE_CODES = new Set(['RAINBOW', '虹']);
-const SWAMP_PIECE_CODES = new Set(['SWAMP', '沼']);
-const POISON_PIECE_CODES = new Set(['POISON', '毒']);
-const WATERFALL_PIECE_CODES = new Set(['WATERFALL', '滝', '8CC9287B7E93']);
-const A_PIECE_CODES = new Set(['A', 'あ']);
-const WOOD_PIECE_CODES = new Set(['WOOD', 'MOK', '木']);
-const LEAF_PIECE_CODES = new Set(['LEAF', 'HAA', '葉']);
-const BULL_PIECE_CODES = new Set(['BULL', '犇', '1275B5728D1C']);
-const BIGNOISE_PIECE_CODES = new Set(['BIGNOISE', '轟', 'D24741D0EF18']);
-const DEMON_PIECE_CODES = new Set(['DEMON', 'MAK', '魔']);
-const DARK_PIECE_CODES = new Set(['DARK', 'YAM', '闇']);
 const PEAK_PIECE_CODES = new Set(['PEAK', 'MINE', '峰', '5A24E1332FF7']);
-const RIDGE_PIECE_CODES = new Set(['RIDGE', 'REI', '嶺', '555D2E24EFB0']);
-const ROCK_PIECE_CODES = new Set(['ROCK', '岩', '69D6ECEFF4E1']);
-const ORE_PIECE_CODES = new Set(['ORE', '鉱', '1BC740C95315']);
-const GRAVE_PIECE_CODES = new Set(['GRAVE', '墓', 'BC8AB84E787B']);
-const DEPRESSION_PIECE_CODES = new Set(['DEPRESSION', '鬱', '9E27F89F65C5']);
-const ROSE_PIECE_CODES = new Set(['ROSE', '薔', 'A49C1E52B47A']);
-const CHRYSANTHEMUM_PIECE_CODES = new Set(['CHRYSANTHEMUM', '菊', '8254C41BA326']);
-const RED_ONI_PIECE_CODES = new Set(['REDONI', '赤鬼', '鬼']);
-const BLUE_ONI_PIECE_CODES = new Set(['BLUEONI', '青鬼']);
-const BLACK_ONI_PIECE_CODES = new Set(['BLACKONI', '黒鬼']);
-const STANDARD_CORE_PIECE_CODES = new Set(['FU', 'KY', 'KE', 'GI', 'KI', 'KA', 'HI', 'OU']);
-/** 牢・柵（不透明 piece ID のサフィックスでも判定） */
-const PRISON_FENCE_PIECE_CODES = new Set([
-  'PRISON',
-  'ROU',
-  'FENCE',
-  'SAKU',
-  'SAKUI',
-  '406177108665',
-  '95E4E9F3D8E5',
-]);
 const SEAL_PIECE_CODES = new Set(['SEAL', '封']);
 const TREASURE_REWARD_CODES = ['KI', 'GI', 'COPPER'] as const;
 
@@ -84,15 +44,6 @@ function stableHashSkillSeed(value: string): number {
     hash = Math.imul(hash, 16777619);
   }
   return hash >>> 0;
-}
-
-function normalizeSkillPieceCode(raw: string | null | undefined): string {
-  if (!raw) return '';
-  const upper = raw.trim().toUpperCase();
-  if (!upper) return '';
-  if (upper.startsWith('PIECE_SHOGI_')) return upper.slice('PIECE_SHOGI_'.length);
-  if (upper.startsWith('PIECE_')) return upper.slice('PIECE_'.length);
-  return upper;
 }
 
 function isSealPieceForAura(piece: { char: string; pieceCode: string | null }): boolean {
@@ -168,70 +119,6 @@ export function resolveEvadeCaptureProcChanceForPiece(
   return null;
 }
 
-function strokeCountForChar(char: string): number | null {
-  const map: Record<string, number> = {
-    忍: 7,
-    影: 15,
-    砲: 10,
-    竜: 10,
-    鳳: 14,
-    炎: 8,
-    火: 4,
-    水: 4,
-    波: 8,
-    木: 4,
-    葉: 12,
-    光: 6,
-    星: 9,
-    闇: 13,
-    魔: 21,
-    銅: 14,
-    鉄: 21,
-    錫: 16,
-    鉛: 13,
-    宝: 20,
-    電: 13,
-    雷: 13,
-    時: 10,
-    氷: 5,
-    雪: 11,
-    砂: 9,
-    風: 9,
-    苔: 8,
-    魚: 11,
-    雲: 12,
-    虹: 9,
-    毒: 8,
-    沼: 8,
-    あ: 3,
-    牢: 7,
-    柵: 9,
-    嶺: 17,
-    峰: 10,
-    山: 3,
-  };
-  return map[char] ?? null;
-}
-
-function isSpecialTenPlusPiece(piece: AiBoardPiece): boolean {
-  const base = toBasePieceCode(piece.pieceCode);
-  if (base && STANDARD_CORE_PIECE_CODES.has(base)) return false;
-  if (piece.char === '王' || piece.char === '玉') return false;
-  const strokes = strokeCountForChar(piece.char);
-  if (strokes == null) return false;
-  return strokes >= 10;
-}
-
-function isAPieceInstance(piece: AiBoardPiece): boolean {
-  const normalizedCode = normalizeSkillPieceCode(piece.pieceCode);
-  const base = toBasePieceCode(piece.pieceCode);
-  if (piece.char === 'あ') return true;
-  if (base === 'A' || normalizedCode === 'A') return true;
-  // 不透明IDでも既知の「あ」駒IDを拾えるようにする。
-  if (normalizedCode.includes('A9C2AD579732')) return true;
-  return false;
-}
-
 function removeRandomAdjacentEnemyPiece(input: {
   pieces: AiBoardPiece[];
   center: AiBoardPiece;
@@ -303,8 +190,8 @@ function sendAllAdjacentEnemiesToOwnerHands(input: {
   pieces: AiBoardPiece[];
   center: AiBoardPiece;
   actorSide: Side;
-}): Array<{ row: number; col: number; side: Side; char: string; handCode: string }> {
-  const moved: Array<{ row: number; col: number; side: Side; char: string; handCode: string }> = [];
+}): { row: number; col: number; side: Side; char: string; handCode: string }[] {
+  const moved: { row: number; col: number; side: Side; char: string; handCode: string }[] = [];
   const targets = input.pieces.filter((piece) => {
     if (piece.side === input.actorSide) return false;
     const dr = Math.abs(piece.row - input.center.row);
@@ -418,7 +305,7 @@ function warpHorizontalAdjacentEnemiesToRandomEmptyCell(input: {
   center: AiBoardPiece;
   actorSide: Side;
 }): number {
-  const offsets: ReadonlyArray<{ dr: number; dc: number }> = [
+  const offsets: readonly { dr: number; dc: number }[] = [
     { dr: 0, dc: -1 },
     { dr: 0, dc: 1 },
   ];
@@ -431,7 +318,7 @@ function warpHorizontalAdjacentEnemiesToRandomEmptyCell(input: {
     if (idx < 0) continue;
     const target = input.pieces[idx]!;
     if (target.side === input.actorSide) continue;
-    const emptyCells: Array<{ row: number; col: number }> = [];
+    const emptyCells: { row: number; col: number }[] = [];
     for (let r = 0; r <= 8; r += 1) {
       for (let c = 0; c <= 8; c += 1) {
         if (r === target.row && c === target.col) continue;
@@ -456,7 +343,7 @@ function pushHorizontalAdjacentEnemiesOneStepAway(input: {
   center: AiBoardPiece;
   actorSide: Side;
 }): number {
-  const offsets: ReadonlyArray<{ dc: number }> = [{ dc: -1 }, { dc: 1 }];
+  const offsets: readonly { dc: number }[] = [{ dc: -1 }, { dc: 1 }];
   let pushed = 0;
   for (const offset of offsets) {
     const row = input.center.row;
@@ -486,7 +373,7 @@ function addRandomAdjacentHazard(input: {
   affectsSide: Side;
   durationTurns: number;
 }): boolean {
-  const candidates: Array<{ row: number; col: number }> = [];
+  const candidates: { row: number; col: number }[] = [];
   for (let dr = -1; dr <= 1; dr += 1) {
     for (let dc = -1; dc <= 1; dc += 1) {
       if (dr === 0 && dc === 0) continue;
@@ -516,7 +403,7 @@ function addRandomOpponentCampPoisonCells(input: {
   durationTurns: number;
 }): number {
   const targetRows = input.actorSide === 'player' ? [0, 1, 2] : [6, 7, 8];
-  const pool: Array<{ row: number; col: number }> = [];
+  const pool: { row: number; col: number }[] = [];
   for (const row of targetRows) {
     for (let col = 0; col <= 8; col += 1) {
       if (!isCellEmpty(input.pieces, row, col)) continue;
@@ -793,9 +680,9 @@ function summonOrthogonalAdjacentEmptyPieces(input: {
   actorSide: Side;
   summonCode: string;
   summonChar: string;
-}): Array<{ row: number; col: number }> {
-  const summoned: Array<{ row: number; col: number }> = [];
-  const directions: ReadonlyArray<{ dr: number; dc: number }> = [
+}): { row: number; col: number }[] {
+  const summoned: { row: number; col: number }[] = [];
+  const directions: readonly { dr: number; dc: number }[] = [
     { dr: -1, dc: 0 },
     { dr: 1, dc: 0 },
     { dr: 0, dc: -1 },
@@ -962,13 +849,19 @@ function allyYangSharesRowOrColumnWithYin(pieces: AiBoardPiece[], yin: AiBoardPi
 }
 
 /** 味方「陰」が同一行または同一列にいる「陽」は敵に取られない（合法手・捕捉の両方で参照）。 */
-export function isYangBondProtectedFromCapture(pieces: AiBoardPiece[], target: AiBoardPiece): boolean {
+export function isYangBondProtectedFromCapture(
+  pieces: AiBoardPiece[],
+  target: AiBoardPiece,
+): boolean {
   if (!isYangAllyAuraPiece(target)) return false;
   return allyYinSharesRowOrColumnWithYang(pieces, target);
 }
 
 /** 味方「陽」が同一行または同一列にいる「陰」は敵に取られない（合法手・捕捉の両方で参照）。 */
-export function isYinBondProtectedFromCapture(pieces: AiBoardPiece[], target: AiBoardPiece): boolean {
+export function isYinBondProtectedFromCapture(
+  pieces: AiBoardPiece[],
+  target: AiBoardPiece,
+): boolean {
   if (!isYinYangBondPiece(target)) return false;
   return allyYangSharesRowOrColumnWithYin(pieces, target);
 }
@@ -1575,131 +1468,55 @@ export function applyMoveSkillEffects(input: {
       };
     });
   }
-  const isFlameMover =
-    FLAME_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '炎';
-  const isFireMover =
-    FIRE_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '火';
-  const isWaterMover =
-    WATER_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '水';
-  const isTreasureMover =
-    TREASURE_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '宝';
-  const isIronMover =
-    IRON_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '鉄';
-  const isWaveMover =
-    WAVE_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '波';
-  const isTinMover =
-    TIN_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '錫';
-  const isElectricMover =
-    ELECTRIC_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '電';
-  const isThunderMover =
-    THUNDER_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '雷';
-  const isTimeMover =
-    TIME_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '時';
-  const isIceMover =
-    ICE_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '氷';
-  const isSnowMover =
-    SNOW_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '雪';
-  const isSandMover =
-    SAND_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '砂';
-  const isBoatMover = movedCode === 'BOAT' || movedPiece?.char === '舟';
-  const movePcUpper = (input.move.pieceCode ?? '').toUpperCase();
-  const isBirdMover =
-    movedCode === 'BIRD' || movedPiece?.char === '禽' || movePcUpper.includes('29ECAB1EF3C3');
-  const isWindMover =
-    WIND_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '風';
-  const isFishMover =
-    FISH_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '魚';
-  const isMossMover =
-    MOSS_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '苔';
-  const isRainbowMover =
-    RAINBOW_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '虹';
-  const isSwampMover =
-    SWAMP_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '沼';
-  const isPoisonMover =
-    POISON_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '毒';
-  const isWaterfallMover =
-    WATERFALL_PIECE_CODES.has(movedCode) ||
-    normalizeSkillPieceCode(input.move.pieceCode) === '滝' ||
-    (movedPiece ? WATERFALL_PIECE_CODES.has(normalizeSkillPieceCode(movedPiece.pieceCode)) : false);
-  const isAMover =
-    A_PIECE_CODES.has(movedCode) ||
-    normalizeSkillPieceCode(input.move.pieceCode) === 'あ' ||
-    (input.movedPiece ? isAPieceInstance(input.movedPiece) : false);
-  const isWoodMover =
-    WOOD_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '木';
-  const isLeafMover =
-    LEAF_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '葉';
-  const isBullMover =
-    BULL_PIECE_CODES.has(movedCode) ||
-    normalizeSkillPieceCode(input.move.pieceCode) === '犇' ||
-    (movedPiece ? movedPiece.char === '犇' : false);
-  const isBignoiseMover =
-    BIGNOISE_PIECE_CODES.has(movedCode) ||
-    normalizeSkillPieceCode(input.move.pieceCode) === '轟' ||
-    (movedPiece ? movedPiece.char === '轟' : false);
-  const isDemonMover =
-    DEMON_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '魔';
-  const isDarkMover =
-    DARK_PIECE_CODES.has(movedCode) || normalizeSkillPieceCode(input.move.pieceCode) === '闇';
-  const isRidgeMover =
-    RIDGE_PIECE_CODES.has(movedCode) ||
-    normalizeSkillPieceCode(input.move.pieceCode) === '嶺' ||
-    (movedPiece ? movedPiece.char === '嶺' : false);
-  const isRockMover =
-    ROCK_PIECE_CODES.has(movedCode) ||
-    normalizeSkillPieceCode(input.move.pieceCode) === '岩' ||
-    (movedPiece ? movedPiece.char === '岩' : false);
-  const isOreMover =
-    ORE_PIECE_CODES.has(movedCode) ||
-    normalizeSkillPieceCode(input.move.pieceCode) === '鉱' ||
-    (movedPiece ? movedPiece.char === '鉱' : false);
-  const isGraveMover =
-    GRAVE_PIECE_CODES.has(movedCode) ||
-    normalizeSkillPieceCode(input.move.pieceCode) === '墓' ||
-    (movedPiece ? movedPiece.char === '墓' : false);
-  const isDepressionMover =
-    DEPRESSION_PIECE_CODES.has(movedCode) ||
-    normalizeSkillPieceCode(input.move.pieceCode) === '鬱' ||
-    (movedPiece ? movedPiece.char === '鬱' : false);
-  const isRoseMover =
-    ROSE_PIECE_CODES.has(movedCode) ||
-    normalizeSkillPieceCode(input.move.pieceCode) === '薔' ||
-    (movedPiece ? movedPiece.char === '薔' : false);
-  const isChrysanthemumMover =
-    CHRYSANTHEMUM_PIECE_CODES.has(movedCode) ||
-    normalizeSkillPieceCode(input.move.pieceCode) === '菊' ||
-    (movedPiece ? movedPiece.char === '菊' : false);
-  const isPrisonFenceMover =
-    PRISON_FENCE_PIECE_CODES.has(movedCode) ||
-    normalizeSkillPieceCode(input.move.pieceCode) === '牢' ||
-    normalizeSkillPieceCode(input.move.pieceCode) === '柵' ||
-    (movedPiece ? movedPiece.char === '牢' || movedPiece.char === '柵' : false);
-  const normalizedMovePieceCode = normalizeSkillPieceCode(input.move.pieceCode);
-  const isBlueOniMover =
-    BLUE_ONI_PIECE_CODES.has(movedCode) ||
-    normalizedMovePieceCode === 'BLUEONI' ||
-    (movedPiece ? movedPiece.char === '鬼' && movedCode === 'BLUEONI' : false);
-  const isBlackOniMover =
-    BLACK_ONI_PIECE_CODES.has(movedCode) ||
-    normalizedMovePieceCode === 'BLACKONI' ||
-    (movedPiece ? movedPiece.char === '鬼' && movedCode === 'BLACKONI' : false);
-  const isRedOniMover =
-    RED_ONI_PIECE_CODES.has(movedCode) ||
-    normalizedMovePieceCode === 'REDONI' ||
-    (movedPiece ? movedPiece.char === '鬼' && movedCode === 'REDONI' : false);
-  const isTatsuGodMover =
-    movedCode === 'TATSU' ||
-    normalizedMovePieceCode === 'TATSU' ||
-    (movedPiece ? movedPiece.char === '辰' : false) ||
-    (normalizedMovePieceCode.length > 0 && normalizedMovePieceCode.includes('707ED609'));
-  const isExperimentMover =
-    movedCode === 'EXPERIMENT' ||
-    normalizedMovePieceCode === 'EXPERIMENT' ||
-    (movedPiece ? movedPiece.char === '実' : false);
-  const isKbossMover =
-    movedCode === 'KBOSS' ||
-    normalizedMovePieceCode === 'KBOSS' ||
-    (movedPiece ? movedPiece.char === 'K' : false);
+  const {
+    isAMover,
+    isBirdMover,
+    isBignoiseMover,
+    isBlackOniMover,
+    isBlueOniMover,
+    isBoatMover,
+    isBullMover,
+    isChrysanthemumMover,
+    isDarkMover,
+    isDemonMover,
+    isDepressionMover,
+    isElectricMover,
+    isExperimentMover,
+    isFireMover,
+    isFishMover,
+    isFlameMover,
+    isGraveMover,
+    isIceMover,
+    isIronMover,
+    isKbossMover,
+    isLeafMover,
+    isMossMover,
+    isOreMover,
+    isPoisonMover,
+    isPrisonFenceMover,
+    isRainbowMover,
+    isRedOniMover,
+    isRidgeMover,
+    isRockMover,
+    isRoseMover,
+    isSandMover,
+    isSnowMover,
+    isSwampMover,
+    isTatsuGodMover,
+    isThunderMover,
+    isTimeMover,
+    isTinMover,
+    isTreasureMover,
+    isWaterMover,
+    isWaterfallMover,
+    isWaveMover,
+    isWindMover,
+    isWoodMover,
+  } = buildSkillMoverFlags({
+    movedCode,
+    movePieceCode: input.move.pieceCode,
+    movedPiece,
+  });
 
   // ai.shogi の explicit override 相当: 定義読み込み失敗時でも炎スキルは発動可能にする。
   if (
@@ -1920,7 +1737,7 @@ export function applyMoveSkillEffects(input: {
       });
     }
   }
-  // 虹/青鬼: 周囲8マスの敵駒の移動範囲を上下1マスに制限する。
+  // 虹/青鬼: 周囲8マスの敵駒の移動範囲を上下左右1マスに制限する。
   if (
     (isRainbowMover || isBlueOniMover) &&
     input.move.fromRow != null &&
@@ -1939,7 +1756,7 @@ export function applyMoveSkillEffects(input: {
           row,
           col,
           side: target.side,
-          movement_rule: 'vertical_step_only',
+          movement_rule: 'orthogonal_step_only',
           remaining_turns: 2,
         });
       }
@@ -2559,7 +2376,7 @@ export function applyMoveSkillEffects(input: {
     let summonRow: number | null = null;
     let summonCol: number | null = null;
     if (triggered) {
-      const around: Array<{ row: number; col: number }> = [];
+      const around: { row: number; col: number }[] = [];
       for (let dr = -1; dr <= 1; dr += 1) {
         for (let dc = -1; dc <= 1; dc += 1) {
           if (dr === 0 && dc === 0) continue;
@@ -2623,10 +2440,6 @@ export function applyMoveSkillEffects(input: {
   if (isOreMover && input.move.fromRow != null && input.move.fromCol != null && movedPiece) {
     const procChance = 0.2;
     const triggered = skillProcRoll(procChance);
-    let transformed = false;
-    let targetRow: number | null = null;
-    let targetCol: number | null = null;
-    let transformedTo: string | null = null;
     if (triggered) {
       const alliesFu = input.pieces.filter((piece) => {
         if (piece.side !== input.actorSide) return false;
@@ -2640,10 +2453,6 @@ export function applyMoveSkillEffects(input: {
         target.pieceCode = picked;
         target.char = picked === 'KI' ? '金' : picked === 'GI' ? '銀' : '銅';
         target.promoted = false;
-        transformed = true;
-        targetRow = target.row;
-        targetCol = target.col;
-        transformedTo = picked;
       }
     }
   }
@@ -2651,11 +2460,8 @@ export function applyMoveSkillEffects(input: {
   if (isGraveMover && input.move.fromRow != null && input.move.fromCol != null && movedPiece) {
     const procChance = 0.2;
     const triggered = skillProcRoll(procChance);
-    let summoned = false;
-    let summonRow: number | null = null;
-    let summonCol: number | null = null;
     if (triggered) {
-      const around: Array<{ row: number; col: number }> = [];
+      const around: { row: number; col: number }[] = [];
       for (let dr = -1; dr <= 1; dr += 1) {
         for (let dc = -1; dc <= 1; dc += 1) {
           if (dr === 0 && dc === 0) continue;
@@ -2677,15 +2483,12 @@ export function applyMoveSkillEffects(input: {
           promoted: false,
           imageSignedUrl: null,
         });
-        summoned = true;
-        summonRow = picked.row;
-        summonCol = picked.col;
       }
     }
   }
   // 岩: 移動時、左右1マスに2ターン持続する岩障害物を召喚。
   if (isRockMover && input.move.fromRow != null && input.move.fromCol != null && movedPiece) {
-    const summoned: Array<{ row: number; col: number }> = [];
+    const summoned: { row: number; col: number }[] = [];
     for (const dc of [-1, 1] as const) {
       const row = movedPiece.row;
       const col = movedPiece.col + dc;
@@ -2850,7 +2653,7 @@ export function applyMoveSkillEffects(input: {
         }
         const mp = input.movedPiece;
         const orthOnly = conditionType === 'orthogonal_adjacent_enemy_exists';
-        const deltas: ReadonlyArray<readonly [number, number]> = orthOnly
+        const deltas: readonly (readonly [number, number])[] = orthOnly
           ? [
               [-1, 0],
               [1, 0],
@@ -3053,7 +2856,7 @@ export function applyMoveSkillEffects(input: {
             maxTargetsRaw != null && Number.isFinite(maxTargetsRaw) && maxTargetsRaw > 0
               ? Math.floor(maxTargetsRaw)
               : null;
-          const orthDeltas: ReadonlyArray<readonly [number, number]> = [
+          const orthDeltas: readonly (readonly [number, number])[] = [
             [-1, 0],
             [1, 0],
             [0, -1],
@@ -3422,7 +3225,7 @@ export function applyMoveSkillEffects(input: {
             const code = toBasePieceCode(capturedToHandPieceCode(target));
             if (code) incrementHand(input.position, input.actorSide, code, 1);
           }
-        continue;
+          continue;
         }
         for (let dr = -1; dr <= 1; dr += 1) {
           for (let dc = -1; dc <= 1; dc += 1) {
@@ -3700,22 +3503,23 @@ export function applyMoveSkillEffects(input: {
 
       if (effectType === 'revive' && selector === 'adjacent_ally') {
         if (!input.movedPiece) continue;
-        if (
-          hasAdjacentPiece({
-            pieces: input.pieces,
-            row: input.movedPiece.row,
-            col: input.movedPiece.col,
-            side: input.actorSide,
-            match: 'ally',
-          })
-        ) {
-          state.piece_statuses.push({
-            row: input.movedPiece.row,
-            col: input.movedPiece.col,
-            side: input.actorSide,
-            status_type: 'revive',
-            remaining_turns: duration,
-          });
+        const reviveDuration = Math.max(2, duration);
+        for (let dr = -1; dr <= 1; dr += 1) {
+          for (let dc = -1; dc <= 1; dc += 1) {
+            if (dr === 0 && dc === 0) continue;
+            const row = input.movedPiece.row + dr;
+            const col = input.movedPiece.col + dc;
+            if (row < 0 || row > 8 || col < 0 || col > 8) continue;
+            const targetPiece = input.pieces.find((p) => p.row === row && p.col === col);
+            if (!targetPiece || targetPiece.side !== input.actorSide) continue;
+            state.piece_statuses.push({
+              row,
+              col,
+              side: input.actorSide,
+              status_type: 'revive',
+              remaining_turns: reviveDuration,
+            });
+          }
         }
         continue;
       }

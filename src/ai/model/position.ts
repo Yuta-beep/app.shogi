@@ -165,11 +165,7 @@ export function piecesFromBoardState(position: AiBattlePosition): AiBoardPiece[]
       typeof pigIc === 'string' && pigIc.trim().length > 0 ? pigIc : undefined;
     const pigPr = obj.pigInheritedPromoted ?? obj.pig_inherited_promoted;
     const pigInheritedPromoted =
-      typeof pigPr === 'boolean'
-        ? pigPr
-        : typeof pigPr === 'number'
-          ? pigPr !== 0
-          : undefined;
+      typeof pigPr === 'boolean' ? pigPr : typeof pigPr === 'number' ? pigPr !== 0 : undefined;
 
     pieces.push({
       side,

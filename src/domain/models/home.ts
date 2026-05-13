@@ -1,11 +1,15 @@
-export type HomeSnapshot = {
-  playerName: string;
-  rating: number;
-  pawnCurrency: number;
-  goldCurrency: number;
-  playerRank: number;
-  playerExp: number;
-  stamina: number;
-  maxStamina: number;
-  nextRecoveryAt: string | null;
-};
+import { z } from 'zod';
+
+export const HomeSnapshotSchema = z.object({
+  playerName: z.string(),
+  rating: z.number(),
+  pawnCurrency: z.number(),
+  goldCurrency: z.number(),
+  playerRank: z.number(),
+  playerExp: z.number(),
+  stamina: z.number(),
+  maxStamina: z.number(),
+  nextRecoveryAt: z.string().nullable(),
+});
+
+export type HomeSnapshot = z.infer<typeof HomeSnapshotSchema>;

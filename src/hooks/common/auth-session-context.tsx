@@ -5,6 +5,7 @@ import { ensureSession } from '@/usecases/auth/ensure-session-usecase';
 type AuthSessionState = {
   isReady: boolean;
   userId: string | null;
+  accessToken: string | null;
   needsUsernameSetup: boolean;
   error: Error | null;
 };
@@ -12,6 +13,7 @@ type AuthSessionState = {
 const initialState: AuthSessionState = {
   isReady: false,
   userId: null,
+  accessToken: null,
   needsUsernameSetup: false,
   error: null,
 };
@@ -39,15 +41,22 @@ export function AuthSessionProvider({ children }: { children: ReactNode }) {
     let active = true;
 
     ensureSession()
-      .then(({ userId, needsUsernameSetup }) => {
+      .then(({ userId, accessToken, needsUsernameSetup }) => {
         if (!active) return;
-        setState({ isReady: true, userId, needsUsernameSetup, error: null });
+        setState({
+          isReady: true,
+          userId,
+          accessToken,
+          needsUsernameSetup,
+          error: null,
+        });
       })
       .catch((error: unknown) => {
         if (!active) return;
         setState({
           isReady: true,
           userId: null,
+          accessToken: null,
           needsUsernameSetup: false,
           error: normalizeUnknownError(error),
         });

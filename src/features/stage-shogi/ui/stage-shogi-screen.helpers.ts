@@ -56,12 +56,7 @@ const STANDARD_PIECE_CODES = new Set(['FU', 'KY', 'KE', 'GI', 'KI', 'KA', 'HI', 
  * apply-move では取った側の手駒にならない駒（霊の消滅、K・実・異の取った扱いでの消滅）。
  * 手駒同期の「盤上数で手駒を打ち消す」補正の対象外にはしない（スキル仕様をここで上書きしない）。
  */
-const NO_CAPTURE_TO_CAPTOR_HAND_CODES = new Set([
-  'SPIRIT',
-  'KBOSS',
-  'EXPERIMENT',
-  'MUTANT',
-]);
+const NO_CAPTURE_TO_CAPTOR_HAND_CODES = new Set(['SPIRIT', 'KBOSS', 'EXPERIMENT', 'MUTANT']);
 
 /**
  * 同一側に同種が盤上に複数いると、手駒キーと盤上カウントの差し引きで「取った手駒」が消える。
@@ -168,6 +163,7 @@ export type BoardPiece = {
   char: string;
   promoted?: boolean;
   imageSignedUrl: string | null;
+  kbossLivesRemaining?: number;
   darkVeiled?: boolean;
   aTransformed?: boolean;
   /** 牢・柵スキル由来の行動不能（鎖.png） */
@@ -2276,7 +2272,10 @@ export function syncCanonicalState(params: {
   const withStunAura = applyStunAuraEffectToPieces(withPrisonChain, position);
   const withAbyssAura = applyAbyssAuraEffectToPieces(withStunAura, position);
   const withChrysRevivalMark = applyChrysanthemumRevivalMarkToPieces(withAbyssAura, position);
-  const withLightProtectionAura = applyLightProtectionAuraEffectToPieces(withChrysRevivalMark, position);
+  const withLightProtectionAura = applyLightProtectionAuraEffectToPieces(
+    withChrysRevivalMark,
+    position,
+  );
   const withDeathCurseAura = applyDeathCurseEffectToPieces(withLightProtectionAura, position);
   const poisonHazardCells = poisonHazardCellsForDisplay(position);
   const rockObstacleCells = rockObstacleCellsForDisplay(position);

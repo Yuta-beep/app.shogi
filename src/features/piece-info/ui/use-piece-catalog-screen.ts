@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { PieceCatalogItem } from '@/domain/models/piece';
+import { useAuthSession } from '@/hooks/common/auth-session-context';
 import { createLoadPieceCatalogUseCase } from '@/usecases/piece-info/create-piece-info-usecases';
 import { createLoadDeckBuilderUseCase } from '@/usecases/deck-builder/create-deck-builder-usecases';
-import { supabase } from '@/lib/supabase/supabase-client';
 import { isApiDataSource } from '@/lib/config/data-source';
 
 /** `legal-moves.ts` の CONCAVE_SLIDE_VECTORS と同一（図鑑グリッド用）。 */
@@ -105,6 +105,7 @@ function normalizeCatalogMoveVectors(piece: PieceCatalogItem): PieceCatalogItem[
 
 export function usePieceCatalogScreen() {
   const isApiMode = isApiDataSource();
+  const { accessToken } = useAuthSession();
   const [items, setItems] = useState<PieceCatalogItem[]>([]);
   const [index, setIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -131,18 +132,14 @@ export function usePieceCatalogScreen() {
         return;
       }
 
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      if (!token) {
+      if (!accessToken) {
         if (active) {
           setItems([]);
         }
         return;
       }
 
-      const deckSnapshot = await createLoadDeckBuilderUseCase(token).execute();
+      const deckSnapshot = await createLoadDeckBuilderUseCase(accessToken).execute();
 
       const ownedByChar = new Map<
         string,
@@ -194,7 +191,7 @@ export function usePieceCatalogScreen() {
     return () => {
       active = false;
     };
-  }, [isApiMode, loadUseCase]);
+  }, [accessToken, isApiMode, loadUseCase]);
 
   useEffect(() => {
     if (items.length === 0) {

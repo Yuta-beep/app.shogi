@@ -13,12 +13,12 @@ import {
   useDeckBuilderScreen,
 } from '@/features/deck-builder/ui/use-deck-builder-screen';
 import { useAssetPreload } from '@/hooks/common/use-asset-preload';
+import { useAuthSession } from '@/hooks/common/auth-session-context';
 import { useScreenBgm } from '@/hooks/common/use-screen-bgm';
 import { playSe } from '@/lib/audio/audio-manager';
 import { resolvePieceImageSource } from '@/lib/piece-image';
 import { getDeckBuilderPieceCost } from '@/features/deck-builder/lib/deck-builder-piece-cost';
 import { createSaveOnlineMatchSetupUseCase } from '@/usecases/online-match/create-online-match-usecases';
-import { supabase } from '@/lib/supabase/supabase-client';
 import { CHAR_TO_CODE } from '@/features/stage-shogi/domain/piece-conversion';
 
 const deckAssets = {
@@ -40,6 +40,7 @@ type DeckBuilderScreenProps = {
 
 export function DeckBuilderScreen({ mode = 'default' }: DeckBuilderScreenProps) {
   const router = useRouter();
+  const { accessToken } = useAuthSession();
   const vm = useDeckBuilderScreen();
   const { placeSelectedPieceAt, isValidPlacementAt, selectedPieceForPlacement, openPieceDetail } =
     vm;
@@ -349,10 +350,7 @@ export function DeckBuilderScreen({ mode = 'default' }: DeckBuilderScreenProps) 
               return vm.applyAsBattleDeck();
             }
 
-            const {
-              data: { session },
-            } = await supabase.auth.getSession();
-            const useCase = createSaveOnlineMatchSetupUseCase(session?.access_token);
+            const useCase = createSaveOnlineMatchSetupUseCase(accessToken ?? undefined);
             const placements = vm.boardPlacements
               .filter((placement) => typeof placement.piece.pieceId === 'number')
               .map((placement) => ({

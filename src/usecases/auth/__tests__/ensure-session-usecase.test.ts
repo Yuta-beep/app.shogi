@@ -48,7 +48,12 @@ describe('ensureSession', () => {
 
       const result = await ensureSession();
 
-      expect(result).toEqual({ userId, isNewUser: false, needsUsernameSetup: false });
+      expect(result).toEqual({
+        userId,
+        accessToken: 'token-123',
+        isNewUser: false,
+        needsUsernameSetup: false,
+      });
       expect(mockSignInAnonymously).not.toHaveBeenCalled();
       expect(mockGetDisplayName).toHaveBeenCalledWith('token-123');
     });
@@ -59,7 +64,12 @@ describe('ensureSession', () => {
 
       const result = await ensureSession();
 
-      expect(result).toEqual({ userId, isNewUser: false, needsUsernameSetup: true });
+      expect(result).toEqual({
+        userId,
+        accessToken: 'token-123',
+        isNewUser: false,
+        needsUsernameSetup: true,
+      });
     });
 
     it('display_name取得でエラーが起きたらthrowする', async () => {
@@ -90,6 +100,7 @@ describe('ensureSession', () => {
       expect(mockGetDisplayName).toHaveBeenNthCalledWith(2, 'token-reauthed');
       expect(result).toEqual({
         userId: 'reauthed-user',
+        accessToken: 'token-reauthed',
         isNewUser: true,
         needsUsernameSetup: true,
       });
@@ -112,7 +123,12 @@ describe('ensureSession', () => {
 
       expect(mockSignInAnonymously).toHaveBeenCalledTimes(1);
       expect(mockGetDisplayName).toHaveBeenCalledWith('token-abc');
-      expect(result).toEqual({ userId, isNewUser: true, needsUsernameSetup: true });
+      expect(result).toEqual({
+        userId,
+        accessToken: 'token-abc',
+        isNewUser: true,
+        needsUsernameSetup: true,
+      });
     });
 
     it('getSession -> signInAnonymously -> getDisplayName の順で呼ばれる', async () => {

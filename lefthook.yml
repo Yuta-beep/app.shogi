@@ -1,8 +1,9 @@
 pre-commit:
-  parallel: true
+  parallel: false
   commands:
     format:
-      run: bun run format:check
+      run: bun run format
+      stage_fixed: true
     lint:
       run: bun run lint
 

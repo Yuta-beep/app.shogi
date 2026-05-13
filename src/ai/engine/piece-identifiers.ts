@@ -1,0 +1,576 @@
+import { toBasePieceCode } from '@/ai/model';
+
+type PieceLike = {
+  pieceCode: string | null;
+  char: string;
+};
+
+type SkillMoverFlagName =
+  | 'isFlameMover'
+  | 'isFireMover'
+  | 'isWaterMover'
+  | 'isTreasureMover'
+  | 'isIronMover'
+  | 'isWaveMover'
+  | 'isTinMover'
+  | 'isElectricMover'
+  | 'isThunderMover'
+  | 'isTimeMover'
+  | 'isIceMover'
+  | 'isSnowMover'
+  | 'isSandMover'
+  | 'isWindMover'
+  | 'isFishMover'
+  | 'isMossMover'
+  | 'isRainbowMover'
+  | 'isSwampMover'
+  | 'isPoisonMover'
+  | 'isWaterfallMover'
+  | 'isAMover'
+  | 'isWoodMover'
+  | 'isLeafMover'
+  | 'isBullMover'
+  | 'isBignoiseMover'
+  | 'isDemonMover'
+  | 'isDarkMover'
+  | 'isRidgeMover'
+  | 'isRockMover'
+  | 'isOreMover'
+  | 'isGraveMover'
+  | 'isDepressionMover'
+  | 'isRoseMover'
+  | 'isChrysanthemumMover'
+  | 'isPrisonFenceMover'
+  | 'isBlueOniMover'
+  | 'isBlackOniMover'
+  | 'isRedOniMover'
+  | 'isTatsuGodMover'
+  | 'isExperimentMover'
+  | 'isKbossMover'
+  | 'isBoatMover'
+  | 'isBirdMover';
+
+export type SkillMoverFlags = Record<SkillMoverFlagName, boolean>;
+
+type SkillMoverSpec = {
+  key: Exclude<
+    SkillMoverFlagName,
+    | 'isAMover'
+    | 'isBoatMover'
+    | 'isBirdMover'
+    | 'isTatsuGodMover'
+    | 'isExperimentMover'
+    | 'isKbossMover'
+  >;
+  aliases: readonly string[];
+};
+
+const FLAME_PIECE_CODES = ['ENN', 'FLAME', '炎'] as const;
+const FIRE_PIECE_CODES = ['FIRE', 'FIR', '火'] as const;
+const WATER_PIECE_CODES = ['WATER', 'SUI', '水'] as const;
+const TREASURE_PIECE_CODES = ['TREASURE', '宝'] as const;
+const IRON_PIECE_CODES = ['IRON', '鉄'] as const;
+const WAVE_PIECE_CODES = ['WAVE', 'NAM', '波'] as const;
+const TIN_PIECE_CODES = ['TIN', '錫'] as const;
+const ELECTRIC_PIECE_CODES = ['ELECTRIC', '電'] as const;
+const THUNDER_PIECE_CODES = ['THUNDER', '雷'] as const;
+const TIME_PIECE_CODES = ['TIME', '時'] as const;
+const ICE_PIECE_CODES = ['ICE', '氷'] as const;
+const SNOW_PIECE_CODES = ['SNOW', '雪'] as const;
+const SAND_PIECE_CODES = ['SAND', '砂'] as const;
+const WIND_PIECE_CODES = ['WIND', '風'] as const;
+const FISH_PIECE_CODES = ['FISH', '魚'] as const;
+const MOSS_PIECE_CODES = ['MOSS', '苔'] as const;
+const RAINBOW_PIECE_CODES = ['RAINBOW', '虹'] as const;
+const SWAMP_PIECE_CODES = ['SWAMP', '沼'] as const;
+const POISON_PIECE_CODES = ['POISON', '毒'] as const;
+const WATERFALL_PIECE_CODES = ['WATERFALL', '滝', '8CC9287B7E93'] as const;
+const A_PIECE_CODES = ['A', 'あ'] as const;
+const WOOD_PIECE_CODES = ['WOOD', 'MOK', '木'] as const;
+const LEAF_PIECE_CODES = ['LEAF', 'HAA', '葉'] as const;
+const BULL_PIECE_CODES = ['BULL', '犇', '1275B5728D1C'] as const;
+const BIGNOISE_PIECE_CODES = ['BIGNOISE', '轟', 'D24741D0EF18'] as const;
+const DEMON_PIECE_CODES = ['DEMON', 'MAK', '魔'] as const;
+const DARK_PIECE_CODES = ['DARK', 'YAM', '闇'] as const;
+const RIDGE_PIECE_CODES = ['RIDGE', 'REI', '嶺', '555D2E24EFB0'] as const;
+const ROCK_PIECE_CODES = ['ROCK', '岩', '69D6ECEFF4E1'] as const;
+const ORE_PIECE_CODES = ['ORE', '鉱', '1BC740C95315'] as const;
+const GRAVE_PIECE_CODES = ['GRAVE', '墓', 'BC8AB84E787B'] as const;
+const DEPRESSION_PIECE_CODES = ['DEPRESSION', '鬱', '9E27F89F65C5'] as const;
+const ROSE_PIECE_CODES = ['ROSE', '薔', 'A49C1E52B47A'] as const;
+const CHRYSANTHEMUM_PIECE_CODES = ['CHRYSANTHEMUM', '菊', '8254C41BA326'] as const;
+const RED_ONI_PIECE_CODES = ['REDONI', '赤鬼', '鬼'] as const;
+const BLUE_ONI_PIECE_CODES = ['BLUEONI', '青鬼'] as const;
+const BLACK_ONI_PIECE_CODES = ['BLACKONI', '黒鬼'] as const;
+const PRISON_FENCE_PIECE_CODES = [
+  'PRISON',
+  'ROU',
+  'FENCE',
+  'SAKU',
+  'SAKUI',
+  '406177108665',
+  '95E4E9F3D8E5',
+] as const;
+const STANDARD_CORE_PIECE_CODES = ['FU', 'KY', 'KE', 'GI', 'KI', 'KA', 'HI', 'OU'] as const;
+
+const MOVER_SPECS: readonly SkillMoverSpec[] = [
+  { key: 'isFlameMover', aliases: FLAME_PIECE_CODES },
+  { key: 'isFireMover', aliases: FIRE_PIECE_CODES },
+  { key: 'isWaterMover', aliases: WATER_PIECE_CODES },
+  { key: 'isTreasureMover', aliases: TREASURE_PIECE_CODES },
+  { key: 'isIronMover', aliases: IRON_PIECE_CODES },
+  { key: 'isWaveMover', aliases: WAVE_PIECE_CODES },
+  { key: 'isTinMover', aliases: TIN_PIECE_CODES },
+  { key: 'isElectricMover', aliases: ELECTRIC_PIECE_CODES },
+  { key: 'isThunderMover', aliases: THUNDER_PIECE_CODES },
+  { key: 'isTimeMover', aliases: TIME_PIECE_CODES },
+  { key: 'isIceMover', aliases: ICE_PIECE_CODES },
+  { key: 'isSnowMover', aliases: SNOW_PIECE_CODES },
+  { key: 'isSandMover', aliases: SAND_PIECE_CODES },
+  { key: 'isWindMover', aliases: WIND_PIECE_CODES },
+  { key: 'isFishMover', aliases: FISH_PIECE_CODES },
+  { key: 'isMossMover', aliases: MOSS_PIECE_CODES },
+  { key: 'isRainbowMover', aliases: RAINBOW_PIECE_CODES },
+  { key: 'isSwampMover', aliases: SWAMP_PIECE_CODES },
+  { key: 'isPoisonMover', aliases: POISON_PIECE_CODES },
+  { key: 'isWaterfallMover', aliases: WATERFALL_PIECE_CODES },
+  { key: 'isWoodMover', aliases: WOOD_PIECE_CODES },
+  { key: 'isLeafMover', aliases: LEAF_PIECE_CODES },
+  { key: 'isBullMover', aliases: BULL_PIECE_CODES },
+  { key: 'isBignoiseMover', aliases: BIGNOISE_PIECE_CODES },
+  { key: 'isDemonMover', aliases: DEMON_PIECE_CODES },
+  { key: 'isDarkMover', aliases: DARK_PIECE_CODES },
+  { key: 'isRidgeMover', aliases: RIDGE_PIECE_CODES },
+  { key: 'isRockMover', aliases: ROCK_PIECE_CODES },
+  { key: 'isOreMover', aliases: ORE_PIECE_CODES },
+  { key: 'isGraveMover', aliases: GRAVE_PIECE_CODES },
+  { key: 'isDepressionMover', aliases: DEPRESSION_PIECE_CODES },
+  { key: 'isRoseMover', aliases: ROSE_PIECE_CODES },
+  { key: 'isChrysanthemumMover', aliases: CHRYSANTHEMUM_PIECE_CODES },
+  { key: 'isPrisonFenceMover', aliases: PRISON_FENCE_PIECE_CODES },
+  { key: 'isBlueOniMover', aliases: BLUE_ONI_PIECE_CODES },
+  { key: 'isBlackOniMover', aliases: BLACK_ONI_PIECE_CODES },
+  { key: 'isRedOniMover', aliases: RED_ONI_PIECE_CODES },
+];
+
+function pieceRawUpper(piece: PieceLike): string {
+  return (piece.pieceCode ?? '').toUpperCase();
+}
+
+export function normKanjiForEngineRules(ch: string): string {
+  try {
+    return ch.normalize('NFKC');
+  } catch {
+    return ch;
+  }
+}
+
+export function normalizeSkillPieceCode(raw: string | null | undefined): string {
+  if (!raw) return '';
+  const upper = raw.trim().toUpperCase();
+  if (!upper) return '';
+  if (upper.startsWith('PIECE_SHOGI_')) return upper.slice('PIECE_SHOGI_'.length);
+  if (upper.startsWith('PIECE_')) return upper.slice('PIECE_'.length);
+  return upper;
+}
+
+export function isOpaquePieceInstanceId(value: string | null | undefined): boolean {
+  if (!value) return false;
+  return /^piece_[a-z0-9]+$/i.test(value.trim());
+}
+
+export function normalizedPieceCodeUpper(piece: PieceLike): string {
+  return (toBasePieceCode(piece.pieceCode) ?? piece.pieceCode ?? '').toUpperCase();
+}
+
+function pieceMatchesAliases(piece: PieceLike, aliases: readonly string[]): boolean {
+  const base = normalizeSkillPieceCode(toBasePieceCode(piece.pieceCode) ?? '');
+  const raw = pieceRawUpper(piece);
+  const char = normKanjiForEngineRules(piece.char);
+  return aliases.some((alias) => {
+    const normalizedAlias = normalizeSkillPieceCode(alias);
+    return (
+      normalizedAlias === base ||
+      normalizedAlias === raw ||
+      alias === char ||
+      raw.includes(normalizedAlias)
+    );
+  });
+}
+
+function codeMatchesAliases(
+  rawCode: string | null | undefined,
+  aliases: readonly string[],
+): boolean {
+  const normalized = normalizeSkillPieceCode(rawCode);
+  if (!normalized) return false;
+  return aliases.some((alias) => {
+    const normalizedAlias = normalizeSkillPieceCode(alias);
+    return normalized === normalizedAlias || normalized.includes(normalizedAlias);
+  });
+}
+
+export function isSpiritPiece(piece: PieceLike): boolean {
+  return (
+    piece.char === '霊' ||
+    toBasePieceCode(piece.pieceCode) === 'SPIRIT' ||
+    pieceRawUpper(piece).includes('9D7397390E77')
+  );
+}
+
+export function isDeathPiece(piece: PieceLike): boolean {
+  return (
+    normKanjiForEngineRules(piece.char) === '死' || toBasePieceCode(piece.pieceCode) === 'DEATH'
+  );
+}
+
+export function isSoulPiece(piece: PieceLike): boolean {
+  return (
+    normKanjiForEngineRules(piece.char) === '魂' || toBasePieceCode(piece.pieceCode) === 'SOUL'
+  );
+}
+
+export function isKbossPiece(piece: PieceLike): boolean {
+  const base = toBasePieceCode(piece.pieceCode);
+  return base === 'KBOSS' || piece.char === 'K';
+}
+
+export function isVanishOnCapturePiece(piece: PieceLike): boolean {
+  const base = toBasePieceCode(piece.pieceCode);
+  return (
+    piece.char === 'K' ||
+    piece.char === '実' ||
+    piece.char === '異' ||
+    base === 'KBOSS' ||
+    base === 'EXPERIMENT' ||
+    base === 'MUTANT'
+  );
+}
+
+export function isHolePiece(piece: PieceLike): boolean {
+  return (
+    normKanjiForEngineRules(piece.char) === '穴' ||
+    toBasePieceCode(piece.pieceCode) === 'HOLE' ||
+    pieceRawUpper(piece).includes('E381DFA07A3D')
+  );
+}
+
+export function isOtsuPiece(piece: PieceLike): boolean {
+  return (
+    normKanjiForEngineRules(piece.char) === '乙' ||
+    toBasePieceCode(piece.pieceCode) === 'OTSU' ||
+    pieceRawUpper(piece).includes('5A07CA59B158')
+  );
+}
+
+export function isConvexPiece(piece: PieceLike): boolean {
+  const raw = pieceRawUpper(piece);
+  return (
+    normKanjiForEngineRules(piece.char) === '凸' ||
+    toBasePieceCode(piece.pieceCode) === 'CONVEX' ||
+    raw.includes('94B641477E72') ||
+    raw.includes('CONVEX')
+  );
+}
+
+export function isReflectivePiece(piece: PieceLike): boolean {
+  return toBasePieceCode(piece.pieceCode) === 'HIK' || piece.char === '光';
+}
+
+export function isCloudPiece(piece: PieceLike): boolean {
+  return toBasePieceCode(piece.pieceCode) === 'CLOUD' || piece.char === '雲';
+}
+
+export function isMirrorPiece(piece: PieceLike): boolean {
+  const code = toBasePieceCode(piece.pieceCode);
+  return (
+    piece.char === '映' ||
+    piece.char === '鏡' ||
+    code === 'EI' ||
+    code === 'KAGAMI' ||
+    code === 'MIRROR'
+  );
+}
+
+export function isMachinePiece(piece: PieceLike): boolean {
+  return toBasePieceCode(piece.pieceCode) === 'MACHINE' || piece.char === '機';
+}
+
+export function isGunPiece(piece: PieceLike): boolean {
+  return normKanjiForEngineRules(piece.char) === '銃' || toBasePieceCode(piece.pieceCode) === 'GUN';
+}
+
+export function isKatanaPiece(piece: PieceLike): boolean {
+  const char = normKanjiForEngineRules(piece.char);
+  if (char === '剣') return false;
+  if (char === '刀') return true;
+  const base = toBasePieceCode(piece.pieceCode);
+  return base === 'KATANA' || base === 'SWORD';
+}
+
+export function isKenSwordPiece(piece: PieceLike): boolean {
+  if (normKanjiForEngineRules(piece.char) === '剣') return true;
+  const base = toBasePieceCode(piece.pieceCode);
+  return base === 'HOLY_SWORD' || pieceRawUpper(piece).includes('0F14ABCC6E5E');
+}
+
+export function isShieldPiece(piece: PieceLike): boolean {
+  return (
+    normKanjiForEngineRules(piece.char) === '盾' || toBasePieceCode(piece.pieceCode) === 'SHIELD'
+  );
+}
+
+export function isOboroPiece(piece: PieceLike): boolean {
+  return (
+    normKanjiForEngineRules(piece.char) === '朧' || toBasePieceCode(piece.pieceCode) === 'OBORO'
+  );
+}
+
+export function isArmorPiece(piece: PieceLike): boolean {
+  return piece.char === '鎧' || toBasePieceCode(piece.pieceCode) === 'ARMOR';
+}
+
+export function isKingPiece(piece: PieceLike): boolean {
+  const base = toBasePieceCode(piece.pieceCode);
+  return base === 'OU' || piece.char === '王' || piece.char === '玉';
+}
+
+export function isReiRitualPiece(piece: PieceLike): boolean {
+  const char = normKanjiForEngineRules(piece.char);
+  const raw = pieceRawUpper(piece);
+  return (
+    char === '礼' || raw.includes('4FCDDF14D08D') || toBasePieceCode(piece.pieceCode) === 'RITUAL'
+  );
+}
+
+export function isCowPiece(piece: PieceLike): boolean {
+  return (
+    normKanjiForEngineRules(piece.char) === '牛' ||
+    toBasePieceCode(piece.pieceCode) === 'COW' ||
+    pieceRawUpper(piece).includes('F75D88C48D6D')
+  );
+}
+
+export function isPigPiece(piece: PieceLike): boolean {
+  return (
+    normKanjiForEngineRules(piece.char) === '豚' ||
+    toBasePieceCode(piece.pieceCode) === 'PIG' ||
+    pieceRawUpper(piece).includes('3EFA5702E75B')
+  );
+}
+
+export function isSenPiece(piece: PieceLike): boolean {
+  return (
+    normKanjiForEngineRules(piece.char) === '銭' ||
+    toBasePieceCode(piece.pieceCode) === 'SEN' ||
+    pieceRawUpper(piece).includes('EACC7F540399')
+  );
+}
+
+export function isZaiPiece(piece: PieceLike): boolean {
+  return (
+    normKanjiForEngineRules(piece.char) === '財' ||
+    toBasePieceCode(piece.pieceCode) === 'ZAI' ||
+    pieceRawUpper(piece).includes('7FC715661514')
+  );
+}
+
+export function isBeastPiece(piece: PieceLike): boolean {
+  const raw = pieceRawUpper(piece);
+  return (
+    normKanjiForEngineRules(piece.char) === '獣' ||
+    raw.includes('BEAST') ||
+    raw.includes('05E4EFB89DAE') ||
+    toBasePieceCode(piece.pieceCode) === 'BEAST'
+  );
+}
+
+export function isBirdPiece(piece: PieceLike): boolean {
+  const raw = pieceRawUpper(piece);
+  return (
+    normKanjiForEngineRules(piece.char) === '禽' ||
+    raw.includes('BIRD') ||
+    raw.includes('29ECAB1EF3C3') ||
+    toBasePieceCode(piece.pieceCode) === 'BIRD'
+  );
+}
+
+export function isConcavePiece(piece: PieceLike): boolean {
+  const raw = pieceRawUpper(piece);
+  return (
+    normKanjiForEngineRules(piece.char) === '凹' ||
+    raw.includes('CONCAVE') ||
+    raw.includes('48204DCCFA56') ||
+    toBasePieceCode(piece.pieceCode) === 'CONCAVE'
+  );
+}
+
+export function isRedOniPiece(piece: PieceLike): boolean {
+  return normalizedPieceCodeUpper(piece) === 'REDONI';
+}
+
+export function isBlueOniPiece(piece: PieceLike): boolean {
+  return normalizedPieceCodeUpper(piece) === 'BLUEONI';
+}
+
+export function isBlackOniPiece(piece: PieceLike): boolean {
+  return normalizedPieceCodeUpper(piece) === 'BLACKONI';
+}
+
+export function isAnyOniVariantPiece(piece: PieceLike): boolean {
+  return isRedOniPiece(piece) || isBlueOniPiece(piece) || isBlackOniPiece(piece);
+}
+
+export function isAPieceInstance(piece: PieceLike): boolean {
+  const normalizedCode = normalizeSkillPieceCode(piece.pieceCode);
+  const base = toBasePieceCode(piece.pieceCode);
+  return (
+    piece.char === 'あ' ||
+    base === 'A' ||
+    normalizedCode === 'A' ||
+    normalizedCode.includes('A9C2AD579732')
+  );
+}
+
+export function isSpecialTenPlusPiece(piece: PieceLike): boolean {
+  const base = toBasePieceCode(piece.pieceCode);
+  if (
+    base &&
+    STANDARD_CORE_PIECE_CODES.includes(base as (typeof STANDARD_CORE_PIECE_CODES)[number])
+  ) {
+    return false;
+  }
+  if (piece.char === '王' || piece.char === '玉') return false;
+  const strokes = (
+    {
+      忍: 7,
+      影: 15,
+      砲: 10,
+      竜: 10,
+      鳳: 14,
+      炎: 8,
+      火: 4,
+      水: 4,
+      波: 8,
+      木: 4,
+      葉: 12,
+      光: 6,
+      星: 9,
+      闇: 13,
+      魔: 21,
+      銅: 14,
+      鉄: 21,
+      錫: 16,
+      鉛: 13,
+      宝: 20,
+      電: 13,
+      雷: 13,
+      時: 10,
+      氷: 5,
+      雪: 11,
+      砂: 9,
+      風: 9,
+      苔: 8,
+      魚: 11,
+      雲: 12,
+      虹: 9,
+      毒: 8,
+      沼: 8,
+      あ: 3,
+      牢: 7,
+      柵: 9,
+      嶺: 17,
+      峰: 10,
+      山: 3,
+    } as Record<string, number>
+  )[piece.char];
+  return strokes != null && strokes >= 10;
+}
+
+export function buildSkillMoverFlags(input: {
+  movedCode: string;
+  movePieceCode: string | null | undefined;
+  movedPiece: PieceLike | null;
+}): SkillMoverFlags {
+  const moveCode = normalizeSkillPieceCode(input.movePieceCode);
+  const movedPieceCode = normalizeSkillPieceCode(input.movedPiece?.pieceCode);
+  const flags: SkillMoverFlags = {
+    isFlameMover: false,
+    isFireMover: false,
+    isWaterMover: false,
+    isTreasureMover: false,
+    isIronMover: false,
+    isWaveMover: false,
+    isTinMover: false,
+    isElectricMover: false,
+    isThunderMover: false,
+    isTimeMover: false,
+    isIceMover: false,
+    isSnowMover: false,
+    isSandMover: false,
+    isWindMover: false,
+    isFishMover: false,
+    isMossMover: false,
+    isRainbowMover: false,
+    isSwampMover: false,
+    isPoisonMover: false,
+    isWaterfallMover: false,
+    isAMover: false,
+    isWoodMover: false,
+    isLeafMover: false,
+    isBullMover: false,
+    isBignoiseMover: false,
+    isDemonMover: false,
+    isDarkMover: false,
+    isRidgeMover: false,
+    isRockMover: false,
+    isOreMover: false,
+    isGraveMover: false,
+    isDepressionMover: false,
+    isRoseMover: false,
+    isChrysanthemumMover: false,
+    isPrisonFenceMover: false,
+    isBlueOniMover: false,
+    isBlackOniMover: false,
+    isRedOniMover: false,
+    isTatsuGodMover: false,
+    isExperimentMover: false,
+    isKbossMover: false,
+    isBoatMover: false,
+    isBirdMover: false,
+  };
+
+  for (const spec of MOVER_SPECS) {
+    flags[spec.key] =
+      codeMatchesAliases(input.movedCode, spec.aliases) ||
+      codeMatchesAliases(moveCode, spec.aliases) ||
+      (input.movedPiece != null && pieceMatchesAliases(input.movedPiece, spec.aliases)) ||
+      (movedPieceCode.length > 0 && codeMatchesAliases(movedPieceCode, spec.aliases));
+  }
+
+  flags.isAMover =
+    codeMatchesAliases(input.movedCode, A_PIECE_CODES) ||
+    codeMatchesAliases(moveCode, A_PIECE_CODES) ||
+    (input.movedPiece != null && isAPieceInstance(input.movedPiece));
+  flags.isBoatMover =
+    input.movedCode === 'BOAT' || moveCode === 'BOAT' || input.movedPiece?.char === '舟';
+  flags.isBirdMover =
+    input.movedCode === 'BIRD' ||
+    moveCode === 'BIRD' ||
+    input.movedPiece?.char === '禽' ||
+    (input.movePieceCode ?? '').toUpperCase().includes('29ECAB1EF3C3') ||
+    (input.movedPiece != null && pieceRawUpper(input.movedPiece).includes('29ECAB1EF3C3'));
+  flags.isTatsuGodMover =
+    input.movedCode === 'TATSU' ||
+    moveCode === 'TATSU' ||
+    input.movedPiece?.char === '辰' ||
+    moveCode.includes('707ED609');
+  flags.isExperimentMover =
+    input.movedCode === 'EXPERIMENT' ||
+    moveCode === 'EXPERIMENT' ||
+    input.movedPiece?.char === '実';
+  flags.isKbossMover =
+    input.movedCode === 'KBOSS' || moveCode === 'KBOSS' || input.movedPiece?.char === 'K';
+
+  return flags;
+}

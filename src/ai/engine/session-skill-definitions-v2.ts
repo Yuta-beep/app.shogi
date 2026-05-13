@@ -6,7 +6,7 @@ import type { PieceCatalogItem } from '@/domain/models/piece';
  * 刀(52)・銃(54) は BFF の古い定義より常にここで上書きし、実処理は将棋エンジン（apply-move / legal-moves）
  * と skill-runtime の二重実行ガードに合わせる。
  */
-const CANONICAL_FALLBACK_DEFINITIONS: ReadonlyArray<Record<string, unknown>> = [
+const CANONICAL_FALLBACK_DEFINITIONS: readonly Record<string, unknown>[] = [
   {
     skillId: 38,
     pieceChars: ['幻'],

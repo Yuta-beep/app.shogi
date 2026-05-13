@@ -66,7 +66,7 @@ const YangSkillSparkleRing = memo(function YangSkillSparkleRing() {
     return () => {
       cancelAnimation(pulse);
     };
-  }, []);
+  }, [pulse]);
   const animatedStyle = useAnimatedStyle(() => ({ opacity: pulse.value }));
   return (
     <Animated.View
@@ -108,7 +108,7 @@ const YinSkillSparkleRing = memo(function YinSkillSparkleRing() {
     return () => {
       cancelAnimation(pulse);
     };
-  }, []);
+  }, [pulse]);
   const animatedStyle = useAnimatedStyle(() => ({ opacity: pulse.value }));
   return (
     <Animated.View
