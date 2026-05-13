@@ -6,8 +6,6 @@ import { homeAssets } from '@/constants/home-assets';
 
 type HomeHeaderSectionProps = {
   onPressBackToTitle: () => void;
-  onPressOnlineMatchSetup: () => void;
-  onPressOnlineBattle: () => void;
   onPressMatching: () => void;
   onPressGachaBallIcon: () => void;
   playerName: string;
@@ -22,8 +20,6 @@ type HomeHeaderSectionProps = {
 
 export function HomeHeaderSection({
   onPressBackToTitle,
-  onPressOnlineMatchSetup,
-  onPressOnlineBattle,
   onPressMatching,
   onPressGachaBallIcon,
   playerName,
@@ -36,7 +32,7 @@ export function HomeHeaderSection({
   nextRecoveryAt,
 }: HomeHeaderSectionProps) {
   return (
-    <View>
+    <View pointerEvents="box-none">
       <HomeCommonHeader
         userName={playerName}
         rank={playerRank}
@@ -59,32 +55,10 @@ export function HomeHeaderSection({
 
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="オンライン対戦の準備へ"
-        onPress={onPressOnlineMatchSetup}
-        className="absolute right-4 top-[194px] z-10 w-[118px] rounded-xl border border-[#0f4c3a] bg-[#f6f1df] px-3 py-2.5 active:opacity-85"
-      >
-        <Text className="text-center text-[10px] font-black tracking-[0.5px] text-[#166534]">
-          ONLINE SETUP
-        </Text>
-        <Text className="mt-0.5 text-center text-sm font-black text-[#2f1b14]">対戦準備</Text>
-      </Pressable>
-
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="オンライン対戦へ"
-        onPress={onPressOnlineBattle}
-        className="absolute right-[-20px] top-[262px] z-10 h-24 w-48 active:scale-95"
-      >
-        <Image
-          source={homeAssets.onlineBattleButton}
-          contentFit="contain"
-          style={{ width: '100%', height: '100%' }}
-        />
-      </Pressable>
-
-      <Pressable
+        accessibilityLabel="PVP対戦へ"
         onPress={onPressMatching}
-        className="absolute right-[-20px] top-[398px] h-14 w-24 active:scale-95"
+        pointerEvents="auto"
+        className="absolute right-[-20px] top-[262px] z-10 h-24 w-48 active:scale-95"
       >
         <Image
           source={homeAssets.pvpBadge}

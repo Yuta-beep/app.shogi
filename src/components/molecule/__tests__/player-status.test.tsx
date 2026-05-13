@@ -8,8 +8,8 @@ jest.mock('@/components/atom/exp-progress-bar', () => ({
 
 jest.mock('@/components/atom/header-label', () => ({
   HeaderLabel: ({ text }: { text: string }) => {
-    const { Text } = require('react-native');
-    return <Text testID="header-label">{text}</Text>;
+    const MockText = jest.requireActual('react-native').Text;
+    return <MockText testID="header-label">{text}</MockText>;
   },
 }));
 

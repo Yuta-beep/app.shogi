@@ -3,11 +3,11 @@ import { render, screen } from '@testing-library/react-native';
 import { CurrencyChip } from '../currency-chip';
 
 jest.mock('expo-image', () => ({
-  Image: require('react-native').Image,
+  Image: jest.requireActual('react-native').Image,
 }));
 
 describe('CurrencyChip', () => {
-  const mockIconSource = require('react-native/jest/assetFileTransformer').default;
+  const mockIconSource = jest.requireActual('react-native/jest/assetFileTransformer').default;
 
   it('renders with correct value', () => {
     render(<CurrencyChip iconSource={mockIconSource} value={1000} />);

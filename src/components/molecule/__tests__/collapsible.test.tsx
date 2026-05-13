@@ -1,5 +1,4 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
-import { Text } from 'react-native';
 
 import { Collapsible } from '../collapsible';
 
@@ -9,7 +8,7 @@ jest.mock('@/components/atom/icon-symbol', () => ({
 
 jest.mock('@/components/atom/themed-text', () => ({
   ThemedText: jest.fn(({ children, ...props }: any) => {
-    const MockText = require('react-native').Text;
+    const MockText = jest.requireActual('react-native').Text;
     return (
       <MockText {...props} testID="themed-text">
         {children}
@@ -20,7 +19,7 @@ jest.mock('@/components/atom/themed-text', () => ({
 
 jest.mock('@/components/atom/themed-view', () => ({
   ThemedView: jest.fn(({ children, ...props }: any) => {
-    const MockText = require('react-native').Text;
+    const MockText = jest.requireActual('react-native').Text;
     return (
       <MockText {...props} testID="themed-view">
         {children}

@@ -6,6 +6,7 @@ pre-commit:
       stage_fixed: true
     lint:
       run: bun run lint
+      fail: exit_code
 
 pre-push:
   parallel: false
@@ -20,3 +21,4 @@ pre-push:
       run: bun run typecheck
     lint:
       run: bun run lint
+      fail: exit_code

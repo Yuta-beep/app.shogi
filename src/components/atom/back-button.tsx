@@ -11,6 +11,7 @@ export function BackButton({ onPress, label = '戻る', disabled = false }: Back
     <Pressable
       onPress={onPress}
       disabled={disabled}
+      testID="back-button"
       className={`rounded-md border border-accent bg-[#fff8e1] px-3 py-1 active:scale-95 ${
         disabled ? 'opacity-50' : ''
       }`}

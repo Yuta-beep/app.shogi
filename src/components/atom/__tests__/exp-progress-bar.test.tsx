@@ -4,7 +4,6 @@ import { ExpProgressBar } from '../exp-progress-bar';
 
 describe('ExpProgressBar', () => {
   it('renders with progress 0', () => {
-    const { getByTestId } = render(<ExpProgressBar progress={0} />);
     expect(() => {
       render(<ExpProgressBar progress={0} />);
     }).not.toThrow();

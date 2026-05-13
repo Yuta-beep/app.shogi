@@ -221,17 +221,9 @@ export function HomeScreen() {
           void playSe('tap');
           router.replace('/');
         }}
-        onPressOnlineMatchSetup={() => {
-          void playSe('tap');
-          router.push('/online-match-setup' as never);
-        }}
-        onPressOnlineBattle={() => {
-          void playSe('tap');
-          router.push('/online-battle');
-        }}
         onPressMatching={() => {
           void playSe('tap');
-          router.push('/matching');
+          router.push('/online-match-setup' as never);
         }}
         onPressGachaBallIcon={openGachaBallViewer}
         playerName={snapshot.playerName}

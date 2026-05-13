@@ -372,7 +372,14 @@ export function DeckBuilderScreen({ mode = 'default' }: DeckBuilderScreenProps) 
           })()
             .then((ok) => {
               if (ok) {
-                Alert.alert(appliedSuccessMessage);
+                Alert.alert(appliedSuccessMessage, undefined, [
+                  {
+                    text: 'OK',
+                    onPress: () => {
+                      router.replace('/matching');
+                    },
+                  },
+                ]);
               } else {
                 Alert.alert('反映に失敗しました', '通信または保存処理を確認してください。');
               }
