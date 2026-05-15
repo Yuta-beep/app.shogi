@@ -13,6 +13,7 @@ export class MockLoadOnlineBattleSessionUseCase implements LoadOnlineBattleSessi
       connectionStatus: '接続状態: マッチング完了（UIモック）',
       playerLabel: 'あなた: プレイヤー名 (R1200)',
       opponentLabel: `相手: ${opponent} (R${rating})`,
+      winnerSide: null,
     };
   }
 }

@@ -4,17 +4,12 @@ import {
   hasKing,
   normalizeHandsStateKeys,
 } from '@/features/stage-shogi/domain/game-rules';
+import type { AiBattleMove, AiBattlePosition, AiBoardPiece, AiPieceDefinition, Side } from '@/ai/model';
 import type {
-  AiBattleMove,
-  AiBattlePosition,
-  AiBoardPiece,
-  AiPieceDefinition,
-  Side,
-} from '@/ai/model';
-import type {
-  BattleMove,
+  BattleCanonicalPosition,
   BattleCommittedMove,
   BattleGameStatus,
+  BattleMove,
 } from '@/usecases/stage-battle/game-move-contract';
 import {
   normalizeBattleMove,
@@ -24,6 +19,11 @@ import {
   toBasePieceCode,
 } from '@/ai/model';
 import { assertMoveAllowedBySessionCatalog } from '@/ai/engine/guardrails';
+import {
+  giantAnchorFootprint,
+  isGiantPieceForEngine,
+  isValidGiantAnchor,
+} from '@/ai/engine/giant-piece';
 import { createPosition, findPieceAt, notationForMove, pieceChar } from '@/ai/engine/shared';
 import { generateLegalMoves } from '@/ai/engine/legal-moves';
 import {
@@ -34,6 +34,7 @@ import {
   tickSkillStateDurations,
   resolveEvadeCaptureProcChanceForPiece,
   pieceHasActiveCaptureImmunityFromBoardState,
+  type SkillRuntimeView,
 } from '@/ai/engine/skill-runtime';
 import {
   isArmorPiece as isArmorPieceForApply,
@@ -284,6 +285,13 @@ function resolveCapturedHandCode(
   if (rawCapturedCode.includes('ZAI')) {
     return 'ZAI';
   }
+  if (
+    capturedChar === '巨' ||
+    rawCapturedCode.includes('C4AEB81F3634') ||
+    rawCapturedCode.includes('GIANT')
+  ) {
+    return 'GIANT';
+  }
   const fromCaptured = toBasePieceCode(capturedToHandPieceCode(captured));
   if (fromCaptured) return fromCaptured;
   const fb = toBasePieceCode(fallbackCapturedCode);
@@ -315,6 +323,7 @@ function resolveCapturedHandCode(
   if (fb.includes('CHICKEN') || fb.includes('F1A6EF3B99DF')) return 'CHICKEN';
   if (fb.includes('SEN') || fb.includes('EACC7F540399')) return 'SEN';
   if (fb.includes('ZAI') || fb.includes('7FC715661514')) return 'ZAI';
+  if (fb.includes('GIANT') || fb.includes('C4AEB81F3634')) return 'GIANT';
   // opaque id をそのまま手駒キーにしない（手駒表示不能の原因）。
   if (/^PIECE_[A-Z0-9_]+$/i.test(fb)) return null;
   return fb;
@@ -676,6 +685,27 @@ function cloneCombatBoardSnapshot(input: { pieces: AiBoardPiece[]; hands: HandsB
   };
 }
 
+/** 取ったマスが巨の占有マスでも、盤上配列では錨にのみ実体があるため錨基準で除去する。 */
+function removeCapturedPieceFromBoard(
+  pieces: AiBoardPiece[],
+  captureRow: number,
+  captureCol: number,
+  captured: AiBoardPiece,
+): AiBoardPiece[] {
+  if (isGiantPieceForEngine(captured)) {
+    return pieces.filter(
+      (p) =>
+        !(
+          p.side === captured.side &&
+          p.row === captured.row &&
+          p.col === captured.col &&
+          isGiantPieceForEngine(p)
+        ),
+    );
+  }
+  return pieces.filter((p) => !(p.row === captureRow && p.col === captureCol));
+}
+
 function applyHostileCaptureAtCell(input: {
   boardState: Record<string, unknown> | undefined;
   nextPieces: AiBoardPiece[];
@@ -684,6 +714,8 @@ function applyHostileCaptureAtCell(input: {
   row: number;
   col: number;
   fallbackCapturedCode: string | null;
+  /** 巨の 2×2 同時取りなど: 剣回避・朧・幻影の取り逃がしを無効化する。 */
+  skipProcCaptureEvasions?: boolean;
 }): {
   nextPieces: AiBoardPiece[];
   hands: HandsBag;
@@ -707,6 +739,9 @@ function applyHostileCaptureAtCell(input: {
       deathCapturedByActor,
     };
   }
+  if (isGiantPieceForEngine(captured)) {
+    throw new Error('cannot capture giant');
+  }
   if (isArmorPieceForApply(captured)) {
     throw new Error('cannot capture armor');
   }
@@ -725,7 +760,7 @@ function applyHostileCaptureAtCell(input: {
     throw new Error('cannot capture king while soul remains');
   }
 
-  if (isKenSwordPieceForApply(captured)) {
+  if (!input.skipProcCaptureEvasions && isKenSwordPieceForApply(captured)) {
     const horiz = collectHorizontalAdjacentEmptyCells(nextPieces, input.row, input.col);
     if (horiz.length > 0) {
       const pick = horiz[Math.floor(Math.random() * horiz.length)]!;
@@ -748,12 +783,14 @@ function applyHostileCaptureAtCell(input: {
     }
   }
 
-  const oboroEvadeTo = resolveOboroEvadeWarpCell({
-    captured,
-    pieces: nextPieces,
-    captureRow: input.row,
-    captureCol: input.col,
-  });
+  const oboroEvadeTo = input.skipProcCaptureEvasions
+    ? null
+    : resolveOboroEvadeWarpCell({
+        captured,
+        pieces: nextPieces,
+        captureRow: input.row,
+        captureCol: input.col,
+      });
   if (oboroEvadeTo) {
     const obIdx = nextPieces.findIndex(
       (p) => p.row === input.row && p.col === input.col && p.side === captured.side,
@@ -774,10 +811,12 @@ function applyHostileCaptureAtCell(input: {
   }
 
   let phantomEvaded = false;
-  let adjacentEmpty: { row: number; col: number }[] = [];
-  const evadeChance = resolveEvadeCaptureProcChanceForPiece(input.boardState, captured);
+  let adjacentEmpty: Array<{ row: number; col: number }> = [];
+  const evadeChance = input.skipProcCaptureEvasions
+    ? null
+    : resolveEvadeCaptureProcChanceForPiece(input.boardState, captured);
   adjacentEmpty = collectAdjacentEmptyCells(nextPieces, input.row, input.col);
-  if (evadeChance != null && adjacentEmpty.length > 0) {
+  if (!input.skipProcCaptureEvasions && evadeChance != null && adjacentEmpty.length > 0) {
     const roll = Math.random();
     phantomEvaded = roll <= evadeChance;
   }
@@ -830,9 +869,7 @@ function applyHostileCaptureAtCell(input: {
   }
   const consumeReiSubstitute = shouldConsumeReiSubstituteAfterAllyCapture(nextPieces, captured);
   if (hasActiveChrysanthemumRevival(input.boardState, captured.side, input.row, input.col)) {
-    nextPieces = nextPieces.filter(
-      (piece) => !(piece.row === input.row && piece.col === input.col),
-    );
+    nextPieces = removeCapturedPieceFromBoard(nextPieces, input.row, input.col, captured);
     removeChrysanthemumRevivalAtCell(input.boardState, captured.side, input.row, input.col);
     if (!isSpiritPiece(captured)) {
       const capturedCode = resolveCapturedHandCode(captured, input.fallbackCapturedCode);
@@ -856,7 +893,7 @@ function applyHostileCaptureAtCell(input: {
       deathCapturedByActor,
     };
   }
-  nextPieces = nextPieces.filter((piece) => !(piece.row === input.row && piece.col === input.col));
+  nextPieces = removeCapturedPieceFromBoard(nextPieces, input.row, input.col, captured);
   const isSpiritCaptured = isSpiritPiece(captured);
   const capturedBaseCode = toBasePieceCode(captured.pieceCode);
   const isStarCaptured = capturedBaseCode === 'HOS' || captured.char === '星';
@@ -921,6 +958,112 @@ function applyHostileCaptureAtCell(input: {
   };
 }
 
+const GIANT_BOARD_MOVE_NOTATION = 'giant_2x2_ortho';
+
+function applyGiantOrthogonalBoardMove(input: {
+  boardState: Record<string, unknown> | undefined;
+  skillView: SkillRuntimeView;
+  nextPieces: AiBoardPiece[];
+  hands: HandsBag;
+  actorSide: Side;
+  move: Pick<BattleMove, 'fromRow' | 'fromCol' | 'toRow' | 'toCol' | 'notation' | 'promote'>;
+  movingIndex: number;
+  movingPiece: AiBoardPiece;
+}): {
+  nextPieces: AiBoardPiece[];
+  hands: HandsBag;
+  didCapture: boolean;
+  movedPiece: AiBoardPiece;
+  starReturnProcTriggered: boolean;
+  deathCapturedByActor: boolean;
+} {
+  const { boardState, skillView, actorSide, move, movingIndex, movingPiece } = input;
+  let { nextPieces, hands } = input;
+  if (move.fromRow == null || move.fromCol == null) {
+    throw new Error('giant move requires from');
+  }
+  if (move.notation !== GIANT_BOARD_MOVE_NOTATION) {
+    throw new Error('invalid giant move notation');
+  }
+  const fr = move.fromRow;
+  const fc = move.fromCol;
+  const tr = move.toRow;
+  const tc = move.toCol;
+  if (!isValidGiantAnchor(fr, fc) || !isValidGiantAnchor(tr, tc)) {
+    throw new Error('giant anchor out of bounds');
+  }
+  const step = Math.abs(tr - fr) + Math.abs(tc - fc);
+  if (step === 0 || step > 2 || (tr !== fr && tc !== fc)) {
+    throw new Error('giant must move orthogonally 1 or 2 steps');
+  }
+  const destCells = giantAnchorFootprint(tr, tc);
+  for (const c of destCells) {
+    if (skillView.rockObstacleCells.has(`${c.row}:${c.col}`)) {
+      throw new Error('cannot move giant onto rock');
+    }
+  }
+  for (const c of destCells) {
+    const occ = findPieceAt(nextPieces, c.row, c.col);
+    if (!occ) continue;
+    if (occ.side === actorSide) {
+      const isSelf = occ.row === movingPiece.row && occ.col === movingPiece.col;
+      if (!isSelf) {
+        throw new Error('giant destination blocked by ally');
+      }
+    }
+  }
+  const victims: AiBoardPiece[] = [];
+  for (const c of destCells) {
+    const occ = findPieceAt(nextPieces, c.row, c.col);
+    if (!occ || occ.side === actorSide) continue;
+    victims.push(occ);
+  }
+  for (const v of victims) {
+    if (tryShieldIntrinsicAbortHostileCapture(actorSide, v, nextPieces)) {
+      throw new Error('shield aborted giant capture');
+    }
+  }
+  let didCapture = false;
+  let starReturnProcTriggered = false;
+  let deathCapturedByActor = false;
+  let work = nextPieces.filter((_, i) => i !== movingIndex);
+  const sortedCells = [...destCells].sort((a, b) => a.row - b.row || a.col - b.col);
+  for (const c of sortedCells) {
+    const occ = findPieceAt(work, c.row, c.col);
+    if (!occ || occ.side === actorSide) continue;
+    const res = applyHostileCaptureAtCell({
+      boardState,
+      nextPieces: work,
+      hands,
+      actorSide,
+      row: c.row,
+      col: c.col,
+      fallbackCapturedCode: null,
+      skipProcCaptureEvasions: true,
+    });
+    work = res.nextPieces;
+    hands = res.hands;
+    if (res.didCapture) didCapture = true;
+    if (res.starReturnProcTriggered) starReturnProcTriggered = true;
+    if (res.deathCapturedByActor) deathCapturedByActor = true;
+  }
+  const moved: AiBoardPiece = {
+    ...movingPiece,
+    row: tr,
+    col: tc,
+    promoted: move.promote ? true : (movingPiece.promoted ?? false),
+  };
+  work = [...work, moved];
+  return {
+    nextPieces: work,
+    hands,
+    didCapture,
+    movedPiece: moved,
+    starReturnProcTriggered,
+    deathCapturedByActor,
+  };
+}
+
 function collectAdjacentEmptyCells(
   pieces: { row: number; col: number }[],
   row: number,
@@ -941,7 +1084,7 @@ function collectAdjacentEmptyCells(
 }
 
 export function applyMove(input: {
-  position: AiBattlePosition;
+  position: BattleCanonicalPosition;
   pieceCatalog: AiPieceDefinition[];
   move: AiBattleMove;
 }): BattleCommittedMove {
@@ -1005,9 +1148,6 @@ export function applyMove(input: {
     });
     movedPieceAfterApply = nextPieces[nextPieces.length - 1] ?? null;
   } else {
-    if (preMoveSkillView.rockObstacleCells.has(`${move.toRow}:${move.toCol}`)) {
-      throw new Error('cannot move onto rock obstacle');
-    }
     const movingIndex = nextPieces.findIndex(
       (piece) =>
         piece.side === actorSide && piece.row === move.fromRow && piece.col === move.fromCol,
@@ -1015,335 +1155,376 @@ export function applyMove(input: {
     if (movingIndex < 0) {
       throw new Error('moving piece not found');
     }
-    const movingPiece = nextPieces[movingIndex];
-    movedByOtsu = isOtsuPieceForApply(movingPiece);
-    movedByConvex = isConvexPieceForApply(movingPiece);
+    const movingPiece = nextPieces[movingIndex]!;
+    let giantHandled = false;
+    if (isGiantPieceForEngine(movingPiece)) {
+      const gr = applyGiantOrthogonalBoardMove({
+        boardState: current.boardState as Record<string, unknown> | undefined,
+        skillView: preMoveSkillView,
+        nextPieces,
+        hands,
+        actorSide,
+        move,
+        movingIndex,
+        movingPiece,
+      });
+      nextPieces = gr.nextPieces;
+      hands = gr.hands;
+      didCapture = gr.didCapture;
+      starReturnProcTriggered = starReturnProcTriggered || gr.starReturnProcTriggered;
+      deathCapturedByActor = deathCapturedByActor || gr.deathCapturedByActor;
+      movedPieceAfterApply = gr.movedPiece;
+      intrinsicCombatSkillTriggered = intrinsicCombatSkillTriggered || gr.didCapture;
+      giantHandled = true;
+    } else if (preMoveSkillView.rockObstacleCells.has(`${move.toRow}:${move.toCol}`)) {
+      throw new Error('cannot move onto rock obstacle');
+    }
+    movedByOtsu = giantHandled ? false : isOtsuPieceForApply(movingPiece);
+    movedByConvex = giantHandled ? false : isConvexPieceForApply(movingPiece);
     const movingCode = toBasePieceCode(movingPiece?.pieceCode);
     const isCloudMover = movingCode === 'CLOUD' || movingPiece?.char === '雲';
     const combatBoardSnapshot = cloneCombatBoardSnapshot({ pieces: nextPieces, hands });
 
-    // 銃: 前方ちょうど2マスへ進む手では、まず1マス目の敵を取ってから2マス目へ入る（両方敵なら同一手で連続取り）。斜め後ろ2マス貫通も同様。
-    const gunPen =
-      isGunPieceForApply(movingPiece) && move.fromRow != null && move.fromCol != null
-        ? computeGunPenetrationMidpoint(
-            actorSide,
-            move.fromRow,
-            move.fromCol,
-            move.toRow,
-            move.toCol,
-          )
-        : null;
-    const midForGun = gunPen != null ? findPieceAt(nextPieces, gunPen.midRow, gunPen.midCol) : null;
+    if (!giantHandled) {
+      // 銃: 前方ちょうど2マスへ進む手では、まず1マス目の敵を取ってから2マス目へ入る（両方敵なら同一手で連続取り）。斜め後ろ2マス貫通も同様。
+      const gunPen =
+        isGunPieceForApply(movingPiece) && move.fromRow != null && move.fromCol != null
+          ? computeGunPenetrationMidpoint(
+              actorSide,
+              move.fromRow,
+              move.fromCol,
+              move.toRow,
+              move.toCol,
+            )
+          : null;
+      const midForGun =
+        gunPen != null ? findPieceAt(nextPieces, gunPen.midRow, gunPen.midCol) : null;
 
-    if (isGunPieceForApply(movingPiece)) {
-      gunApplyDebugLog({
-        phase: 'pre-capture',
-        from: [move.fromRow, move.fromCol],
-        to: [move.toRow, move.toCol],
-        actorSide,
-        gunPen,
-        mid: midForGun
-          ? {
-              row: midForGun.row,
-              col: midForGun.col,
-              side: midForGun.side,
-              char: midForGun.char,
-            }
-          : null,
-      });
-    }
-
-    if (gunPen && midForGun) {
-      if (midForGun.side === actorSide) {
-        if (isGunFullyBlockingAllyOnMidForApply(midForGun, actorSide)) {
-          throw new Error('gun path blocked by ally');
-        }
-        nextPieces = nextPieces.filter(
-          (p) => !(p.row === gunPen.midRow && p.col === gunPen.midCol),
-        );
-        didCapture = true;
-      } else {
-        if (isArmorPieceForApply(movingPiece)) {
-          throw new Error('armor cannot capture');
-        }
-        if (isArmorPieceForApply(midForGun)) {
-          throw new Error('cannot capture armor piece');
-        }
-        const midRes = applyHostileCaptureAtCell({
-          boardState: current.boardState as Record<string, unknown> | undefined,
-          nextPieces,
-          hands,
+      if (isGunPieceForApply(movingPiece)) {
+        gunApplyDebugLog({
+          phase: 'pre-capture',
+          from: [move.fromRow, move.fromCol],
+          to: [move.toRow, move.toCol],
           actorSide,
-          row: gunPen.midRow,
-          col: gunPen.midCol,
-          fallbackCapturedCode: null,
+          gunPen,
+          mid: midForGun
+            ? {
+                row: midForGun.row,
+                col: midForGun.col,
+                side: midForGun.side,
+                char: midForGun.char,
+              }
+            : null,
         });
-        if (midRes.rebuffKboss) {
-          throw new Error('invalid gun move: kboss midpoint');
-        }
-        nextPieces = midRes.nextPieces;
-        hands = midRes.hands;
-        if (midRes.didCapture) {
-          didCapture = true;
-          intrinsicCombatSkillTriggered = true;
-          if (isHolePieceForApply(midForGun)) {
-            capturedHoleCellsByActor.push({ row: gunPen.midRow, col: gunPen.midCol });
-          }
-        }
-        if (midRes.starReturnProcTriggered) starReturnProcTriggered = true;
-        if (midRes.deathCapturedByActor) deathCapturedByActor = true;
       }
-    }
 
-    let cowChargedPathDist: number | null = null;
-    if (isCowPieceForApply(movingPiece) && move.fromRow != null && move.fromCol != null) {
-      cowChargedPathDist = computeCowForwardPathDistanceForApply(
-        actorSide,
-        move.fromRow,
-        move.fromCol,
-        move.toRow,
-        move.toCol,
-      );
-      if (cowChargedPathDist != null && cowChargedPathDist > 1) {
-        const d = gunForwardRowDeltaForApply(actorSide);
-        for (let s = 1; s < cowChargedPathDist; s += 1) {
-          const r = move.fromRow + d * s;
-          const c = move.fromCol;
-          const mid = findPieceAt(nextPieces, r, c);
-          if (!mid) continue;
-          if (mid.side === actorSide) {
-            throw new Error('cow path blocked by ally');
+      if (gunPen && midForGun) {
+        if (midForGun.side === actorSide) {
+          if (isGunFullyBlockingAllyOnMidForApply(midForGun, actorSide)) {
+            throw new Error('gun path blocked by ally');
           }
-          const midHole = isHolePieceForApply(mid);
+          nextPieces = nextPieces.filter(
+            (p) => !(p.row === gunPen.midRow && p.col === gunPen.midCol),
+          );
+          didCapture = true;
+        } else {
+          if (isArmorPieceForApply(movingPiece)) {
+            throw new Error('armor cannot capture');
+          }
+          if (isArmorPieceForApply(midForGun)) {
+            throw new Error('cannot capture armor piece');
+          }
           const midRes = applyHostileCaptureAtCell({
             boardState: current.boardState as Record<string, unknown> | undefined,
             nextPieces,
             hands,
             actorSide,
-            row: r,
-            col: c,
+            row: gunPen.midRow,
+            col: gunPen.midCol,
             fallbackCapturedCode: null,
           });
           if (midRes.rebuffKboss) {
-            throw new Error('invalid cow move: kboss path');
+            throw new Error('invalid gun move: kboss midpoint');
           }
           nextPieces = midRes.nextPieces;
           hands = midRes.hands;
           if (midRes.didCapture) {
             didCapture = true;
             intrinsicCombatSkillTriggered = true;
-            if (midHole) {
-              capturedHoleCellsByActor.push({ row: r, col: c });
+            if (isHolePieceForApply(midForGun)) {
+              capturedHoleCellsByActor.push({ row: gunPen.midRow, col: gunPen.midCol });
             }
           }
           if (midRes.starReturnProcTriggered) starReturnProcTriggered = true;
           if (midRes.deathCapturedByActor) deathCapturedByActor = true;
         }
       }
-    }
 
-    const captured = findPieceAt(nextPieces, move.toRow, move.toCol);
-    let pigInheritVictim: AiBoardPiece | null = null;
-    /** 財スキル用: 盤上から消す直前の敵駒スナップショット */
-    let zaiCapturedEnemySnapshot: AiBoardPiece | null = null;
-    let rebuffKboss = false;
-    if (captured) {
-      const captureOwnPiece = captured.side === actorSide;
-      if (!captureOwnPiece && !isCloudMover && isArmorPieceForApply(captured)) {
-        throw new Error('cannot capture armor');
-      }
-      if (
-        !captureOwnPiece &&
-        isKingPieceForApply(captured) &&
-        hasSoulOnBoardForSide(nextPieces, captured.side)
-      ) {
-        throw new Error('cannot capture king while soul remains');
-      }
-      if (!captureOwnPiece && isArmorPieceForApply(movingPiece)) {
-        throw new Error('armor cannot capture enemy');
-      }
-      if (captureOwnPiece && !isCloudMover) {
-        throw new Error('friendly capture is only allowed for CLOUD');
-      }
-      if (isCloudMover && !captureOwnPiece) {
-        throw new Error('CLOUD cannot capture enemy pieces');
-      }
-      if (isCloudMover && captureOwnPiece) {
-        const capturedBase = toBasePieceCode(captured.pieceCode);
-        if (capturedBase === 'OU' || captured.char === '王' || captured.char === '玉') {
-          throw new Error('CLOUD cannot capture allied king');
-        }
-      }
-
-      if (
-        !captureOwnPiece &&
-        tryShieldIntrinsicAbortHostileCapture(actorSide, captured, nextPieces)
-      ) {
-        shieldAbortedMove = true;
-        intrinsicCombatSkillTriggered = true;
-        const snap = cloneCombatBoardSnapshot(combatBoardSnapshot);
-        nextPieces = snap.pieces;
-        hands = snap.hands;
-        didCapture = false;
-      }
-
-      let phantomEvaded = false;
-      let adjacentEmpty: { row: number; col: number }[] = [];
-      let kenSwordEvadeTo: { row: number; col: number } | null = null;
-      if (!shieldAbortedMove && !captureOwnPiece && isKenSwordPieceForApply(captured)) {
-        const horizKen = collectHorizontalAdjacentEmptyCells(nextPieces, move.toRow, move.toCol);
-        if (horizKen.length > 0) {
-          kenSwordEvadeTo = horizKen[Math.floor(Math.random() * horizKen.length)]!;
-          intrinsicCombatSkillTriggered = true;
-        }
-      }
-      let oboroEvadeTo: { row: number; col: number } | null = null;
-      if (!shieldAbortedMove && !captureOwnPiece && !kenSwordEvadeTo) {
-        oboroEvadeTo = resolveOboroEvadeWarpCell({
-          captured,
-          pieces: nextPieces,
-          captureRow: move.toRow,
-          captureCol: move.toCol,
-        });
-      }
-      if (!shieldAbortedMove && !captureOwnPiece && !kenSwordEvadeTo) {
-        const evadeChance = resolveEvadeCaptureProcChanceForPiece(
-          current.boardState as Record<string, unknown> | undefined,
-          captured,
+      let cowChargedPathDist: number | null = null;
+      if (isCowPieceForApply(movingPiece) && move.fromRow != null && move.fromCol != null) {
+        cowChargedPathDist = computeCowForwardPathDistanceForApply(
+          actorSide,
+          move.fromRow,
+          move.fromCol,
+          move.toRow,
+          move.toCol,
         );
-        adjacentEmpty = collectAdjacentEmptyCells(nextPieces, move.toRow, move.toCol);
-        if (evadeChance != null) {
-          if (adjacentEmpty.length > 0) {
-            const roll = Math.random();
-            phantomEvaded = roll <= evadeChance;
-          }
-        }
-      }
-
-      if (shieldAbortedMove) {
-        // 盤・手駒は上で復元済み。着手駒は from のまま。
-      } else if (kenSwordEvadeTo) {
-        didCapture = false;
-        const ksIdx = nextPieces.findIndex(
-          (p) => p.row === move.toRow && p.col === move.toCol && p.side === captured.side,
-        );
-        if (ksIdx >= 0) {
-          const ks = nextPieces[ksIdx]!;
-          nextPieces[ksIdx] = { ...ks, row: kenSwordEvadeTo.row, col: kenSwordEvadeTo.col };
-        }
-      } else if (oboroEvadeTo) {
-        didCapture = false;
-        const obIdx = nextPieces.findIndex(
-          (p) => p.row === move.toRow && p.col === move.toCol && p.side === captured.side,
-        );
-        if (obIdx >= 0) {
-          const ob = nextPieces[obIdx]!;
-          nextPieces[obIdx] = { ...ob, row: oboroEvadeTo.row, col: oboroEvadeTo.col };
-        }
-      } else if (phantomEvaded) {
-        didCapture = false;
-        const pick = adjacentEmpty[Math.floor(Math.random() * adjacentEmpty.length)]!;
-        const phIdx = nextPieces.findIndex(
-          (p) => p.row === move.toRow && p.col === move.toCol && p.side === captured.side,
-        );
-        if (phIdx >= 0) {
-          const ph = nextPieces[phIdx]!;
-          nextPieces[phIdx] = { ...ph, row: pick.row, col: pick.col };
-        }
-      } else if (!captureOwnPiece && isKbossPiece(captured) && kbossEffectiveLives(captured) > 1) {
-        rebuffKboss = true;
-        didCapture = false;
-        const kIdx = nextPieces.findIndex(
-          (p) => p.row === move.toRow && p.col === move.toCol && p.side === captured.side,
-        );
-        if (kIdx >= 0) {
-          const cur = nextPieces[kIdx]!;
-          nextPieces[kIdx] = {
-            ...cur,
-            kbossLivesRemaining: kbossEffectiveLives(cur) - 1,
-          };
-        }
-      } else {
-        didCapture = true;
-        if (!captureOwnPiece && isPigPieceForApply(movingPiece)) {
-          pigInheritVictim = captured;
-        }
-        {
-          const capturedChar = (() => {
-            try {
-              return (captured.char ?? '').normalize('NFKC');
-            } catch {
-              return captured.char ?? '';
+        if (cowChargedPathDist != null && cowChargedPathDist > 1) {
+          const d = gunForwardRowDeltaForApply(actorSide);
+          for (let s = 1; s < cowChargedPathDist; s += 1) {
+            const r = move.fromRow + d * s;
+            const c = move.fromCol;
+            const mid = findPieceAt(nextPieces, r, c);
+            if (!mid) continue;
+            if (mid.side === actorSide) {
+              throw new Error('cow path blocked by ally');
             }
-          })();
-          const rawCode = (captured.pieceCode ?? '').toUpperCase();
-          if (!captureOwnPiece && (capturedChar === '病' || rawCode.includes('151646512B2F'))) {
-            diseaseCapturedByActor = true;
-          }
-          if (!captureOwnPiece && (capturedChar === '淵' || rawCode.includes('31CB39CC0FA8'))) {
-            abyssCapturedByActor = true;
-          }
-          if (!captureOwnPiece && isDeathPieceForApply(captured)) {
-            deathCapturedByActor = true;
-          }
-          if (!captureOwnPiece && isHolePieceForApply(captured)) {
-            capturedHoleCellsByActor.push({ row: move.toRow, col: move.toCol });
+            const midHole = isHolePieceForApply(mid);
+            const midRes = applyHostileCaptureAtCell({
+              boardState: current.boardState as Record<string, unknown> | undefined,
+              nextPieces,
+              hands,
+              actorSide,
+              row: r,
+              col: c,
+              fallbackCapturedCode: null,
+            });
+            if (midRes.rebuffKboss) {
+              throw new Error('invalid cow move: kboss path');
+            }
+            nextPieces = midRes.nextPieces;
+            hands = midRes.hands;
+            if (midRes.didCapture) {
+              didCapture = true;
+              intrinsicCombatSkillTriggered = true;
+              if (midHole) {
+                capturedHoleCellsByActor.push({ row: r, col: c });
+              }
+            }
+            if (midRes.starReturnProcTriggered) starReturnProcTriggered = true;
+            if (midRes.deathCapturedByActor) deathCapturedByActor = true;
           }
         }
-        const consumeReiSubstitute =
-          !captureOwnPiece && captured
-            ? shouldConsumeReiSubstituteAfterAllyCapture(nextPieces, captured)
-            : false;
-        const chrysRevivalActive =
+      }
+
+      const captured = findPieceAt(nextPieces, move.toRow, move.toCol);
+      let pigInheritVictim: AiBoardPiece | null = null;
+      /** 財スキル用: 盤上から消す直前の敵駒スナップショット */
+      let zaiCapturedEnemySnapshot: AiBoardPiece | null = null;
+      let rebuffKboss = false;
+      if (captured) {
+        const captureOwnPiece = captured.side === actorSide;
+        if (!captureOwnPiece && isGiantPieceForEngine(captured)) {
+          throw new Error('cannot capture giant');
+        }
+        if (!captureOwnPiece && !isCloudMover && isArmorPieceForApply(captured)) {
+          throw new Error('cannot capture armor');
+        }
+        if (
           !captureOwnPiece &&
-          captured != null &&
-          hasActiveChrysanthemumRevival(
-            current.boardState as Record<string, unknown> | undefined,
-            captured.side,
-            move.toRow,
-            move.toCol,
-          );
-        if (!captureOwnPiece && isZaiPieceForApply(movingPiece)) {
-          zaiCapturedEnemySnapshot = { ...captured };
+          isKingPieceForApply(captured) &&
+          hasSoulOnBoardForSide(nextPieces, captured.side)
+        ) {
+          throw new Error('cannot capture king while soul remains');
         }
-        nextPieces = nextPieces.filter(
-          (piece) => !(piece.row === move.toRow && piece.col === move.toCol),
-        );
-        const fallbackCapturedCode = toBasePieceCode(move.capturedPieceCode);
-        if (captureOwnPiece) {
-          // 雲の味方捕獲は自分の手駒に加える。
-          const capturedCode = resolveCapturedHandCode(captured, fallbackCapturedCode);
-          if (capturedCode) {
-            hands = addHandPiece(hands, actorSide, capturedCode, 1);
+        if (!captureOwnPiece && isArmorPieceForApply(movingPiece)) {
+          throw new Error('armor cannot capture enemy');
+        }
+        if (captureOwnPiece && !isCloudMover) {
+          throw new Error('friendly capture is only allowed for CLOUD');
+        }
+        if (isCloudMover && !captureOwnPiece) {
+          throw new Error('CLOUD cannot capture enemy pieces');
+        }
+        if (isCloudMover && captureOwnPiece) {
+          const capturedBase = toBasePieceCode(captured.pieceCode);
+          if (capturedBase === 'OU' || captured.char === '王' || captured.char === '玉') {
+            throw new Error('CLOUD cannot capture allied king');
           }
-        } else if (chrysRevivalActive) {
-          removeChrysanthemumRevivalAtCell(
+        }
+
+        if (
+          !captureOwnPiece &&
+          tryShieldIntrinsicAbortHostileCapture(actorSide, captured, nextPieces)
+        ) {
+          shieldAbortedMove = true;
+          intrinsicCombatSkillTriggered = true;
+          const snap = cloneCombatBoardSnapshot(combatBoardSnapshot);
+          nextPieces = snap.pieces;
+          hands = snap.hands;
+          didCapture = false;
+        }
+
+        let phantomEvaded = false;
+        let adjacentEmpty: Array<{ row: number; col: number }> = [];
+        let kenSwordEvadeTo: { row: number; col: number } | null = null;
+        if (!shieldAbortedMove && !captureOwnPiece && isKenSwordPieceForApply(captured)) {
+          const horizKen = collectHorizontalAdjacentEmptyCells(nextPieces, move.toRow, move.toCol);
+          if (horizKen.length > 0) {
+            kenSwordEvadeTo = horizKen[Math.floor(Math.random() * horizKen.length)]!;
+            intrinsicCombatSkillTriggered = true;
+          }
+        }
+        let oboroEvadeTo: { row: number; col: number } | null = null;
+        if (!shieldAbortedMove && !captureOwnPiece && !kenSwordEvadeTo) {
+          oboroEvadeTo = resolveOboroEvadeWarpCell({
+            captured,
+            pieces: nextPieces,
+            captureRow: move.toRow,
+            captureCol: move.toCol,
+          });
+        }
+        if (!shieldAbortedMove && !captureOwnPiece && !kenSwordEvadeTo) {
+          const evadeChance = resolveEvadeCaptureProcChanceForPiece(
             current.boardState as Record<string, unknown> | undefined,
-            captured.side,
-            move.toRow,
-            move.toCol,
+            captured,
           );
-          if (!isSpiritPiece(captured)) {
-            const capturedCode = resolveCapturedHandCode(captured, fallbackCapturedCode);
-            if (capturedCode) {
-              hands = addHandPiece(hands, captured.side, capturedCode, 1);
+          adjacentEmpty = collectAdjacentEmptyCells(nextPieces, move.toRow, move.toCol);
+          if (evadeChance != null) {
+            if (adjacentEmpty.length > 0) {
+              const roll = Math.random();
+              phantomEvaded = roll <= evadeChance;
             }
+          }
+        }
+
+        if (shieldAbortedMove) {
+          // 盤・手駒は上で復元済み。着手駒は from のまま。
+        } else if (kenSwordEvadeTo) {
+          didCapture = false;
+          const ksIdx = nextPieces.findIndex(
+            (p) => p.row === move.toRow && p.col === move.toCol && p.side === captured.side,
+          );
+          if (ksIdx >= 0) {
+            const ks = nextPieces[ksIdx]!;
+            nextPieces[ksIdx] = { ...ks, row: kenSwordEvadeTo.row, col: kenSwordEvadeTo.col };
+          }
+        } else if (oboroEvadeTo) {
+          didCapture = false;
+          const obIdx = nextPieces.findIndex(
+            (p) => p.row === move.toRow && p.col === move.toCol && p.side === captured.side,
+          );
+          if (obIdx >= 0) {
+            const ob = nextPieces[obIdx]!;
+            nextPieces[obIdx] = { ...ob, row: oboroEvadeTo.row, col: oboroEvadeTo.col };
+          }
+        } else if (phantomEvaded) {
+          didCapture = false;
+          const pick = adjacentEmpty[Math.floor(Math.random() * adjacentEmpty.length)]!;
+          const phIdx = nextPieces.findIndex(
+            (p) => p.row === move.toRow && p.col === move.toCol && p.side === captured.side,
+          );
+          if (phIdx >= 0) {
+            const ph = nextPieces[phIdx]!;
+            nextPieces[phIdx] = { ...ph, row: pick.row, col: pick.col };
+          }
+        } else if (
+          !captureOwnPiece &&
+          isKbossPiece(captured) &&
+          kbossEffectiveLives(captured) > 1
+        ) {
+          rebuffKboss = true;
+          didCapture = false;
+          const kIdx = nextPieces.findIndex(
+            (p) => p.row === move.toRow && p.col === move.toCol && p.side === captured.side,
+          );
+          if (kIdx >= 0) {
+            const cur = nextPieces[kIdx]!;
+            nextPieces[kIdx] = {
+              ...cur,
+              kbossLivesRemaining: kbossEffectiveLives(cur) - 1,
+            };
           }
         } else {
-          const isSpiritCaptured = isSpiritPiece(captured);
-          const capturedBaseCode = toBasePieceCode(captured.pieceCode);
-          const isStarCaptured = capturedBaseCode === 'HOS' || captured.char === '星';
-          if (isSpiritCaptured) {
-            // 霊: 相手に取られても手駒に加わらず消滅する。
-          } else if (isVanishOnCapturePiece(captured)) {
-            // K 博士・実・異: 手駒に加えない。
-          } else if (isStarCaptured) {
-            const procChance = 0.4;
-            const roll = Math.random();
-            const triggered = roll <= procChance;
-            if (triggered) {
-              starReturnProcTriggered = true;
-              hands = addHandPiece(hands, captured.side, 'HOS', 1);
+          didCapture = true;
+          if (!captureOwnPiece && isPigPieceForApply(movingPiece)) {
+            pigInheritVictim = captured;
+          }
+          {
+            const capturedChar = (() => {
+              try {
+                return (captured.char ?? '').normalize('NFKC');
+              } catch {
+                return captured.char ?? '';
+              }
+            })();
+            const rawCode = (captured.pieceCode ?? '').toUpperCase();
+            if (!captureOwnPiece && (capturedChar === '病' || rawCode.includes('151646512B2F'))) {
+              diseaseCapturedByActor = true;
+            }
+            if (!captureOwnPiece && (capturedChar === '淵' || rawCode.includes('31CB39CC0FA8'))) {
+              abyssCapturedByActor = true;
+            }
+            if (!captureOwnPiece && isDeathPieceForApply(captured)) {
+              deathCapturedByActor = true;
+            }
+            if (!captureOwnPiece && isHolePieceForApply(captured)) {
+              capturedHoleCellsByActor.push({ row: move.toRow, col: move.toCol });
+            }
+          }
+          const consumeReiSubstitute =
+            !captureOwnPiece && captured
+              ? shouldConsumeReiSubstituteAfterAllyCapture(nextPieces, captured)
+              : false;
+          const chrysRevivalActive =
+            !captureOwnPiece &&
+            captured != null &&
+            hasActiveChrysanthemumRevival(
+              current.boardState as Record<string, unknown> | undefined,
+              captured.side,
+              move.toRow,
+              move.toCol,
+            );
+          if (!captureOwnPiece && isZaiPieceForApply(movingPiece)) {
+            zaiCapturedEnemySnapshot = { ...captured };
+          }
+          nextPieces = removeCapturedPieceFromBoard(nextPieces, move.toRow, move.toCol, captured);
+          const fallbackCapturedCode = toBasePieceCode(move.capturedPieceCode);
+          if (captureOwnPiece) {
+            // 雲の味方捕獲は自分の手駒に加える。
+            const capturedCode = resolveCapturedHandCode(captured, fallbackCapturedCode);
+            if (capturedCode) {
+              hands = addHandPiece(hands, actorSide, capturedCode, 1);
+            }
+          } else if (chrysRevivalActive) {
+            removeChrysanthemumRevivalAtCell(
+              current.boardState as Record<string, unknown> | undefined,
+              captured.side,
+              move.toRow,
+              move.toCol,
+            );
+            if (!isSpiritPiece(captured)) {
+              const capturedCode = resolveCapturedHandCode(captured, fallbackCapturedCode);
+              if (capturedCode) {
+                hands = addHandPiece(hands, captured.side, capturedCode, 1);
+              }
+            }
+          } else {
+            const isSpiritCaptured = isSpiritPiece(captured);
+            const capturedBaseCode = toBasePieceCode(captured.pieceCode);
+            const isStarCaptured = capturedBaseCode === 'HOS' || captured.char === '星';
+            if (isSpiritCaptured) {
+              // 霊: 相手に取られても手駒に加わらず消滅する。
+            } else if (isVanishOnCapturePiece(captured)) {
+              // K 博士・実・異: 手駒に加えない。
+            } else if (isStarCaptured) {
+              const procChance = 0.4;
+              const roll = Math.random();
+              const triggered = roll <= procChance;
+              if (triggered) {
+                starReturnProcTriggered = true;
+                hands = addHandPiece(hands, captured.side, 'HOS', 1);
+              } else {
+                const capturedCode = resolveCapturedHandCode(captured, fallbackCapturedCode);
+                if (capturedCode) {
+                  const handSide = targetHandSideForCapturedPiece(
+                    actorSide,
+                    captured.side,
+                    consumeReiSubstitute,
+                  );
+                  hands = addHandPiece(hands, handSide, capturedCode, 1);
+                }
+              }
             } else {
               const capturedCode = resolveCapturedHandCode(captured, fallbackCapturedCode);
               if (capturedCode) {
@@ -1355,177 +1536,167 @@ export function applyMove(input: {
                 hands = addHandPiece(hands, handSide, capturedCode, 1);
               }
             }
-          } else {
-            const capturedCode = resolveCapturedHandCode(captured, fallbackCapturedCode);
-            if (capturedCode) {
-              const handSide = targetHandSideForCapturedPiece(
-                actorSide,
-                captured.side,
-                consumeReiSubstitute,
-              );
-              hands = addHandPiece(hands, handSide, capturedCode, 1);
-            }
+          }
+          if (consumeReiSubstitute && captured && !chrysRevivalActive) {
+            nextPieces = removeFirstReiRitualFromSide(nextPieces, captured.side);
           }
         }
-        if (consumeReiSubstitute && captured && !chrysRevivalActive) {
-          nextPieces = removeFirstReiRitualFromSide(nextPieces, captured.side);
-        }
       }
-    }
 
-    const movingIndexAfterCapture = nextPieces.findIndex(
-      (piece) =>
-        piece.side === actorSide && piece.row === move.fromRow && piece.col === move.fromCol,
-    );
-    if (movingIndexAfterCapture < 0) {
-      throw new Error('moving piece not found after capture resolution');
-    }
-    if (!rebuffKboss && !shieldAbortedMove) {
-      const moving = nextPieces[movingIndexAfterCapture];
-      const nextPromoted = move.promote || moving.promoted === true;
-      const resolvedChar = pieceChar(moving.pieceCode, nextPromoted);
-      // pieceCode が剣と共有（SWORD 等）のとき pieceChar が「剣」になり、刀の intrinsic が死ぬのを防ぐ。銃も同様。
-      const nextChar =
-        isKatanaPieceForApply(moving) ||
-        isGunPieceForApply(moving) ||
-        isCowPieceForApply(moving) ||
-        isPigPieceForApply(moving)
-          ? moving.char
-          : resolvedChar === '?' ||
-              (toBasePieceCode(moving.pieceCode) != null &&
-                resolvedChar === toBasePieceCode(moving.pieceCode))
+      const movingIndexAfterCapture = nextPieces.findIndex(
+        (piece) =>
+          piece.side === actorSide && piece.row === move.fromRow && piece.col === move.fromCol,
+      );
+      if (movingIndexAfterCapture < 0) {
+        throw new Error('moving piece not found after capture resolution');
+      }
+      if (!rebuffKboss && !shieldAbortedMove) {
+        const moving = nextPieces[movingIndexAfterCapture];
+        const nextPromoted = move.promote || moving.promoted === true;
+        const resolvedChar = pieceChar(moving.pieceCode, nextPromoted);
+        // pieceCode が剣と共有（SWORD 等）のとき pieceChar が「剣」になり、刀の intrinsic が死ぬのを防ぐ。銃も同様。
+        const nextChar =
+          isKatanaPieceForApply(moving) ||
+          isGunPieceForApply(moving) ||
+          isCowPieceForApply(moving) ||
+          isPigPieceForApply(moving)
             ? moving.char
-            : resolvedChar;
-      const cowFwdDistForCharge =
-        move.fromRow != null && move.fromCol != null
-          ? computeCowForwardPathDistanceForApply(
-              actorSide,
-              move.fromRow,
-              move.fromCol,
-              move.toRow,
-              move.toCol,
-            )
-          : null;
-      const isCowFwdMove = isCowPieceForApply(moving) && cowFwdDistForCharge != null;
-      const isCowBackMove =
-        isCowPieceForApply(moving) &&
-        move.fromRow != null &&
-        move.toCol === move.fromCol &&
-        move.toRow - move.fromRow === -gunForwardRowDeltaForApply(actorSide);
-      nextPieces[movingIndexAfterCapture] = {
-        ...moving,
-        row: move.toRow,
-        col: move.toCol,
-        promoted: nextPromoted,
-        char: nextChar,
-        ...(isCowPieceForApply(moving)
-          ? {
-              cowChargeCount: isCowFwdMove
-                ? 0
-                : isCowBackMove
-                  ? Math.min(8, Math.max(0, Math.floor(moving.cowChargeCount ?? 0)) + 1)
-                  : Math.max(0, Math.floor(moving.cowChargeCount ?? 0)),
-            }
-          : {}),
-        ...(isPigPieceForApply(moving)
-          ? pigInheritVictim
-            ? (() => {
-                const resolved =
-                  resolveCapturedHandCode(
-                    pigInheritVictim,
-                    toBasePieceCode(move.capturedPieceCode),
-                  ) ?? toBasePieceCode(pigInheritVictim.pieceCode);
-                const code =
-                  resolved && `${resolved}`.trim() !== ''
-                    ? `${resolved}`.trim().toUpperCase()
-                    : null;
-                return code
-                  ? {
-                      pigInheritedPieceCode: code,
-                      pigInheritedChar: pigInheritVictim.char,
-                      pigInheritedPromoted: pigInheritVictim.promoted ?? false,
-                    }
-                  : {
-                      pigInheritedPieceCode: moving.pigInheritedPieceCode ?? null,
-                      ...(moving.pigInheritedChar != null
-                        ? { pigInheritedChar: moving.pigInheritedChar }
-                        : {}),
-                      ...(moving.pigInheritedPromoted != null
-                        ? { pigInheritedPromoted: moving.pigInheritedPromoted }
-                        : {}),
-                    };
-              })()
-            : {
-                pigInheritedPieceCode: moving.pigInheritedPieceCode ?? null,
-                ...(moving.pigInheritedChar != null
-                  ? { pigInheritedChar: moving.pigInheritedChar }
-                  : {}),
-                ...(moving.pigInheritedPromoted != null
-                  ? { pigInheritedPromoted: moving.pigInheritedPromoted }
-                  : {}),
+            : resolvedChar === '?' ||
+                (toBasePieceCode(moving.pieceCode) != null &&
+                  resolvedChar === toBasePieceCode(moving.pieceCode))
+              ? moving.char
+              : resolvedChar;
+        const cowFwdDistForCharge =
+          move.fromRow != null && move.fromCol != null
+            ? computeCowForwardPathDistanceForApply(
+                actorSide,
+                move.fromRow,
+                move.fromCol,
+                move.toRow,
+                move.toCol,
+              )
+            : null;
+        const isCowFwdMove = isCowPieceForApply(moving) && cowFwdDistForCharge != null;
+        const isCowBackMove =
+          isCowPieceForApply(moving) &&
+          move.fromRow != null &&
+          move.toCol === move.fromCol &&
+          move.toRow - move.fromRow === -gunForwardRowDeltaForApply(actorSide);
+        nextPieces[movingIndexAfterCapture] = {
+          ...moving,
+          row: move.toRow,
+          col: move.toCol,
+          promoted: nextPromoted,
+          char: nextChar,
+          ...(isCowPieceForApply(moving)
+            ? {
+                cowChargeCount: isCowFwdMove
+                  ? 0
+                  : isCowBackMove
+                    ? Math.min(8, Math.max(0, Math.floor(moving.cowChargeCount ?? 0)) + 1)
+                    : Math.max(0, Math.floor(moving.cowChargeCount ?? 0)),
               }
-          : {}),
-      };
-      let landedAfterMove = nextPieces[movingIndexAfterCapture]!;
-      if (move.fromRow != null && move.fromCol != null && isSenPieceForApply(movingPiece)) {
-        const transformed = maybeApplySenMoveSkillTransform(landedAfterMove);
-        if (
-          transformed.pieceCode !== landedAfterMove.pieceCode ||
-          transformed.char !== landedAfterMove.char
-        ) {
-          nextPieces[movingIndexAfterCapture] = transformed;
-          landedAfterMove = transformed;
-          intrinsicCombatSkillTriggered = true;
+            : {}),
+          ...(isPigPieceForApply(moving)
+            ? pigInheritVictim
+              ? (() => {
+                  const resolved =
+                    resolveCapturedHandCode(
+                      pigInheritVictim,
+                      toBasePieceCode(move.capturedPieceCode),
+                    ) ?? toBasePieceCode(pigInheritVictim.pieceCode);
+                  const code =
+                    resolved && `${resolved}`.trim() !== ''
+                      ? `${resolved}`.trim().toUpperCase()
+                      : null;
+                  return code
+                    ? {
+                        pigInheritedPieceCode: code,
+                        pigInheritedChar: pigInheritVictim.char,
+                        pigInheritedPromoted: pigInheritVictim.promoted ?? false,
+                      }
+                    : {
+                        pigInheritedPieceCode: moving.pigInheritedPieceCode ?? null,
+                        ...(moving.pigInheritedChar != null
+                          ? { pigInheritedChar: moving.pigInheritedChar }
+                          : {}),
+                        ...(moving.pigInheritedPromoted != null
+                          ? { pigInheritedPromoted: moving.pigInheritedPromoted }
+                          : {}),
+                      };
+                })()
+              : {
+                  pigInheritedPieceCode: moving.pigInheritedPieceCode ?? null,
+                  ...(moving.pigInheritedChar != null
+                    ? { pigInheritedChar: moving.pigInheritedChar }
+                    : {}),
+                  ...(moving.pigInheritedPromoted != null
+                    ? { pigInheritedPromoted: moving.pigInheritedPromoted }
+                    : {}),
+                }
+            : {}),
+        };
+        let landedAfterMove = nextPieces[movingIndexAfterCapture]!;
+        if (move.fromRow != null && move.fromCol != null && isSenPieceForApply(movingPiece)) {
+          const transformed = maybeApplySenMoveSkillTransform(landedAfterMove);
+          if (
+            transformed.pieceCode !== landedAfterMove.pieceCode ||
+            transformed.char !== landedAfterMove.char
+          ) {
+            nextPieces[movingIndexAfterCapture] = transformed;
+            landedAfterMove = transformed;
+            intrinsicCombatSkillTriggered = true;
+          }
         }
+        if (
+          zaiCapturedEnemySnapshot &&
+          isZaiPieceForApply(movingPiece) &&
+          didCapture &&
+          move.fromRow != null &&
+          move.fromCol != null
+        ) {
+          const zaiNext = applyZaiSkillReplaceAllySenWithCaptured(
+            nextPieces,
+            actorSide,
+            zaiCapturedEnemySnapshot,
+            move.toRow,
+            move.toCol,
+          );
+          if (zaiNext) {
+            nextPieces = zaiNext;
+            intrinsicCombatSkillTriggered = true;
+          }
+        }
+        movedPieceAfterApply = landedAfterMove;
+      } else {
+        movedPieceAfterApply = nextPieces[movingIndexAfterCapture] ?? null;
+      }
+
+      // 銃の貫通手で敵を取った（中点のみ／先のみ／両方）ときスキル発動扱いにする。
+      if (gunPen != null && isGunPieceForApply(movingPiece) && didCapture) {
+        intrinsicCombatSkillTriggered = true;
       }
       if (
-        zaiCapturedEnemySnapshot &&
-        isZaiPieceForApply(movingPiece) &&
-        didCapture &&
-        move.fromRow != null &&
-        move.fromCol != null
+        cowChargedPathDist != null &&
+        cowChargedPathDist > 1 &&
+        isCowPieceForApply(movingPiece) &&
+        didCapture
       ) {
-        const zaiNext = applyZaiSkillReplaceAllySenWithCaptured(
-          nextPieces,
-          actorSide,
-          zaiCapturedEnemySnapshot,
-          move.toRow,
-          move.toCol,
-        );
-        if (zaiNext) {
-          nextPieces = zaiNext;
-          intrinsicCombatSkillTriggered = true;
-        }
+        intrinsicCombatSkillTriggered = true;
       }
-      movedPieceAfterApply = landedAfterMove;
-    } else {
-      movedPieceAfterApply = nextPieces[movingIndexAfterCapture] ?? null;
-    }
 
-    // 銃の貫通手で敵を取った（中点のみ／先のみ／両方）ときスキル発動扱いにする。
-    if (gunPen != null && isGunPieceForApply(movingPiece) && didCapture) {
-      intrinsicCombatSkillTriggered = true;
-    }
-    if (
-      cowChargedPathDist != null &&
-      cowChargedPathDist > 1 &&
-      isCowPieceForApply(movingPiece) &&
-      didCapture
-    ) {
-      intrinsicCombatSkillTriggered = true;
-    }
-
-    if (isGunPieceForApply(movingPiece)) {
-      gunApplyDebugLog({
-        phase: 'post-board-update',
-        didCapture,
-        rebuffKboss,
-        hadGunPenetration: gunPen != null,
-        intrinsicCombatSkillFlag: gunPen != null && isGunPieceForApply(movingPiece) && didCapture,
-        landing: movedPieceAfterApply
-          ? { row: movedPieceAfterApply.row, col: movedPieceAfterApply.col }
-          : null,
-      });
+      if (isGunPieceForApply(movingPiece)) {
+        gunApplyDebugLog({
+          phase: 'post-board-update',
+          didCapture,
+          rebuffKboss,
+          hadGunPenetration: gunPen != null,
+          intrinsicCombatSkillFlag: gunPen != null && isGunPieceForApply(movingPiece) && didCapture,
+          landing: movedPieceAfterApply
+            ? { row: movedPieceAfterApply.row, col: movedPieceAfterApply.col }
+            : null,
+        });
+      }
     }
   }
 
@@ -1658,12 +1829,13 @@ export function applyMove(input: {
       currentBoardState.skillDefinitionsV2 ?? generatedBoardState.skillDefinitionsV2,
   };
 
+  let moveSkillEffectTriggeredFromMoveEffects = false;
   if (turnAdvanced) {
     // 既存ハザードの残りターンを進める。
     tickSkillStateDurations(nextPosition);
     if (applyLandingDerivedEffects) {
       // 着手によるスキル効果（移動制限・毒マスなど）を反映（実際にマスへ入ったときのみ）。
-      applyMoveSkillEffects({
+      const { moveSkillEffectTriggered } = applyMoveSkillEffects({
         position: nextPosition,
         move,
         actorSide,
@@ -1671,6 +1843,7 @@ export function applyMove(input: {
         pieces: nextPieces,
         didCapture,
       });
+      moveSkillEffectTriggeredFromMoveEffects = moveSkillEffectTriggered;
     }
     hands = nextPosition.hands;
   }
@@ -1990,6 +2163,7 @@ export function applyMove(input: {
       shieldAbortedMove ||
       intrinsicCombatSkillTriggered ||
       starReturnProcTriggered ||
+      moveSkillEffectTriggeredFromMoveEffects ||
       move.notation === 'time_skill' ||
       move.notation === 'time_skill_only' ||
       move.notation === 'house_skill_only' ||

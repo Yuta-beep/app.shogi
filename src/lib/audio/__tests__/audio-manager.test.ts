@@ -6,6 +6,10 @@ jest.mock('expo-audio', () => ({
   setAudioModeAsync: (...args: unknown[]) => mockSetAudioModeAsync(...args),
 }));
 
+jest.mock('@/constants/battle-piece-effect-sound-modules.generated', () => ({
+  BATTLE_PIECE_EFFECT_SOUND_MODULES: {},
+}));
+
 jest.mock('@/constants/audio-assets', () => ({
   bgmSources: {
     title: 101,
@@ -24,6 +28,9 @@ jest.mock('@/constants/audio-assets', () => ({
     tap: 201,
     confirm: 202,
     cancel: 203,
+    battlePieceMove: 204,
+    battlePromote: 206,
+    battleSkill: 205,
   },
 }));
 

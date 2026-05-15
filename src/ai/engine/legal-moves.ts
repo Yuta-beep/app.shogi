@@ -23,6 +23,11 @@ import {
 } from '@/ai/model';
 import { CHAR_TO_CODE, CODE_TO_CHAR } from '@/features/stage-shogi/domain/piece-conversion';
 import { createMove, resolvePieceDef } from '@/ai/engine/shared';
+import {
+  giantAnchorFootprint,
+  isGiantPieceForEngine,
+  isValidGiantAnchor,
+} from '@/ai/engine/giant-piece';
 import { effectivePieceForRulesAfterSpring } from '@/ai/engine/spring-ryu-awakening';
 import { createSkillRuntimeView, type SkillRuntimeView } from '@/ai/engine/skill-runtime';
 import {
@@ -210,6 +215,7 @@ function collectHeartProtectAllyTargets(
   for (const p of after) {
     if (p.side !== actorSide) continue;
     if (isKingPiece(p)) continue;
+    if (isGiantPieceForEngine(p)) continue;
     const k = `${p.row}:${p.col}`;
     if (seen.has(k)) continue;
     seen.add(k);
@@ -239,6 +245,7 @@ function collectSatoriEnemyStunTargets(
   for (const p of pieces) {
     if (p.side !== enemySide) continue;
     if (isKingPiece(p)) continue;
+    if (isGiantPieceForEngine(p)) continue;
     if (capturedEnemyAtDest && p.row === move.toRow && p.col === move.toCol) continue;
     out.push({ row: p.row, col: p.col });
   }
@@ -601,6 +608,9 @@ function resolvePieceCodeForLegalMove(piece: AiBoardPiece, lookups: AiPieceLooku
   if (ch === '財' || rawUp.includes('7FC715661514') || rawUp.includes('ZAI')) {
     return 'ZAI';
   }
+  if (ch === '巨' || rawUp.includes('C4AEB81F3634')) {
+    return 'GIANT';
+  }
   const legacy = toBasePieceCode(CHAR_TO_CODE[piece.char]);
   if (legacy) return legacy;
   return 'FU';
@@ -783,6 +793,14 @@ function generateGunForwardTargets(
     logBlock('1マス目がK博士耐久2');
     return out;
   }
+  if (p1 && isGiantPieceForEngine(p1)) {
+    logBlock('1マス目が巨');
+    return out;
+  }
+  if (r2Valid && p2 && isGiantPieceForEngine(p2)) {
+    logBlock('2マス目が巨');
+    return out;
+  }
 
   const push = (row: number, col: number) => {
     const key = `${row}:${col}`;
@@ -873,6 +891,8 @@ function generateGunBackDiagonalTargets(
     if (p1 && isArmorPiece(p1)) continue;
     if (r2Valid && p2 && isArmorPiece(p2)) continue;
     if (p1 && isKbossPieceForGun(p1) && kbossEffectiveLivesForGunFilter(p1) > 1) continue;
+    if (p1 && isGiantPieceForEngine(p1)) continue;
+    if (r2Valid && p2 && isGiantPieceForEngine(p2)) continue;
 
     if (!p1 && (!r2Valid || !p2)) {
       push(r1, c1);
@@ -932,7 +952,21 @@ function occupancyKey(row: number, col: number): string {
 }
 
 function buildOccupancyMap(pieces: AiBoardPiece[]): OccupancyMap {
-  return new Map(pieces.map((piece) => [occupancyKey(piece.row, piece.col), piece]));
+  const map = new Map<string, AiBoardPiece>();
+  const giants: AiBoardPiece[] = [];
+  for (const piece of pieces) {
+    if (isGiantPieceForEngine(piece)) {
+      giants.push(piece);
+    } else {
+      map.set(occupancyKey(piece.row, piece.col), piece);
+    }
+  }
+  for (const piece of giants) {
+    for (const c of giantAnchorFootprint(piece.row, piece.col)) {
+      map.set(occupancyKey(c.row, c.col), piece);
+    }
+  }
+  return map;
 }
 
 function isRockObstacleVirtualPiece(piece: AiBoardPiece): boolean {
@@ -1029,6 +1063,10 @@ function generateCowForwardChargedTargets(input: {
           ok = false;
           break;
         }
+        if (isGiantPieceForEngine(p)) {
+          ok = false;
+          break;
+        }
       }
     }
     if (!ok) continue;
@@ -1077,7 +1115,7 @@ function generateReflectiveTargets(
       if (nr < 0 || nr > 8 || nc < 0 || nc > 8) break;
       const target = findPieceAtFast(occupancy, nr, nc);
       if (target) {
-        if (target.side !== piece.side) {
+        if (target.side !== piece.side && !isGiantPieceForEngine(target)) {
           const key = `${nr}:${nc}`;
           if (!seen.has(key)) {
             seen.add(key);
@@ -1568,10 +1606,12 @@ function generateLeapOverOneTargets(
         continue;
       }
       if (target.side !== piece.side) {
-        const key = `${r}:${c}`;
-        if (!seen.has(key)) {
-          seen.add(key);
-          out.push({ row: r, col: c });
+        if (!isGiantPieceForEngine(target)) {
+          const key = `${r}:${c}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            out.push({ row: r, col: c });
+          }
         }
       }
       break;
@@ -1619,6 +1659,121 @@ function generateCloudTargetsFromVectors(
   return out;
 }
 
+const GIANT_BOARD_MOVE_NOTATION = 'giant_2x2_ortho';
+
+function generateGiantOrthogonalBoardMoves(input: {
+  pieces: AiBoardPiece[];
+  piece: AiBoardPiece;
+  position: AiBattlePosition;
+  lookups: AiPieceLookups;
+  occupancy: OccupancyMap;
+  skillView: SkillRuntimeView;
+  mover: AiBoardPiece;
+  noCaptureOnly?: boolean;
+}): AiBattleMove[] {
+  const { mover, pieces, occupancy, skillView, lookups, noCaptureOnly } = input;
+  const fr = mover.row;
+  const fc = mover.col;
+  if (!isValidGiantAnchor(fr, fc)) return [];
+  const from = { row: fr, col: fc };
+  const pieceCode = resolvePieceCodeForLegalMove(mover, lookups);
+  const deltas = [-2, -1, 1, 2];
+  const candidateAnchors: { row: number; col: number }[] = [];
+  for (const d of deltas) {
+    candidateAnchors.push({ row: fr + d, col: fc });
+    candidateAnchors.push({ row: fr, col: fc + d });
+  }
+  const seen = new Set<string>();
+  const moves: AiBattleMove[] = [];
+  for (const to of candidateAnchors) {
+    if (!isValidGiantAnchor(to.row, to.col)) continue;
+    const tr = to.row;
+    const tc = to.col;
+    if (tr === fr && tc === fc) continue;
+    const step = Math.abs(tr - fr) + Math.abs(tc - fc);
+    if (step === 0 || step > 2) continue;
+    if (tr !== fr && tc !== fc) continue;
+    const key = `${tr}:${tc}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const destCells = giantAnchorFootprint(tr, tc);
+    let blocked = false;
+    for (const c of destCells) {
+      if (skillView.rockObstacleCells.has(`${c.row}:${c.col}`)) {
+        blocked = true;
+        break;
+      }
+      if (isBlockedByRockObstacle(skillView, c.row, c.col)) {
+        blocked = true;
+        break;
+      }
+    }
+    if (blocked) continue;
+    for (const c of destCells) {
+      const occ = findPieceAtFast(occupancy, c.row, c.col);
+      if (!occ) continue;
+      if (occ.side === mover.side) {
+        const isSelf = occ.row === mover.row && occ.col === mover.col && occ.side === mover.side;
+        if (!isSelf) {
+          blocked = true;
+          break;
+        }
+      }
+    }
+    if (blocked) continue;
+    if (noCaptureOnly) {
+      const anyEnemy = destCells.some((c) => {
+        const occ = findPieceAtFast(occupancy, c.row, c.col);
+        return occ && occ.side !== mover.side;
+      });
+      if (anyEnemy) continue;
+    }
+    for (const c of destCells) {
+      const occ = findPieceAtFast(occupancy, c.row, c.col);
+      if (!occ || occ.side === mover.side) continue;
+      if (isArmorPiece(occ)) {
+        blocked = true;
+        break;
+      }
+      if (isKingPiece(occ) && hasSoulOnBoardForSide(pieces, occ.side)) {
+        blocked = true;
+        break;
+      }
+      if (skillView.captureImmunityCells.has(`${occ.side}:${c.row}:${c.col}`)) {
+        blocked = true;
+        break;
+      }
+      if (skillView.darkBlindCells.has(`${occ.side}:${c.row}:${c.col}`)) {
+        blocked = true;
+        break;
+      }
+      if (isGiantPieceForEngine(occ)) {
+        blocked = true;
+        break;
+      }
+    }
+    if (blocked) continue;
+    const firstEnemyInDest = destCells
+      .map((c) => findPieceAtFast(occupancy, c.row, c.col))
+      .find((occ) => occ && occ.side !== mover.side);
+    const capturedPieceCode =
+      noCaptureOnly === true
+        ? null
+        : resolveCapturedPieceCodeForLegalMove(firstEnemyInDest ?? null);
+    moves.push(
+      createMove({
+        from,
+        to,
+        pieceCode,
+        promote: false,
+        capturedPieceCode,
+        notation: GIANT_BOARD_MOVE_NOTATION,
+      }),
+    );
+  }
+  return moves;
+}
+
 function generateBoardPieceMoves(input: {
   pieces: AiBoardPiece[];
   piece: AiBoardPiece;
@@ -1628,12 +1783,59 @@ function generateBoardPieceMoves(input: {
   skillView: SkillRuntimeView;
   noCaptureOnly?: boolean;
 }): AiBattleMove[] {
+  if (isBookPiece(input.piece)) {
+    const aroundAllies = input.pieces.filter((ally) => {
+      if (ally.side !== input.piece.side) return false;
+      if (ally.row === input.piece.row && ally.col === input.piece.col) return false;
+      const dr = Math.abs(ally.row - input.piece.row);
+      const dc = Math.abs(ally.col - input.piece.col);
+      return dr <= 1 && dc <= 1;
+    });
+    const targetKeys = new Set<string>();
+    const targets: { row: number; col: number }[] = [];
+    for (const ally of aroundAllies) {
+      // 「書」同士の相互参照ループを避けるため、隣接書は参照対象から除外する。
+      if (isBookPiece(ally)) continue;
+      const allyMoves = generateBoardPieceMoves({
+        ...input,
+        piece: ally,
+      });
+      for (const mv of allyMoves) {
+        const row = mv.toRow;
+        const col = mv.toCol;
+        const key = `${row}:${col}`;
+        if (targetKeys.has(key)) continue;
+        targetKeys.add(key);
+        targets.push({ row, col });
+      }
+    }
+    const from = { row: input.piece.row, col: input.piece.col };
+    const pieceCode = resolvePieceCodeForLegalMove(input.piece, input.lookups);
+    return targets.map((to) =>
+      createMove({
+        from,
+        to,
+        pieceCode,
+        promote: false,
+        capturedPieceCode: resolveCapturedPieceCodeForLegalMove(
+          findPieceAtFast(input.occupancy, to.row, to.col),
+        ),
+      }),
+    );
+  }
+
   const pieceAfterSpring = effectivePieceForRulesAfterSpring(
     input.piece,
     input.pieces,
     input.lookups,
   );
   const mover = pigInheritedMoveOverlay(pieceAfterSpring) ?? pieceAfterSpring;
+  if (isGiantPieceForEngine(mover)) {
+    return generateGiantOrthogonalBoardMoves({
+      ...input,
+      mover,
+    });
+  }
   let pieceDef = resolvePieceDef(mover, input.lookups);
   if (isMachinePiece(mover)) {
     const donor = pickMachineDonorAlly(input.pieces, input.piece);
@@ -2016,6 +2218,7 @@ export function generateLegalMoves(input: {
     .filter(
       (piece) =>
         isKingPiece(piece) ||
+        isGiantPieceForEngine(piece) ||
         !skillView.immobilizedCells.has(`${piece.side}:${piece.row}:${piece.col}`),
     )
     .flatMap((piece) =>

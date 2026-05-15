@@ -1,8 +1,9 @@
 import { Image } from 'expo-image';
 import { Modal, Pressable, Text, View } from 'react-native';
 
-import { resolvePieceImageSource } from '@/lib/piece-image';
+import { BattleEndResultOverlay } from '@/features/stage-shogi/ui/components/battle-end-result-overlay';
 import { Side } from '@/features/stage-shogi/domain/game-rules';
+import { resolvePieceImageSource } from '@/lib/piece-image';
 import { InspectingPieceState } from '@/features/stage-shogi/ui/stage-shogi-screen.presenters';
 import { getPieceImageSource } from '@/features/stage-shogi/ui/stage-shogi-screen.helpers';
 import type {
@@ -10,39 +11,9 @@ import type {
   TimeActionMode,
 } from '@/features/stage-shogi/ui/use-stage-shogi-screen';
 
-export function StageShogiResultOverlay({
-  winner,
-  clearRewardText,
-}: {
-  winner: Side | null;
-  clearRewardText: string | null;
-}) {
+export function StageShogiResultOverlay({ winner }: { winner: Side | null }) {
   if (!winner) return null;
-  return (
-    <View className="absolute inset-0 items-center justify-center bg-black/50 p-6">
-      <View
-        className={`w-full max-w-sm rounded-2xl border-2 p-6 ${
-          winner === 'player' ? 'border-yellow-500 bg-[#fffbeb]' : 'border-[#7f1d1d] bg-[#fff5f5]'
-        }`}
-      >
-        <Text
-          className={`text-center text-3xl font-black ${
-            winner === 'player' ? 'text-yellow-600' : 'text-[#7f1d1d]'
-          }`}
-        >
-          {winner === 'player' ? '勝利！' : '敗北...'}
-        </Text>
-        <Text className="mt-2 text-center text-sm font-bold text-gray-500">
-          {winner === 'player' ? 'おめでとうございます！' : 'またチャレンジしよう'}
-        </Text>
-        {clearRewardText ? (
-          <Text className="mt-3 text-center text-xs font-bold text-[#14532d]">
-            {clearRewardText}
-          </Text>
-        ) : null}
-      </View>
-    </View>
-  );
+  return <BattleEndResultOverlay winner={winner} />;
 }
 
 export function StageShogiPromotionModal({

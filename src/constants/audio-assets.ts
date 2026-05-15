@@ -10,7 +10,16 @@ export type BgmTrack =
   | 'matching'
   | 'onlineBattle'
   | 'specialDungeon';
-export type SeTrack = 'tap' | 'confirm' | 'cancel';
+export type SeTrack =
+  | 'tap'
+  | 'confirm'
+  | 'cancel'
+  /** 対局: 駒の移動・打ち（マスが変わる着手・成り以外） */
+  | 'battlePieceMove'
+  /** 対局: 成り */
+  | 'battlePromote'
+  /** 対局: スキル発動 */
+  | 'battleSkill';
 
 export const bgmSources: Record<BgmTrack, number | null> = {
   title: require('../../assets/audio/bgm/title.mp3'),
@@ -30,4 +39,7 @@ export const seSources: Record<SeTrack, number | null> = {
   tap: require('../../assets/audio/se/tap.wav'),
   confirm: require('../../assets/audio/se/confirm.wav'),
   cancel: require('../../assets/audio/se/cancel.wav'),
+  battlePieceMove: require('../../assets/audio/se/battle/駒打つ.mp3'),
+  battlePromote: require('../../assets/audio/se/battle/駒成る.mp3'),
+  battleSkill: require('../../assets/audio/se/battle/battle-skill.wav'),
 };

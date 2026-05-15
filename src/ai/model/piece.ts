@@ -101,6 +101,15 @@ function applyClientEnginePieceCatalogOverrides(item: PieceCatalogItem): PieceCa
     };
   }
 
+  if (ch === '巨' || baseCode === 'GIANT') {
+    return {
+      ...item,
+      skill:
+        '敵に取られず、あらゆるスキルの特殊効果を受けない。本体が占める4マスには他の駒は入れない。移動先の2×2マス内の敵駒をまとめて取れる。味方駒が1マスでも重なるマスへは進めない。',
+      move: '本体は盤上でマス2×2を占める。前後左右に最大2マスまで移動できる（左上基準）。',
+    };
+  }
+
   return item;
 }
 

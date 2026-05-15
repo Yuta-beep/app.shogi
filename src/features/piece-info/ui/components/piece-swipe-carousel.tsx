@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { Animated, FlatList, Pressable, Text, View, useWindowDimensions } from 'react-native';
 
 import type { PieceCatalogItem } from '@/domain/models/piece';
+import { isBossPiece } from '@/features/deck-builder/lib/boss-pieces';
 import { resolvePieceImageSource } from '@/lib/piece-image';
 
 const LOOP_MULTIPLIER = 5;
@@ -137,6 +138,12 @@ export function PieceSwipeCarousel({
         const isActive = normalizedIndex === selectedIndex;
         const resolvedOpacity = isActive ? 1 : opacity;
 
+        const boss = isBossPiece({
+          char: cell.piece.char,
+          name: cell.piece.name,
+          pieceCode: cell.piece.pieceCode,
+        });
+
         return (
           <Animated.View
             style={{ width: itemWidth, opacity: resolvedOpacity, transform: [{ scale }] }}
@@ -151,9 +158,14 @@ export function PieceSwipeCarousel({
                   animated: true,
                 });
               }}
-              className="items-center justify-center"
+              className="relative items-center justify-center"
               style={{ width: itemWidth, height: cellHeight }}
             >
+              {boss ? (
+                <View className="absolute right-0 top-2 z-10 rounded bg-[#7f1d1d] px-1.5 py-0.5">
+                  <Text className="text-[9px] font-black text-[#fde68a]">ボス</Text>
+                </View>
+              ) : null}
               {source ? (
                 <Image
                   source={source}

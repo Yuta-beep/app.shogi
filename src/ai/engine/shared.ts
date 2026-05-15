@@ -16,6 +16,7 @@ import type {
 } from '@/ai/model';
 import { buildPieceLookups, normalizePieceCode, toBasePieceCode } from '@/ai/model';
 import { assembleSkillDefinitionsV2ForSession } from '@/ai/engine/session-skill-definitions-v2';
+import { findPieceCoveringCell } from '@/ai/engine/giant-piece';
 
 export const PIECE_VALUES: Readonly<Record<string, number>> = {
   OU: 100000,
@@ -39,7 +40,7 @@ export function pieceChar(pieceCode: string | null, promoted = false): string {
 }
 
 export function findPieceAt(placements: AiBoardPiece[], row: number, col: number) {
-  return placements.find((piece) => piece.row === row && piece.col === col) ?? null;
+  return findPieceCoveringCell(placements, row, col);
 }
 
 export function createMove(base: {

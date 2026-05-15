@@ -9,6 +9,11 @@ import {
   isSpecialTenPlusPiece,
   normalizeSkillPieceCode,
 } from '@/ai/engine/piece-identifiers';
+import {
+  findPieceCoveringCell,
+  giantAnchorFootprint,
+  isGiantPieceForEngine,
+} from '@/ai/engine/giant-piece';
 
 type SkillStateRecord = {
   board_hazards: Record<string, unknown>[];
@@ -131,6 +136,7 @@ function removeRandomAdjacentEnemyPiece(input: {
       if (piece.char === '王' || piece.char === '玉' || toBasePieceCode(piece.pieceCode) === 'OU') {
         return false;
       }
+      if (isGiantPieceForEngine(piece)) return false;
       return (
         Math.abs(piece.row - input.center.row) <= 1 &&
         Math.abs(piece.col - input.center.col) <= 1 &&
@@ -156,6 +162,7 @@ function removeUpToRandomAdjacentEnemyPieces(input: {
       if (piece.char === '王' || piece.char === '玉' || toBasePieceCode(piece.pieceCode) === 'OU') {
         return false;
       }
+      if (isGiantPieceForEngine(piece)) return false;
       return (
         Math.abs(piece.row - input.center.row) <= 1 &&
         Math.abs(piece.col - input.center.col) <= 1 &&
@@ -194,6 +201,7 @@ function sendAllAdjacentEnemiesToOwnerHands(input: {
   const moved: { row: number; col: number; side: Side; char: string; handCode: string }[] = [];
   const targets = input.pieces.filter((piece) => {
     if (piece.side === input.actorSide) return false;
+    if (isGiantPieceForEngine(piece)) return false;
     const dr = Math.abs(piece.row - input.center.row);
     const dc = Math.abs(piece.col - input.center.col);
     return (dr !== 0 || dc !== 0) && dr <= 1 && dc <= 1;
@@ -956,6 +964,44 @@ function cellKey(side: Side, row: number, col: number): string {
   return `${side}:${row}:${col}`;
 }
 
+function anyGiantFootprintContainsCell(pieces: AiBoardPiece[], row: number, col: number): boolean {
+  for (const p of pieces) {
+    if (!isGiantPieceForEngine(p)) continue;
+    if (giantAnchorFootprint(p.row, p.col).some((c) => c.row === row && c.col === col)) return true;
+  }
+  return false;
+}
+
+function pieceStatusEntryAffectsGiantImmunePiece(
+  pieces: AiBoardPiece[],
+  entry: Record<string, unknown>,
+): boolean {
+  const side = (asString(entry.side) ?? 'player') === 'enemy' ? 'enemy' : 'player';
+  const row = asNumber(entry.row);
+  const col = asNumber(entry.col);
+  if (row == null || col == null) return false;
+  const at = findPieceCoveringCell(pieces, row, col);
+  return Boolean(at && isGiantPieceForEngine(at) && at.side === side);
+}
+
+function stripSkillStateForGiantImmunity(state: SkillStateRecord, pieces: AiBoardPiece[]): void {
+  state.piece_statuses = state.piece_statuses.filter(
+    (e) => !pieceStatusEntryAffectsGiantImmunePiece(pieces, e),
+  );
+  state.movement_modifiers = state.movement_modifiers.filter(
+    (e) => !pieceStatusEntryAffectsGiantImmunePiece(pieces, e),
+  );
+  state.piece_defenses = state.piece_defenses.filter(
+    (e) => !pieceStatusEntryAffectsGiantImmunePiece(pieces, e),
+  );
+  state.board_hazards = state.board_hazards.filter((e) => {
+    const row = asNumber(e.row);
+    const col = asNumber(e.col);
+    if (row == null || col == null) return true;
+    return !anyGiantFootprintContainsCell(pieces, row, col);
+  });
+}
+
 /**
  * いずれかの「陰」の周囲8マスにいる **その陰にとっての敵駒** が着手したとき、
  * その駒のスキルは発動しない（陰と同じ側の駒は対象外）。
@@ -966,6 +1012,7 @@ export function isActorSkillProcSuppressedByAdjacentEnemyYin(
   movedPiece: AiBoardPiece | null,
 ): boolean {
   if (!movedPiece || movedPiece.side !== actorSide) return false;
+  if (isGiantPieceForEngine(movedPiece)) return false;
   for (const yin of pieces) {
     if (!isYinYangBondPiece(yin)) continue;
     if (yin.side === movedPiece.side) continue;
@@ -1134,7 +1181,14 @@ export function pieceHasActiveCaptureImmunityFromBoardState(
     if (s === side && r === row && c === col) return true;
   }
   if (pieces && pieces.length > 0) {
-    const target = pieces.find((p) => p.side === side && p.row === row && p.col === col);
+    const covering = findPieceCoveringCell(pieces, row, col);
+    if (covering && covering.side === side && isGiantPieceForEngine(covering)) {
+      return true;
+    }
+    const target =
+      covering && covering.side === side
+        ? covering
+        : pieces.find((p) => p.side === side && p.row === row && p.col === col);
     if (target && isYangBondProtectedFromCapture(pieces, target)) return true;
     if (target && isYinBondProtectedFromCapture(pieces, target)) return true;
   }
@@ -1143,12 +1197,18 @@ export function pieceHasActiveCaptureImmunityFromBoardState(
 
 export function createSkillRuntimeView(position: AiBattlePosition): SkillRuntimeView {
   const state = readSkillState(position);
+  const boardPieces = piecesFromBoardState(position);
   const movementRulesByCell = new Map<string, string>();
   const immobilizedCells = new Set<string>();
   const darkBlindCells = new Set<string>();
   const kingPoisonBlockedCells = new Set<string>();
   const rockObstacleCells = new Set<string>();
   const aTransformCells = new Set<string>();
+
+  function cellTargetsGiantImmune(statusSide: Side, row: number, col: number): boolean {
+    const at = findPieceCoveringCell(boardPieces, row, col);
+    return Boolean(at && isGiantPieceForEngine(at) && at.side === statusSide);
+  }
 
   for (const entry of state.movement_modifiers) {
     const side = (asString(entry.side) ?? 'player') === 'enemy' ? 'enemy' : 'player';
@@ -1157,6 +1217,7 @@ export function createSkillRuntimeView(position: AiBattlePosition): SkillRuntime
     const remaining = asNumber(entry.remaining_turns ?? entry.remainingTurns) ?? 0;
     const rule = asString(entry.movement_rule ?? entry.movementRule);
     if (row == null || col == null || remaining <= 0 || !rule) continue;
+    if (cellTargetsGiantImmune(side, row, col)) continue;
     const key = cellKey(side, row, col);
     if (!movementRulesByCell.has(key)) {
       movementRulesByCell.set(key, rule);
@@ -1170,6 +1231,7 @@ export function createSkillRuntimeView(position: AiBattlePosition): SkillRuntime
     const remaining = asNumber(entry.remaining_turns ?? entry.remainingTurns) ?? 0;
     const statusType = asString(entry.status_type ?? entry.statusType) ?? '';
     if (row == null || col == null || remaining <= 0) continue;
+    if (cellTargetsGiantImmune(side, row, col)) continue;
     const key = cellKey(side, row, col);
     if (
       statusType === 'stun' ||
@@ -1190,7 +1252,6 @@ export function createSkillRuntimeView(position: AiBattlePosition): SkillRuntime
   }
 
   // 封: 斜め4方向に隣接する敵駒を移動不可にする常時オーラ。
-  const boardPieces = piecesFromBoardState(position);
   for (const piece of boardPieces) {
     if (!isSealPieceForAura(piece)) continue;
     for (const [dr, dc] of [
@@ -1202,9 +1263,10 @@ export function createSkillRuntimeView(position: AiBattlePosition): SkillRuntime
       const row = piece.row + dr;
       const col = piece.col + dc;
       if (row < 0 || row > 8 || col < 0 || col > 8) continue;
-      const target = boardPieces.find((p) => p.row === row && p.col === col);
+      const target = findPieceCoveringCell(boardPieces, row, col);
       if (!target || target.side === piece.side) continue;
-      immobilizedCells.add(cellKey(target.side, row, col));
+      if (isGiantPieceForEngine(target)) continue;
+      immobilizedCells.add(cellKey(target.side, target.row, target.col));
     }
   }
 
@@ -1219,6 +1281,7 @@ export function createSkillRuntimeView(position: AiBattlePosition): SkillRuntime
         : 'player';
     if (type !== 'poison_cell' && type !== 'poison') continue;
     if (row == null || col == null || remaining <= 0) continue;
+    if (anyGiantFootprintContainsCell(boardPieces, row, col)) continue;
     kingPoisonBlockedCells.add(cellKey(affectsSide, row, col));
   }
   for (const entry of state.board_hazards) {
@@ -1228,6 +1291,7 @@ export function createSkillRuntimeView(position: AiBattlePosition): SkillRuntime
     const remaining = asNumber(entry.remaining_turns ?? entry.remainingTurns) ?? 0;
     if (type !== 'rock_obstacle' && type !== 'pit_cell') continue;
     if (row == null || col == null || remaining <= 0) continue;
+    if (anyGiantFootprintContainsCell(boardPieces, row, col)) continue;
     rockObstacleCells.add(`${row}:${col}`);
   }
 
@@ -1241,10 +1305,12 @@ export function createSkillRuntimeView(position: AiBattlePosition): SkillRuntime
     const row = asNumber(entry.row);
     const col = asNumber(entry.col);
     if (row == null || col == null) continue;
+    if (cellTargetsGiantImmune(side, row, col)) continue;
     captureImmunityCells.add(cellKey(side, row, col));
   }
 
   for (const p of boardPieces) {
+    if (isGiantPieceForEngine(p)) continue;
     if (
       isYangBondProtectedFromCapture(boardPieces, p) ||
       isYinBondProtectedFromCapture(boardPieces, p)
@@ -1265,6 +1331,7 @@ export function createSkillRuntimeView(position: AiBattlePosition): SkillRuntime
         ? 'enemy'
         : 'player';
     if (row == null || col == null || remaining <= 0) continue;
+    if (anyGiantFootprintContainsCell(boardPieces, row, col)) continue;
     thornDropBlockedCells.add(cellKey(affectsSide, row, col));
   }
 
@@ -1304,6 +1371,7 @@ export function tickSkillStateDurations(position: AiBattlePosition) {
   state.movement_modifiers = tick(state.movement_modifiers);
   state.piece_statuses = tick(state.piece_statuses);
   state.piece_defenses = tick(state.piece_defenses);
+  stripSkillStateForGiantImmunity(state, piecesFromBoardState(position));
   writeSkillState(position, state);
 }
 
@@ -1322,11 +1390,14 @@ export function isPieceImmobilized(
   row: number,
   col: number,
 ): boolean {
-  const currentPiece = piecesFromBoardState(position).find(
-    (piece) => piece.side === side && piece.row === row && piece.col === col,
-  );
+  const boardPieces = piecesFromBoardState(position);
+  const currentPiece = findPieceCoveringCell(boardPieces, row, col);
+  if (currentPiece && currentPiece.side === side && isGiantPieceForEngine(currentPiece)) {
+    return false;
+  }
   if (
     currentPiece &&
+    currentPiece.side === side &&
     (toBasePieceCode(currentPiece.pieceCode) === 'OU' ||
       currentPiece.char === '王' ||
       currentPiece.char === '玉')
@@ -1370,8 +1441,11 @@ export function applyBoardHazardsOnLanding(input: {
     );
   });
   if (!lethal) return;
+  const landed = findPieceCoveringCell(input.pieces, input.movedTo.row, input.movedTo.col);
+  if (!landed || landed.side !== input.actorSide) return;
+  if (isGiantPieceForEngine(landed)) return;
   const idx = input.pieces.findIndex(
-    (p) => p.side === input.actorSide && p.row === input.movedTo.row && p.col === input.movedTo.col,
+    (p) => p.side === landed.side && p.row === landed.row && p.col === landed.col,
   );
   if (idx >= 0) {
     input.pieces.splice(idx, 1);
@@ -1421,6 +1495,30 @@ function applyExperimentMutantReverts(pieces: AiBoardPiece[]): void {
   }
 }
 
+/** 着手スキル発動検知用: 盤上駒の multiset 署名（並び替えで安定） */
+function boardSignatureForSkillFx(pieces: AiBoardPiece[]): string {
+  return [...pieces]
+    .map(
+      (p) =>
+        `${p.side}:${p.row}:${p.col}:${String(p.char)}:${String(p.pieceCode ?? '')}:${
+          p.promoted ? 1 : 0
+        }`,
+    )
+    .sort()
+    .join(';');
+}
+
+function stableHandsStringForSkillFx(position: AiBattlePosition): string {
+  const enc = (side: 'player' | 'enemy'): string => {
+    const bag = (position.hands?.[side] ?? {}) as Record<string, unknown>;
+    return Object.keys(bag)
+      .sort()
+      .map((k) => `${k}:${String(bag[k])}`)
+      .join(',');
+  };
+  return `${enc('player')}|${enc('enemy')}`;
+}
+
 export function applyMoveSkillEffects(input: {
   position: AiBattlePosition;
   move: AiBattleMove;
@@ -1428,7 +1526,7 @@ export function applyMoveSkillEffects(input: {
   movedPiece: AiBoardPiece | null;
   pieces: AiBoardPiece[];
   didCapture: boolean;
-}) {
+}): { moveSkillEffectTriggered: boolean } {
   const movedCodeRaw = toBasePieceCode(input.move.pieceCode);
   const movedCode = normalizeSkillPieceCode(movedCodeRaw);
   const movedPiece = input.movedPiece;
@@ -1447,7 +1545,11 @@ export function applyMoveSkillEffects(input: {
     const eff = applyYangAllySkillProcMultiplier(p, yangSkillProcFactor);
     return Math.random() <= eff;
   };
-  if (!movedCode) return;
+  if (!movedCode) return { moveSkillEffectTriggered: false };
+  let moveSkillEffectTriggered = false;
+  const markMoveSkillFx = (): void => {
+    moveSkillEffectTriggered = true;
+  };
   const boardState = asRecord(input.position.boardState) ?? {};
   const defsRoot = asRecord(boardState.skill_definitions_v2 ?? boardState.skillDefinitionsV2);
   const defs = asArray(defsRoot?.definitions);
@@ -1528,19 +1630,23 @@ export function applyMoveSkillEffects(input: {
     const procChance = 0.2;
     const triggered = skillProcRoll(procChance);
     if (triggered) {
-      removeRandomAdjacentEnemyPiece({
-        pieces: input.pieces,
-        center: input.movedPiece,
-        actorSide: input.actorSide,
-      });
+      if (
+        removeRandomAdjacentEnemyPiece({
+          pieces: input.pieces,
+          center: input.movedPiece,
+          actorSide: input.actorSide,
+        })
+      ) {
+        markMoveSkillFx();
+      }
     }
   }
   // 火: 移動時20%で敵の手持ち駒を1つ消滅。
   if (isFireMover && input.move.fromRow != null && input.move.fromCol != null) {
     const procChance = 0.2;
     const triggered = skillProcRoll(procChance);
-    if (triggered) {
-      decrementFirstHandPiece(input.position, sideOpposite(input.actorSide));
+    if (triggered && decrementFirstHandPiece(input.position, sideOpposite(input.actorSide))) {
+      markMoveSkillFx();
     }
   }
   // 宝: 移動時20%で手持ちに金・銀・銅のいずれか1つを加える。
@@ -1553,6 +1659,7 @@ export function applyMoveSkillEffects(input: {
       grantedCode = TREASURE_REWARD_CODES[idx] ?? null;
       if (grantedCode) {
         incrementHand(input.position, input.actorSide, grantedCode, 1);
+        markMoveSkillFx();
       }
     }
     if (typeof __DEV__ !== 'undefined' && __DEV__) {
@@ -1574,42 +1681,59 @@ export function applyMoveSkillEffects(input: {
     input.move.fromCol != null &&
     input.movedPiece
   ) {
-    pushAdjacentEnemyPiecesOneStep({
-      pieces: input.pieces,
-      center: input.movedPiece,
-      actorSide: input.actorSide,
-    });
+    if (
+      pushAdjacentEnemyPiecesOneStep({
+        pieces: input.pieces,
+        center: input.movedPiece,
+        actorSide: input.actorSide,
+      }) > 0
+    ) {
+      markMoveSkillFx();
+    }
   }
   // 鉄: 水と同様、移動時に周囲8マスの敵駒を1マス押し流す。
   if (isIronMover && input.move.fromRow != null && input.move.fromCol != null && input.movedPiece) {
-    pushAdjacentEnemyPiecesOneStep({
-      pieces: input.pieces,
-      center: input.movedPiece,
-      actorSide: input.actorSide,
-    });
+    if (
+      pushAdjacentEnemyPiecesOneStep({
+        pieces: input.pieces,
+        center: input.movedPiece,
+        actorSide: input.actorSide,
+      }) > 0
+    ) {
+      markMoveSkillFx();
+    }
   }
   // 波: 移動時に周囲8マスの敵駒を1マス押し流す。
   if (isWaveMover && input.move.fromRow != null && input.move.fromCol != null && input.movedPiece) {
-    pushAdjacentEnemyPiecesOneStep({
-      pieces: input.pieces,
-      center: input.movedPiece,
-      actorSide: input.actorSide,
-    });
+    if (
+      pushAdjacentEnemyPiecesOneStep({
+        pieces: input.pieces,
+        center: input.movedPiece,
+        actorSide: input.actorSide,
+      }) > 0
+    ) {
+      markMoveSkillFx();
+    }
   }
   // 砂: 移動時、隣接する味方の砂駒があれば同じ方向へ連携移動する。
   if (isSandMover && input.move.fromRow != null && input.move.fromCol != null && input.movedPiece) {
     const deltaRow = input.move.toRow - input.move.fromRow;
     const deltaCol = input.move.toCol - input.move.fromCol;
-    moveAdjacentAllySandWithLeader({
-      pieces: input.pieces,
-      center: input.movedPiece,
-      actorSide: input.actorSide,
-      deltaRow,
-      deltaCol,
-    });
+    if (
+      moveAdjacentAllySandWithLeader({
+        pieces: input.pieces,
+        center: input.movedPiece,
+        actorSide: input.actorSide,
+        deltaRow,
+        deltaCol,
+      }) > 0
+    ) {
+      markMoveSkillFx();
+    }
   }
   // 舟: 移動時、真後ろ1マスにいる味方駒（玉除く）を同じベクトルで引きずる。
   if (isBoatMover && input.move.fromRow != null && input.move.fromCol != null && input.movedPiece) {
+    const sigBoat = boardSignatureForSkillFx(input.pieces);
     moveAllyBehindBoatOneStep({
       pieces: input.pieces,
       actorSide: input.actorSide,
@@ -1618,14 +1742,21 @@ export function applyMoveSkillEffects(input: {
       toRow: input.move.toRow,
       toCol: input.move.toCol,
     });
+    if (boardSignatureForSkillFx(input.pieces) !== sigBoat) {
+      markMoveSkillFx();
+    }
   }
   // 禽: 移動後、真後ろ1マスが空いていればランダムな味方駒（玉除く）をそのマスへ。
   if (isBirdMover && input.move.fromRow != null && input.move.fromCol != null && input.movedPiece) {
+    const sigBird = boardSignatureForSkillFx(input.pieces);
     moveRandomAllyToCellBehindBird({
       pieces: input.pieces,
       actorSide: input.actorSide,
       movedBird: input.movedPiece,
     });
+    if (boardSignatureForSkillFx(input.pieces) !== sigBird) {
+      markMoveSkillFx();
+    }
   }
   // 悟: 移動後にプレイヤーが選んだ敵駒（王・玉以外）を2ターン行動不能（stun）。
   {
@@ -1646,6 +1777,7 @@ export function applyMoveSkillEffects(input: {
           status_type: 'stun',
           remaining_turns: 2,
         });
+        markMoveSkillFx();
       }
     }
   }
@@ -1668,6 +1800,7 @@ export function applyMoveSkillEffects(input: {
           mode: 'immunity',
           remaining_turns: 2,
         });
+        markMoveSkillFx();
       }
     }
   }
@@ -1679,22 +1812,30 @@ export function applyMoveSkillEffects(input: {
     input.move.notation !== 'house_skill_only' &&
     !input.move.dropPieceCode
   ) {
-    moveAdjacentAllyGearFollowLeader({
-      pieces: input.pieces,
-      actorSide: input.actorSide,
-      fromRow: input.move.fromRow,
-      fromCol: input.move.fromCol,
-      toRow: input.move.toRow,
-      toCol: input.move.toCol,
-    });
+    if (
+      moveAdjacentAllyGearFollowLeader({
+        pieces: input.pieces,
+        actorSide: input.actorSide,
+        fromRow: input.move.fromRow,
+        fromCol: input.move.fromCol,
+        toRow: input.move.toRow,
+        toCol: input.move.toCol,
+      }) > 0
+    ) {
+      markMoveSkillFx();
+    }
   }
   // 風: 前後左右1マスの敵駒を、その方向の行けるところまで押し流す。
   if (isWindMover && input.move.fromRow != null && input.move.fromCol != null && input.movedPiece) {
-    pushOrthogonalAdjacentEnemiesToEdge({
-      pieces: input.pieces,
-      center: input.movedPiece,
-      actorSide: input.actorSide,
-    });
+    if (
+      pushOrthogonalAdjacentEnemiesToEdge({
+        pieces: input.pieces,
+        center: input.movedPiece,
+        actorSide: input.actorSide,
+      }) > 0
+    ) {
+      markMoveSkillFx();
+    }
   }
   // 魚: 移動時30%で周囲の敵駒1体（玉除く）を3ターン行動不能（stun）。
   if (isFishMover && input.move.fromRow != null && input.move.fromCol != null && movedPiece) {
@@ -1720,6 +1861,7 @@ export function applyMoveSkillEffects(input: {
           status_type: 'stun',
           remaining_turns: 3,
         });
+        markMoveSkillFx();
       }
     }
   }
@@ -1728,13 +1870,16 @@ export function applyMoveSkillEffects(input: {
     const procChance = 0.3;
     const triggered = skillProcRoll(procChance);
     if (triggered) {
-      summonRandomAdjacentEmptyPiece({
+      const sum = summonRandomAdjacentEmptyPiece({
         pieces: input.pieces,
         center: input.movedPiece,
         actorSide: input.actorSide,
         summonCode: 'MOSS',
         summonChar: '苔',
       });
+      if (sum.summoned) {
+        markMoveSkillFx();
+      }
     }
   }
   // 虹/青鬼: 周囲8マスの敵駒の移動範囲を上下左右1マスに制限する。
@@ -1744,6 +1889,7 @@ export function applyMoveSkillEffects(input: {
     input.move.fromCol != null &&
     input.movedPiece
   ) {
+    let rainbowMods = 0;
     for (let dr = -1; dr <= 1; dr += 1) {
       for (let dc = -1; dc <= 1; dc += 1) {
         if (dr === 0 && dc === 0) continue;
@@ -1759,7 +1905,11 @@ export function applyMoveSkillEffects(input: {
           movement_rule: 'orthogonal_step_only',
           remaining_turns: 2,
         });
+        rainbowMods += 1;
       }
+    }
+    if (rainbowMods > 0) {
+      markMoveSkillFx();
     }
   }
   // 沼: 周囲8マスの敵駒の移動範囲を上下1マスに制限する。
@@ -1798,6 +1948,9 @@ export function applyMoveSkillEffects(input: {
         remainingTurns: affectedCount > 0 ? 2 : 0,
       });
     }
+    if (affectedCount > 0) {
+      markMoveSkillFx();
+    }
   }
   // 毒: 移動前マスを4ターンの毒マスにする（敵が踏むと消滅）。
   if (isPoisonMover && input.move.fromRow != null && input.move.fromCol != null) {
@@ -1809,6 +1962,7 @@ export function applyMoveSkillEffects(input: {
       affects_side: sideOpposite(input.actorSide),
       remaining_turns: durationTurns,
     });
+    markMoveSkillFx();
   }
   // 滝: 移動時20%で周囲8マスの敵駒をすべて相手の手駒へ移動する。
   if (
@@ -1844,6 +1998,9 @@ export function applyMoveSkillEffects(input: {
         movedCount: movedToHands.length,
         movedPieces: movedToHands,
       });
+      if (movedToHands.length > 0) {
+        markMoveSkillFx();
+      }
     }
   }
   // あ: 周囲8マスの敵駒を「歩」に変化させる（王/玉は除外）。
@@ -1869,6 +2026,7 @@ export function applyMoveSkillEffects(input: {
     const uniqueCenters = triggerCenters.filter(
       (piece, idx, arr) => arr.findIndex((p) => centerKey(p) === centerKey(piece)) === idx,
     );
+    let aSkillTransformedAny = false;
     for (const center of uniqueCenters) {
       for (let dr = -1; dr <= 1; dr += 1) {
         for (let dc = -1; dc <= 1; dc += 1) {
@@ -1887,6 +2045,7 @@ export function applyMoveSkillEffects(input: {
           target.pieceCode = 'FU';
           target.char = '歩';
           target.promoted = false;
+          aSkillTransformedAny = true;
           const existingIdx = state.piece_statuses.findIndex((entry) => {
             const statusType = asString(entry.status_type ?? entry.statusType) ?? '';
             const side = (asString(entry.side) ?? 'player') === 'enemy' ? 'enemy' : 'player';
@@ -1918,9 +2077,13 @@ export function applyMoveSkillEffects(input: {
         }
       }
     }
+    if (aSkillTransformedAny) {
+      markMoveSkillFx();
+    }
   }
   // 実: 移動後、周囲 8 マスの敵駒を「異」に変える（王・玉除く・既に異は対象外）。
   if (isExperimentMover && movedPiece) {
+    let experimentMutatedAny = false;
     for (let dr = -1; dr <= 1; dr += 1) {
       for (let dc = -1; dc <= 1; dc += 1) {
         if (dr === 0 && dc === 0) continue;
@@ -1948,7 +2111,11 @@ export function applyMoveSkillEffects(input: {
         target.mutantRevertChar = revertChar;
         target.mutantRevertPromoted = revertPromoted;
         target.mutantRevertImageSignedUrl = revertImage;
+        experimentMutatedAny = true;
       }
+    }
+    if (experimentMutatedAny) {
+      markMoveSkillFx();
     }
   }
   // 錫: 移動時10%で周囲8マスの敵駒（玉除く）を2ターン行動不能（stun）。
@@ -1956,6 +2123,7 @@ export function applyMoveSkillEffects(input: {
     const procChance = 0.1;
     const triggered = skillProcRoll(procChance);
     if (triggered) {
+      let tinStuns = 0;
       for (let dr = -1; dr <= 1; dr += 1) {
         for (let dc = -1; dc <= 1; dc += 1) {
           if (dr === 0 && dc === 0) continue;
@@ -1978,7 +2146,11 @@ export function applyMoveSkillEffects(input: {
             status_type: 'stun',
             remaining_turns: 2,
           });
+          tinStuns += 1;
         }
+      }
+      if (tinStuns > 0) {
+        markMoveSkillFx();
       }
     }
   }
@@ -2006,6 +2178,7 @@ export function applyMoveSkillEffects(input: {
           status_type: 'stun',
           remaining_turns: 3,
         });
+        markMoveSkillFx();
       }
     }
   }
@@ -2021,6 +2194,9 @@ export function applyMoveSkillEffects(input: {
         if (!removed) break;
         removedHandCodes.push(removed);
       }
+    }
+    if (removedHandCodes.length > 0) {
+      markMoveSkillFx();
     }
   }
   // 氷: 移動時30%で周囲8マスの敵駒（玉除く）1体を2ターン行動不能（stun）。
@@ -2047,6 +2223,7 @@ export function applyMoveSkillEffects(input: {
           status_type: 'stun',
           remaining_turns: 2,
         });
+        markMoveSkillFx();
       }
     }
   }
@@ -2055,7 +2232,11 @@ export function applyMoveSkillEffects(input: {
     const procChance = 0.2;
     const triggered = skillProcRoll(procChance);
     if (triggered) {
+      const handsBeforeSnow = stableHandsStringForSkillFx(input.position);
       incrementHand(input.position, input.actorSide, 'ICE', 1);
+      if (stableHandsStringForSkillFx(input.position) !== handsBeforeSnow) {
+        markMoveSkillFx();
+      }
     }
   }
   // 時: skill 発動時（time_skill_only/time_skill）に周囲8マスの敵駒（玉除く）を4ターン行動不能。
@@ -2077,6 +2258,7 @@ export function applyMoveSkillEffects(input: {
           ) ?? null)
         : null);
     if (center) {
+      let timeStuns = 0;
       for (let dr = -1; dr <= 1; dr += 1) {
         for (let dc = -1; dc <= 1; dc += 1) {
           if (dr === 0 && dc === 0) continue;
@@ -2094,7 +2276,11 @@ export function applyMoveSkillEffects(input: {
             status_type: 'stun',
             remaining_turns: 4,
           });
+          timeStuns += 1;
         }
+      }
+      if (timeStuns > 0) {
+        markMoveSkillFx();
       }
     }
   }
@@ -2106,10 +2292,14 @@ export function applyMoveSkillEffects(input: {
       return CHAR_TO_CODE[p.char] === 'PEOPLE';
     });
     if (people.length < 5) {
+      const sigHouse = boardSignatureForSkillFx(input.pieces);
       summonPeopleInHomeRandomEmpty({
         pieces: input.pieces,
         actorSide: input.actorSide,
       });
+      if (boardSignatureForSkillFx(input.pieces) !== sigHouse) {
+        markMoveSkillFx();
+      }
     }
   }
   // 木: 移動時10%で周囲8マスのランダム1マスに木を召喚。
@@ -2117,13 +2307,16 @@ export function applyMoveSkillEffects(input: {
     const procChance = 0.1;
     const triggered = skillProcRoll(procChance);
     if (triggered) {
-      summonRandomAdjacentEmptyPiece({
+      const wSum = summonRandomAdjacentEmptyPiece({
         pieces: input.pieces,
         center: input.movedPiece,
         actorSide: input.actorSide,
         summonCode: 'MOK',
         summonChar: '木',
       });
+      if (wSum.summoned) {
+        markMoveSkillFx();
+      }
     }
   }
   // 葉: 移動時10%で周囲8マスのランダム1マスに葉を召喚。
@@ -2131,13 +2324,16 @@ export function applyMoveSkillEffects(input: {
     const procChance = 0.1;
     const triggered = skillProcRoll(procChance);
     if (triggered) {
-      summonRandomAdjacentEmptyPiece({
+      const lSum = summonRandomAdjacentEmptyPiece({
         pieces: input.pieces,
         center: input.movedPiece,
         actorSide: input.actorSide,
         summonCode: 'HAA',
         summonChar: '葉',
       });
+      if (lSum.summoned) {
+        markMoveSkillFx();
+      }
     }
   }
   // 犇: 移動時10%で前後左右4マスの空きマスに犇を召喚。
@@ -2164,6 +2360,9 @@ export function applyMoveSkillEffects(input: {
       summonedCount: summoned.length,
       summoned,
     });
+    if (summoned.length > 0) {
+      markMoveSkillFx();
+    }
   }
   // 轟: 移動時、左右1マスの敵駒を盤面のランダム空きマスへ飛ばす。
   if (
@@ -2184,6 +2383,9 @@ export function applyMoveSkillEffects(input: {
       at: [input.movedPiece.row, input.movedPiece.col],
       warpedCount: warped,
     });
+    if (warped > 0) {
+      markMoveSkillFx();
+    }
   }
   // 赤鬼: 移動時、左右の敵駒を1マス遠ざける + 周囲ランダム1マスを2ターンのバツマスにする。
   if (
@@ -2192,18 +2394,21 @@ export function applyMoveSkillEffects(input: {
     input.move.fromCol != null &&
     input.movedPiece
   ) {
-    pushHorizontalAdjacentEnemiesOneStepAway({
+    const redPushed = pushHorizontalAdjacentEnemiesOneStepAway({
       pieces: input.pieces,
       center: input.movedPiece,
       actorSide: input.actorSide,
     });
-    addRandomAdjacentHazard({
+    const redHazard = addRandomAdjacentHazard({
       state,
       center: input.movedPiece,
       hazardType: 'pit_cell',
       affectsSide: sideOpposite(input.actorSide),
       durationTurns: 2,
     });
+    if (redPushed > 0 || redHazard) {
+      markMoveSkillFx();
+    }
   }
   // 黒鬼: 移動時、相手側3行のランダム3マスを2ターン毒マスにする。
   if (
@@ -2212,13 +2417,17 @@ export function applyMoveSkillEffects(input: {
     input.move.fromCol != null &&
     input.movedPiece
   ) {
-    addRandomOpponentCampPoisonCells({
-      state,
-      pieces: input.pieces,
-      actorSide: input.actorSide,
-      count: 3,
-      durationTurns: 2,
-    });
+    if (
+      addRandomOpponentCampPoisonCells({
+        state,
+        pieces: input.pieces,
+        actorSide: input.actorSide,
+        count: 3,
+        durationTurns: 2,
+      }) > 0
+    ) {
+      markMoveSkillFx();
+    }
   }
   // 魔: 移動時10%で周囲8マスの敵駒を最大2体消滅。
   if (
@@ -2228,12 +2437,15 @@ export function applyMoveSkillEffects(input: {
     input.movedPiece
   ) {
     if (skillProcRoll(0.1)) {
-      removeUpToRandomAdjacentEnemyPieces({
+      const demonRemoved = removeUpToRandomAdjacentEnemyPieces({
         pieces: input.pieces,
         center: input.movedPiece,
         actorSide: input.actorSide,
         maxRemove: 2,
       });
+      if (demonRemoved > 0) {
+        markMoveSkillFx();
+      }
     }
   }
   // 辰神（辰）: 移動時10%で周囲8マスの敵駒を1体消滅（玉除く）。
@@ -2244,16 +2456,20 @@ export function applyMoveSkillEffects(input: {
     input.movedPiece
   ) {
     if (skillProcRoll(0.1)) {
-      removeUpToRandomAdjacentEnemyPieces({
+      const tatsuRemoved = removeUpToRandomAdjacentEnemyPieces({
         pieces: input.pieces,
         center: input.movedPiece,
         actorSide: input.actorSide,
         maxRemove: 1,
       });
+      if (tatsuRemoved > 0) {
+        markMoveSkillFx();
+      }
     }
   }
   // 闇: 周囲8マスの敵を闇で覆う（移動不能・捕獲不可）。
   if (isDarkMover && input.move.fromRow != null && input.move.fromCol != null && input.movedPiece) {
+    let darkApplied = 0;
     for (let dr = -1; dr <= 1; dr += 1) {
       for (let dc = -1; dc <= 1; dc += 1) {
         if (dr === 0 && dc === 0) continue;
@@ -2269,7 +2485,11 @@ export function applyMoveSkillEffects(input: {
           status_type: 'dark_blind',
           remaining_turns: 2,
         });
+        darkApplied += 1;
       }
+    }
+    if (darkApplied > 0) {
+      markMoveSkillFx();
     }
   }
   // 牢・柵: 移動時、盤上の敵駒からランダムで1体（玉除く）を2ターン行動不能（鎖表示用 status）。
@@ -2319,6 +2539,7 @@ export function applyMoveSkillEffects(input: {
         status_type: 'prison_fence_stun',
         remaining_turns: 2,
       });
+      markMoveSkillFx();
       if (typeof __DEV__ !== 'undefined' && __DEV__) {
         console.info('[prison-fence-skill-debug]', {
           moveCount: input.position.moveCount,
@@ -2415,6 +2636,9 @@ export function applyMoveSkillEffects(input: {
         summonCol,
       });
     }
+    if (summoned) {
+      markMoveSkillFx();
+    }
   }
   // K 博士: 移動・打ち後 40% で周囲 8 マスの空き 1 マスに「実」を召喚（味方として出現）。
   if (isKbossMover && movedPiece) {
@@ -2430,6 +2654,9 @@ export function applyMoveSkillEffects(input: {
         summonCode,
         summonChar: '実',
       });
+      if (sum.summoned) {
+        markMoveSkillFx();
+      }
       if (sum.summoned && sum.row != null && sum.col != null && template?.imageSignedUrl) {
         const placed = input.pieces.find((p) => p.row === sum.row && p.col === sum.col);
         if (placed) placed.imageSignedUrl = template.imageSignedUrl;
@@ -2440,6 +2667,7 @@ export function applyMoveSkillEffects(input: {
   if (isOreMover && input.move.fromRow != null && input.move.fromCol != null && movedPiece) {
     const procChance = 0.2;
     const triggered = skillProcRoll(procChance);
+    let transformed = false;
     if (triggered) {
       const alliesFu = input.pieces.filter((piece) => {
         if (piece.side !== input.actorSide) return false;
@@ -2453,13 +2681,18 @@ export function applyMoveSkillEffects(input: {
         target.pieceCode = picked;
         target.char = picked === 'KI' ? '金' : picked === 'GI' ? '銀' : '銅';
         target.promoted = false;
+        transformed = true;
       }
+    }
+    if (transformed) {
+      markMoveSkillFx();
     }
   }
   // 墓: 移動時20%で周囲8マスの空きマス1つに霊を召喚。
   if (isGraveMover && input.move.fromRow != null && input.move.fromCol != null && movedPiece) {
     const procChance = 0.2;
     const triggered = skillProcRoll(procChance);
+    let summonedSpirit = false;
     if (triggered) {
       const around: { row: number; col: number }[] = [];
       for (let dr = -1; dr <= 1; dr += 1) {
@@ -2483,7 +2716,11 @@ export function applyMoveSkillEffects(input: {
           promoted: false,
           imageSignedUrl: null,
         });
+        summonedSpirit = true;
       }
+    }
+    if (summonedSpirit) {
+      markMoveSkillFx();
     }
   }
   // 岩: 移動時、左右1マスに2ターン持続する岩障害物を召喚。
@@ -2517,9 +2754,13 @@ export function applyMoveSkillEffects(input: {
         summoned,
       });
     }
+    if (summoned.length > 0) {
+      markMoveSkillFx();
+    }
   }
   // 鬱: 移動後、左右の空きマスを2ターン持続する侵入菌糸（×マス）にする。
   if (isDepressionMover && input.move.fromRow != null && input.move.fromCol != null && movedPiece) {
+    let depressionHazards = 0;
     for (const dc of [-1, 1] as const) {
       const row = movedPiece.row;
       const col = movedPiece.col + dc;
@@ -2538,10 +2779,15 @@ export function applyMoveSkillEffects(input: {
         affects_side: sideOpposite(input.actorSide),
         remaining_turns: 2,
       });
+      depressionHazards += 1;
+    }
+    if (depressionHazards > 0) {
+      markMoveSkillFx();
     }
   }
   // 薔: 移動時、上下1マスを2ターン持続する茨化マスにする（相手はそのマスへ打てない）。
   if (isRoseMover && input.move.fromRow != null && input.move.fromCol != null && movedPiece) {
+    let roseHazards = 0;
     for (const dr of [-1, 1] as const) {
       const row = movedPiece.row + dr;
       const col = movedPiece.col;
@@ -2560,6 +2806,10 @@ export function applyMoveSkillEffects(input: {
         affects_side: sideOpposite(input.actorSide),
         remaining_turns: 2,
       });
+      roseHazards += 1;
+    }
+    if (roseHazards > 0) {
+      markMoveSkillFx();
     }
   }
   // 菊: 移動後、周囲8マスにいる味方駒1体（玉除く）に2ターンの復活効果。実装は apply-move（捕獲時に元の陣営の手駒へ）。
@@ -2581,6 +2831,7 @@ export function applyMoveSkillEffects(input: {
         if (!p) continue;
         const b = toBasePieceCode(p.pieceCode);
         if (b === 'OU' || p.char === '王' || p.char === '玉') continue;
+        if (isGiantPieceForEngine(p)) continue;
         allies.push(p);
       }
     }
@@ -2603,13 +2854,15 @@ export function applyMoveSkillEffects(input: {
         status_type: 'chrysanthemum_revival',
         remaining_turns: 2,
       });
+      markMoveSkillFx();
     }
   }
   const skipGenericAdjacentSummon = isWoodMover || isLeafMover || isBullMover;
   const skipGenericAdjacentRemove = isDemonMover || isTatsuGodMover;
   if (defs.length === 0) {
+    stripSkillStateForGiantImmunity(state, input.pieces);
     writeSkillState(input.position, state);
-    return;
+    return { moveSkillEffectTriggered };
   }
 
   const matchedDefs = defs.filter((raw) => {
@@ -2703,6 +2956,14 @@ export function applyMoveSkillEffects(input: {
     }
     if (blockedByCondition) continue;
     const effects = asArray(def.effects);
+    const v2FxSnapPieces = boardSignatureForSkillFx(input.pieces);
+    const v2FxSnapHands = stableHandsStringForSkillFx(input.position);
+    const v2FxSnapLens = {
+      ps: state.piece_statuses.length,
+      mm: state.movement_modifiers.length,
+      bh: state.board_hazards.length,
+      pd: state.piece_defenses.length,
+    };
     for (const rawEffect of effects) {
       const effect = asRecord(rawEffect);
       if (!effect) continue;
@@ -3144,6 +3405,7 @@ export function applyMoveSkillEffects(input: {
             if (p.side === input.actorSide) return false;
             if (p.char === '王' || p.char === '玉' || toBasePieceCode(p.pieceCode) === 'OU')
               return false;
+            if (isGiantPieceForEngine(p)) return false;
             return (
               Math.abs(p.row - input.movedPiece!.row) <= 1 &&
               Math.abs(p.col - input.movedPiece!.col) <= 1
@@ -3197,6 +3459,7 @@ export function applyMoveSkillEffects(input: {
             }
             const armor = target.char === '鎧' || toBasePieceCode(target.pieceCode) === 'ARMOR';
             if (armor) continue;
+            if (isGiantPieceForEngine(target)) continue;
             const spirit =
               target.char === '霊' ||
               toBasePieceCode(target.pieceCode) === 'SPIRIT' ||
@@ -3244,6 +3507,7 @@ export function applyMoveSkillEffects(input: {
             ) {
               continue;
             }
+            if (isGiantPieceForEngine(target)) continue;
             input.pieces.splice(idx, 1);
           }
         }
@@ -3280,6 +3544,7 @@ export function applyMoveSkillEffects(input: {
           }
           const armor = target.char === '鎧' || toBasePieceCode(target.pieceCode) === 'ARMOR';
           if (armor) continue;
+          if (isGiantPieceForEngine(target)) continue;
           const spirit =
             target.char === '霊' ||
             toBasePieceCode(target.pieceCode) === 'SPIRIT' ||
@@ -3317,6 +3582,7 @@ export function applyMoveSkillEffects(input: {
             if (p.side === input.actorSide) return false;
             if (p.char === '王' || p.char === '玉' || toBasePieceCode(p.pieceCode) === 'OU')
               return false;
+            if (isGiantPieceForEngine(p)) return false;
             return (
               Math.abs(p.row - input.movedPiece!.row) <= 1 &&
               Math.abs(p.col - input.movedPiece!.col) <= 1
@@ -3339,6 +3605,7 @@ export function applyMoveSkillEffects(input: {
 
       if (effectType === 'return_to_hand' && selector === 'self_piece') {
         if (!input.movedPiece) continue;
+        if (isGiantPieceForEngine(input.movedPiece)) continue;
         const handOwner = asString(params.handOwner) ?? 'self';
         const ownerSide: Side =
           handOwner === 'enemy' ? sideOpposite(input.actorSide) : input.actorSide;
@@ -3363,6 +3630,7 @@ export function applyMoveSkillEffects(input: {
           if (p.side === input.actorSide) return false;
           if (p.char === '王' || p.char === '玉' || toBasePieceCode(p.pieceCode) === 'OU')
             return false;
+          if (isGiantPieceForEngine(p)) return false;
           return (
             Math.abs(p.row - input.movedPiece!.row) <= 1 &&
             Math.abs(p.col - input.movedPiece!.col) <= 1
@@ -3381,6 +3649,7 @@ export function applyMoveSkillEffects(input: {
 
       if (effectType === 'transform_piece' && selector === 'self_piece') {
         if (!input.movedPiece) continue;
+        if (isGiantPieceForEngine(input.movedPiece)) continue;
         const idx = input.pieces.findIndex(
           (p) =>
             p.side === input.actorSide &&
@@ -3408,6 +3677,7 @@ export function applyMoveSkillEffects(input: {
         for (let i = 0; i < input.pieces.length; i += 1) {
           const piece = input.pieces[i]!;
           if (piece.side !== input.actorSide) continue;
+          if (isGiantPieceForEngine(piece)) continue;
           if (fromPieceCode && toBasePieceCode(piece.pieceCode) !== fromPieceCode) continue;
           input.pieces[i] = {
             ...piece,
@@ -3421,6 +3691,7 @@ export function applyMoveSkillEffects(input: {
 
       if (effectType === 'defense_or_immunity' && selector === 'self_piece') {
         if (!input.movedPiece) continue;
+        if (isGiantPieceForEngine(input.movedPiece)) continue;
         const mode = asString(params.mode) ?? 'immunity';
         state.piece_defenses.push({
           row: input.movedPiece.row,
@@ -3443,6 +3714,7 @@ export function applyMoveSkillEffects(input: {
             if (row < 0 || row > 8 || col < 0 || col > 8) continue;
             const targetPiece = input.pieces.find((p) => p.row === row && p.col === col);
             if (!targetPiece || targetPiece.side !== input.actorSide) continue;
+            if (isGiantPieceForEngine(targetPiece)) continue;
             state.piece_defenses.push({
               row,
               col,
@@ -3457,6 +3729,7 @@ export function applyMoveSkillEffects(input: {
 
       if (effectType === 'extra_action' && selector === 'self_piece') {
         if (!input.movedPiece) continue;
+        if (isGiantPieceForEngine(input.movedPiece)) continue;
         state.piece_statuses.push({
           row: input.movedPiece.row,
           col: input.movedPiece.col,
@@ -3479,6 +3752,7 @@ export function applyMoveSkillEffects(input: {
 
       if (effectType === 'inherit_ability' && selector === 'self_piece') {
         if (!input.movedPiece) continue;
+        if (isGiantPieceForEngine(input.movedPiece)) continue;
         state.piece_statuses.push({
           row: input.movedPiece.row,
           col: input.movedPiece.col,
@@ -3491,6 +3765,7 @@ export function applyMoveSkillEffects(input: {
 
       if (effectType === 'substitute' && selector === 'self_piece') {
         if (!input.movedPiece) continue;
+        if (isGiantPieceForEngine(input.movedPiece)) continue;
         state.piece_defenses.push({
           row: input.movedPiece.row,
           col: input.movedPiece.col,
@@ -3503,6 +3778,7 @@ export function applyMoveSkillEffects(input: {
 
       if (effectType === 'revive' && selector === 'adjacent_ally') {
         if (!input.movedPiece) continue;
+        if (isGiantPieceForEngine(input.movedPiece)) continue;
         const reviveDuration = Math.max(2, duration);
         for (let dr = -1; dr <= 1; dr += 1) {
           for (let dc = -1; dc <= 1; dc += 1) {
@@ -3529,17 +3805,6 @@ export function applyMoveSkillEffects(input: {
         const hook = asString(params.hook) ?? asString(params.hookName) ?? '';
         if (!hook) continue;
 
-        if (hook === 'reflect_until_blocked') {
-          state.piece_statuses.push({
-            row: input.movedPiece.row,
-            col: input.movedPiece.col,
-            side: input.actorSide,
-            status_type: 'reflect_until_blocked',
-            remaining_turns: duration,
-          });
-          continue;
-        }
-
         if (hook === 'bomb_explosion_push') {
           for (let dr = -1; dr <= 1; dr += 1) {
             for (let dc = -1; dc <= 1; dc += 1) {
@@ -3551,6 +3816,7 @@ export function applyMoveSkillEffects(input: {
               if (idx < 0) continue;
               const target = input.pieces[idx]!;
               if (target.side === input.actorSide) continue;
+              if (isGiantPieceForEngine(target)) continue;
               const pushRow = row + dr;
               const pushCol = col + dc;
               if (pushRow < 0 || pushRow > 8 || pushCol < 0 || pushCol > 8) continue;
@@ -3558,6 +3824,25 @@ export function applyMoveSkillEffects(input: {
               input.pieces[idx] = { ...target, row: pushRow, col: pushCol };
             }
           }
+          continue;
+        }
+
+        if (
+          isGiantPieceForEngine(input.movedPiece) &&
+          hook !== 'safe_room_king_relocation' &&
+          hook !== 'escape_king_follow'
+        ) {
+          continue;
+        }
+
+        if (hook === 'reflect_until_blocked') {
+          state.piece_statuses.push({
+            row: input.movedPiece.row,
+            col: input.movedPiece.col,
+            side: input.actorSide,
+            status_type: 'reflect_until_blocked',
+            remaining_turns: duration,
+          });
           continue;
         }
 
@@ -3628,8 +3913,20 @@ export function applyMoveSkillEffects(input: {
         decrementFirstHandPiece(input.position, sideOpposite(input.actorSide));
       }
     }
+    if (
+      boardSignatureForSkillFx(input.pieces) !== v2FxSnapPieces ||
+      stableHandsStringForSkillFx(input.position) !== v2FxSnapHands ||
+      state.piece_statuses.length !== v2FxSnapLens.ps ||
+      state.movement_modifiers.length !== v2FxSnapLens.mm ||
+      state.board_hazards.length !== v2FxSnapLens.bh ||
+      state.piece_defenses.length !== v2FxSnapLens.pd
+    ) {
+      markMoveSkillFx();
+    }
   }
 
   applyExperimentMutantReverts(input.pieces);
+  stripSkillStateForGiantImmunity(state, input.pieces);
   writeSkillState(input.position, state);
+  return { moveSkillEffectTriggered };
 }

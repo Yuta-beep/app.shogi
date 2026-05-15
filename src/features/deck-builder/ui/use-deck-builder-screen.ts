@@ -12,6 +12,7 @@ import { supabase } from '@/lib/supabase/supabase-client';
 import { getDeckBuilderPieceCost } from '@/features/deck-builder/lib/deck-builder-piece-cost';
 import { normalizeDeckBuilderPieceChar } from '@/features/deck-builder/lib/deck-builder-piece-char';
 import { CHAR_TO_CODE } from '@/features/stage-shogi/domain/piece-conversion';
+import { isBossPiece } from '@/features/deck-builder/lib/boss-pieces';
 
 type BoardPlacement = {
   row: number;
@@ -260,7 +261,7 @@ function isDeckAreaRow(row: number): boolean {
   return row >= DECK_ROW_OFFSET && row < BOARD_ROWS;
 }
 
-/** ステージ30系（K・実・異）はマイデッキ下段に配置不可 */
+/** ステージ30系（K・実・異）・鬼系・ボス専用駒はマイデッキ下段に配置不可 */
 export function isPieceBannedFromMyDeck(piece: OwnedPiece): boolean {
   const normalizedName = (piece.name ?? '').normalize('NFKC');
   const isOniBoss =
@@ -268,7 +269,13 @@ export function isPieceBannedFromMyDeck(piece: OwnedPiece): boolean {
     normalizedName === '赤鬼' ||
     normalizedName === '青鬼' ||
     normalizedName === '黒鬼';
-  return piece.char === 'K' || piece.char === '実' || piece.char === '異' || isOniBoss;
+  return (
+    piece.char === 'K' ||
+    piece.char === '実' ||
+    piece.char === '異' ||
+    isOniBoss ||
+    isBossPiece({ char: piece.char, name: piece.name })
+  );
 }
 
 function filterBannedPiecesOutOfDeckArea(placements: BoardPlacement[]): BoardPlacement[] {

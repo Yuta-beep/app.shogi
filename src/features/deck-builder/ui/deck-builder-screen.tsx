@@ -8,6 +8,7 @@ import { AppLoadingScreen } from '@/components/organism/app-loading-screen';
 import { BackButton } from '@/components/atom/back-button';
 import { homeAssets } from '@/constants/home-assets';
 import { UiScreenShell } from '@/components/organism/ui-screen-shell';
+import { isBossPiece } from '@/features/deck-builder/lib/boss-pieces';
 import {
   isPieceBannedFromMyDeck,
   useDeckBuilderScreen,
@@ -76,7 +77,7 @@ export function DeckBuilderScreen({ mode = 'default' }: DeckBuilderScreenProps) 
     : '将棋盤に駒を配置して保存';
   const paletteDescription = isOnlineMatchSetup
     ? '所持駒からオンライン対戦用の並びを試せます。今はマイデッキ編集UIを流用しています。'
-    : '所持駒（駒を選択して盤面マスをタップで配置・未選択ならマスの駒を削除）。K・実・異はマイデッキに入れません。';
+    : '所持駒（駒を選択して盤面マスをタップで配置・未選択ならマスの駒を削除）。K・実・異・朧・死・魂・巨などはマイデッキに入れません。';
   const applyButtonTitle = isOnlineMatchSetup ? '対戦準備として反映' : '反映';
   const applyButtonSubtitle = isOnlineMatchSetup
     ? '現在の盤面をオンライン対戦の準備用として試す'
@@ -262,6 +263,7 @@ export function DeckBuilderScreen({ mode = 'default' }: DeckBuilderScreenProps) 
             const remaining = vm.getRemainingCount(piece);
             const outOfStock = remaining <= 0;
             const bannedFromDeck = isPieceBannedFromMyDeck(piece);
+            const bossPiece = isBossPiece({ char: piece.char, name: piece.name });
             const cost = getDeckBuilderPieceCost(piece.char, piece.name);
             const paletteKey =
               typeof piece.pieceId === 'number'
@@ -285,6 +287,11 @@ export function DeckBuilderScreen({ mode = 'default' }: DeckBuilderScreenProps) 
                     : ''
                 } ${outOfStock ? 'opacity-45' : ''} ${bannedFromDeck ? 'opacity-40' : ''}`}
               >
+                {bossPiece ? (
+                  <View className="absolute right-0 top-0 z-10 rounded bg-[#7f1d1d] px-1 py-0.5">
+                    <Text className="text-[8px] font-black text-[#fde68a]">ボス</Text>
+                  </View>
+                ) : null}
                 {resolveDeckPieceImageSource(piece) ? (
                   <Image
                     source={resolveDeckPieceImageSource(piece)!}
@@ -427,6 +434,14 @@ export function DeckBuilderScreen({ mode = 'default' }: DeckBuilderScreenProps) 
             <Text className="mt-1 text-base font-black text-[#2f1b14] text-center">
               {vm.selectedPiece?.name}
             </Text>
+            {vm.selectedPiece &&
+            isBossPiece({ char: vm.selectedPiece.char, name: vm.selectedPiece.name }) ? (
+              <View className="mt-2 rounded-lg bg-[#78350f] px-3 py-2">
+                <Text className="text-center text-xs font-black text-[#fde68a]">
+                  ボス駒のためマイデッキには配置できません
+                </Text>
+              </View>
+            ) : null}
             <Text className="mt-3 text-xs font-black text-[#7f1d1d]">【スキルの説明】</Text>
             <Text className="mt-1 text-sm text-[#1f2937]">{vm.selectedPiece?.desc}</Text>
             <Text className="mt-3 text-xs font-black text-[#7f1d1d]">【行動範囲】</Text>

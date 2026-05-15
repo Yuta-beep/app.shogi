@@ -31,6 +31,7 @@ import {
   resolveInspectSkillDescription,
   toUserFacingBattleError,
 } from '@/features/stage-shogi/ui/stage-shogi-screen.presenters';
+import { isGiantPieceForEngine } from '@/ai/engine/giant-piece';
 import {
   BOARD_SIZE,
   BoardPiece,
@@ -77,6 +78,12 @@ import {
 import { LoadGameLegalMovesUseCase } from '@/usecases/stage-battle/load-game-legal-moves-usecase';
 import { LoadGameStateUseCase } from '@/usecases/stage-battle/load-game-state-usecase';
 import { RequestAiMoveUseCase } from '@/usecases/stage-battle/request-ai-move-usecase';
+import { BATTLE_PIECE_EFFECT_SOUND_MODULES } from '@/constants/battle-piece-effect-sound-modules.generated';
+import {
+  playBattlePieceEffectSound,
+  playBattlePieceEffectSoundFirstMatch,
+  playSe,
+} from '@/lib/audio/audio-manager';
 
 export type PendingPromotion = {
   promoteMove: BattleMove;
@@ -88,6 +95,129 @@ export type PendingPromotion = {
 };
 
 export type TimeActionMode = 'skill' | 'normal';
+
+/** マスが変わる移動・打ち（同一マスでのスキルのみ着手は除く） */
+function isPhysicalBattleMove(move: BattleMove): boolean {
+  const notation = typeof move.notation === 'string' ? move.notation : '';
+  if (notation === 'time_skill_only' || notation === 'house_skill_only') return false;
+  if (move.dropPieceCode) return true;
+  if (move.fromRow == null || move.fromCol == null) return false;
+  return move.fromRow !== move.toRow || move.fromCol !== move.toCol;
+}
+
+function normalizeKanjiForBattleAudioKey(s: string): string {
+  const t = s.trim();
+  try {
+    return t.normalize('NFKC');
+  } catch {
+    return t;
+  }
+}
+
+function resolveKanjiForBattleMoveSound(
+  move: BattleMove,
+  actorSide: Side,
+  board: BoardPiece[],
+): string | null {
+  if (move.dropPieceCode) {
+    const code = move.dropPieceCode.toUpperCase();
+    const ch = pieceCharFromCode(code, actorSide, false);
+    return ch && ch !== '?' ? normalizeKanjiForBattleAudioKey(ch) : null;
+  }
+  // 着手後の盤では移動先に着手駒があることが多いので、移動元より先に解決する。
+  const atTo = findPieceAt(board, move.toRow, move.toCol);
+  if (atTo?.side === actorSide && atTo.char && !/^piece_/i.test(atTo.char)) {
+    return normalizeKanjiForBattleAudioKey(getDisplayChar(atTo));
+  }
+  if (move.fromRow != null && move.fromCol != null) {
+    const atFrom = findPieceAt(board, move.fromRow, move.fromCol);
+    if (atFrom?.side === actorSide && atFrom.char && !/^piece_/i.test(atFrom.char)) {
+      return normalizeKanjiForBattleAudioKey(getDisplayChar(atFrom));
+    }
+  }
+  const rawPc = (move.pieceCode ?? '').toUpperCase();
+  const base = (toAiBasePieceCode(move.pieceCode ?? null) ?? rawPc).toUpperCase();
+  const ch = pieceCharFromCode(base, actorSide, move.promote === true);
+  return ch && ch !== '?' ? normalizeKanjiForBattleAudioKey(ch) : null;
+}
+
+function pieceDefForBattleAudio(
+  move: BattleMove,
+  kanji: string | null,
+  pieceDefsByCode: Record<string, PieceCatalogItem>,
+  pieceDefsByChar: Record<string, PieceCatalogItem>,
+  promotedPieceDefsByCode: Record<string, PieceCatalogItem>,
+): PieceCatalogItem | undefined {
+  const rawCode = (move.pieceCode ?? '').toUpperCase();
+  const baseRaw = toAiBasePieceCode(move.pieceCode ?? null);
+  const base = (baseRaw ?? rawCode).toUpperCase();
+  if (move.promote) {
+    return (
+      promotedPieceDefsByCode[base] ??
+      promotedPieceDefsByCode[rawCode] ??
+      pieceDefsByCode[base] ??
+      pieceDefsByCode[rawCode]
+    );
+  }
+  if (kanji && pieceDefsByChar[kanji]) return pieceDefsByChar[kanji];
+  return pieceDefsByCode[base] ?? pieceDefsByCode[rawCode];
+}
+
+/** カタログにスキル文があっても、移動時は必ず「◯効果音」を鳴らす駒（マップにファイルがある場合のみ）。 */
+const PIECE_CHARS_ALWAYS_USE_EFFECT_SOUND_ON_MOVE = new Set<string>(['鳳']);
+
+function shouldUsePieceEffectInsteadOfGenericMove(
+  move: BattleMove,
+  kanji: string | null,
+  pieceDefsByCode: Record<string, PieceCatalogItem>,
+  pieceDefsByChar: Record<string, PieceCatalogItem>,
+  promotedPieceDefsByCode: Record<string, PieceCatalogItem>,
+  modules: Partial<Record<string, number>>,
+): boolean {
+  if (move.promote) return false;
+  const key = kanji ? normalizeKanjiForBattleAudioKey(kanji) : '';
+  if (!key || modules[key] == null) return false;
+  if (PIECE_CHARS_ALWAYS_USE_EFFECT_SOUND_ON_MOVE.has(key)) return true;
+  const def = pieceDefForBattleAudio(
+    move,
+    kanji,
+    pieceDefsByCode,
+    pieceDefsByChar,
+    promotedPieceDefsByCode,
+  );
+  if (!def) return true;
+  return normalizeSkillName(def.skill) == null;
+}
+
+function playBattleMoveOrPromoteSe(
+  move: BattleMove,
+  actorSide: Side,
+  board: BoardPiece[],
+  pieceDefsByCode: Record<string, PieceCatalogItem>,
+  pieceDefsByChar: Record<string, PieceCatalogItem>,
+  promotedPieceDefsByCode: Record<string, PieceCatalogItem>,
+): void {
+  if (move.promote) {
+    void playSe('battlePromote');
+    return;
+  }
+  if (!isPhysicalBattleMove(move)) return;
+  const kanji = resolveKanjiForBattleMoveSound(move, actorSide, board);
+  if (
+    shouldUsePieceEffectInsteadOfGenericMove(
+      move,
+      kanji,
+      pieceDefsByCode,
+      pieceDefsByChar,
+      promotedPieceDefsByCode,
+      BATTLE_PIECE_EFFECT_SOUND_MODULES,
+    )
+  ) {
+    void playBattlePieceEffectSound(kanji, 'battlePieceMove');
+    return;
+  }
+  void playSe('battlePieceMove');
+}
 
 function normalizeKanjiForSkillId(ch: string): string {
   if (!ch) return ch;
@@ -176,7 +306,6 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
   const [stateHash, setStateHash] = useState<string | null>(null);
   const [pieceCatalog, setPieceCatalog] = useState<PieceCatalogItem[]>([]);
   const [winner, setWinner] = useState<Side | null>(null);
-  const [clearRewardText, setClearRewardText] = useState<string | null>(null);
   const [skillActivationText, setSkillActivationText] = useState<string | null>(null);
   const [inspectingPiece, setInspectingPiece] = useState<InspectingPieceState>(null);
   const debugLogPieceMoveRanges = (
@@ -333,7 +462,57 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
     return move.promote ? (promoted ?? base) : (base ?? promoted);
   }
 
-  function showSkillActivation(actor: Side, move: BattleMove) {
+  /** スキル発動時の「◯効果音」用キー（駒コード・カタログ・盤面の順で候補を積む） */
+  function buildSkillActivationEffectSoundKeys(
+    move: BattleMove,
+    actorSide: Side,
+    board: BoardPiece[],
+  ): string[] {
+    const keys: string[] = [];
+    const push = (s: string | null | undefined) => {
+      if (!s) return;
+      let t = s.trim();
+      if (!t) return;
+      try {
+        t = t.normalize('NFKC');
+      } catch {
+        /* ignore */
+      }
+      if (!keys.includes(t)) keys.push(t);
+    };
+
+    const rawCode = move.pieceCode ?? move.dropPieceCode;
+    if (rawCode) {
+      const upper = rawCode.toUpperCase();
+      const base = (toAiBasePieceCode(rawCode) ?? upper).toUpperCase();
+      push(pieceCharFromCode(upper, actorSide, move.promote === true));
+      if (base !== upper) {
+        push(pieceCharFromCode(base, actorSide, move.promote === true));
+      }
+      const c1 = CODE_TO_CHAR[upper];
+      const c2 = CODE_TO_CHAR[base];
+      if (typeof c1 === 'string') push(c1);
+      if (typeof c2 === 'string') push(c2);
+    }
+
+    const kanji = resolveKanjiForBattleMoveSound(move, actorSide, board);
+    const def = pieceDefForBattleAudio(
+      move,
+      kanji,
+      pieceDefsByCode,
+      pieceDefsByChar,
+      promotedPieceDefsByCode,
+    );
+    if (def?.char) push(def.char);
+    if (def?.name) push(def.name.replace(/\s+/g, ''));
+    push(kanji);
+
+    return keys;
+  }
+
+  function showSkillActivation(actor: Side, move: BattleMove, board: BoardPiece[]) {
+    const keys = buildSkillActivationEffectSoundKeys(move, actor, board);
+    void playBattlePieceEffectSoundFirstMatch(keys, 'battleSkill', 0.92);
     const actorLabel = actor === 'player' ? 'あなた' : 'CPU';
     const skillName = resolveSkillName(move);
     const message = skillName
@@ -467,7 +646,6 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
     setStateHash(null);
     aiPositionRef.current = null;
     setWinner(null);
-    setClearRewardText(null);
     setSkillActivationText(null);
     if (skillToastTimeoutRef.current) {
       clearTimeout(skillToastTimeoutRef.current);
@@ -688,14 +866,7 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
     clearRewardClaimedRef.current = true;
     battleSessionSettledRef.current = true;
     try {
-      const result = await claimStageClearRewardUseCase.execute({ stageId: stageParam });
-      if (!result) return;
-
-      const pieceCount = result.granted.pieces.reduce((sum, piece) => sum + piece.quantity, 0);
-      const pieceSummary = pieceCount > 0 ? ` / 駒+${pieceCount}` : '';
-      setClearRewardText(
-        `${result.firstClear ? '初回' : '周回'}報酬: 歩+${result.granted.pawn} 金+${result.granted.gold}${pieceSummary}`,
-      );
+      await claimStageClearRewardUseCase.execute({ stageId: stageParam });
     } catch (error: unknown) {
       battleSessionSettledRef.current = false;
       setAiError(toUserFacingBattleError(error));
@@ -768,7 +939,7 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
         });
 
         if (attempt === 0 && response.skillTriggered && response.selectedMove) {
-          showSkillActivation('enemy', response.selectedMove);
+          showSkillActivation('enemy', response.selectedMove, piecesRef.current);
         }
         const patchedAiPosition = patchHandsForStarReturnSkill(
           response.position,
@@ -849,6 +1020,14 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
           });
           setAiPreviewTarget(null);
           applyOptimisticMove('enemy', selectedMoveForApply);
+          playBattleMoveOrPromoteSe(
+            selectedMoveForApply,
+            'enemy',
+            piecesRef.current,
+            pieceDefsByCode,
+            pieceDefsByChar,
+            promotedPieceDefsByCode,
+          );
           await waitForAiMoveVisualCommit();
         }
 
@@ -1080,7 +1259,7 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
       });
 
       if (result.skillTriggered) {
-        showSkillActivation('player', result.move);
+        showSkillActivation('player', result.move, optimisticBaseline);
       }
       let patchedPlayerPosition = patchHandsForStarReturnSkill(
         result.position,
@@ -1268,6 +1447,15 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
       applyBoardAndClearSelection();
     }
 
+    playBattleMoveOrPromoteSe(
+      move,
+      'player',
+      optimisticBaseline,
+      pieceDefsByCode,
+      pieceDefsByChar,
+      promotedPieceDefsByCode,
+    );
+
     await sendCommittedPlayerMoveToServer(
       move,
       optimisticBaseline,
@@ -1435,6 +1623,15 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
         snapshotBeforeDialog && snapshotBeforeDialog.length > 0 ? snapshotBeforeDialog : preBoard,
       hands: handsRef.current,
     };
+
+    playBattleMoveOrPromoteSe(
+      move,
+      'player',
+      optimisticBaseline,
+      pieceDefsByCode,
+      pieceDefsByChar,
+      promotedPieceDefsByCode,
+    );
 
     void sendCommittedPlayerMoveToServer(
       move,
@@ -1639,7 +1836,8 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
     const piece = findPieceAt(pieces, row, col);
     if (piece?.side === 'enemy') {
       const pieceKey = `${piece.side}:${piece.row}:${piece.col}`;
-      const immobilizedBySkill = latestImmobilizedByCellRef.current.has(pieceKey);
+      const immobilizedBySkill =
+        !isGiantPieceForEngine(piece) && latestImmobilizedByCellRef.current.has(pieceKey);
       if (immobilizedBySkill) {
         setSelectedCell(null);
         setSelectedDropPieceCode(null);
@@ -1780,8 +1978,11 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
       legalForCell.filter((m) => m.notation !== 'house_skill_only'),
     );
     const pieceKey = `${piece.side}:${piece.row}:${piece.col}`;
-    const movementRule = latestMovementRuleByCellRef.current.get(pieceKey) ?? null;
-    const immobilizedBySkill = latestImmobilizedByCellRef.current.has(pieceKey);
+    const movementRule = isGiantPieceForEngine(piece)
+      ? null
+      : (latestMovementRuleByCellRef.current.get(pieceKey) ?? null);
+    const immobilizedBySkill =
+      !isGiantPieceForEngine(piece) && latestImmobilizedByCellRef.current.has(pieceKey);
     const affectedBySkill = movementRule != null || immobilizedBySkill || Boolean(piece.darkVeiled);
     if (targets.length === 0) {
       if (affectedBySkill) {
@@ -2044,7 +2245,6 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
     pieceDefsByCode,
     pieceSfenMapping,
     winner,
-    clearRewardText,
     skillActivationText,
     inspectingPiece,
     handleBoardCellPress,

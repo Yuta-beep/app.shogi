@@ -486,6 +486,7 @@ export const CODE_TO_CHAR: Readonly<Record<string, string>> = {
   CHICKEN: '鶏',
   SEN: '銭',
   ZAI: '財',
+  GIANT: '巨',
 };
 
 export const PROMOTED_CODE_TO_CHAR: Readonly<Record<string, string>> = {

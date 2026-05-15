@@ -4,6 +4,7 @@ import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { View, Text } from 'react-native';
+import 'react-native-gesture-handler';
 import 'react-native-reanimated';
 
 import { AppLoadingScreen } from '@/components/organism/app-loading-screen';

@@ -71,6 +71,9 @@ function normalizeCatalogSkillText(piece: PieceCatalogItem): string {
   if (piece.char === '財' || pc.includes('ZAI') || pc.includes('7FC715661514')) {
     return '敵駒を取ったとき、味方の「銭」駒を1体、取った敵駒と同じ駒へ変化させる。';
   }
+  if (piece.char === '巨' || pc.includes('GIANT') || pc.includes('C4AEB81F3634')) {
+    return '敵に取られず、あらゆるスキルの特殊効果を受けない。本体が占める4マスには他の駒は入れない。移動先の2×2マス内の敵駒をまとめて取れる。味方駒が1マスでも重なるマスへは進めない。';
+  }
   if (piece.char === '鶏' || pc.includes('CHICKEN') || pc.includes('F1A6EF3B99DF')) {
     return 'なし';
   }

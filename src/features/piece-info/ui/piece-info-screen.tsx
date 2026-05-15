@@ -8,6 +8,7 @@ import { BackButton } from '@/components/atom/back-button';
 import { AppLoadingScreen } from '@/components/organism/app-loading-screen';
 import { GlobalHomeHud } from '@/components/organism/global-home-hud';
 import { homeAssets } from '@/constants/home-assets';
+import { isBossPiece } from '@/features/deck-builder/lib/boss-pieces';
 import { PieceSwipeCarousel } from '@/features/piece-info/ui/components/piece-swipe-carousel';
 import { usePieceCatalogScreen } from '@/features/piece-info/ui/use-piece-catalog-screen';
 import { useAssetPreload } from '@/hooks/common/use-asset-preload';
@@ -162,6 +163,17 @@ export function PieceInfoScreen() {
               <Text className="mt-1 text-center text-sm font-bold text-[#6b4532]">{`${index + 1} / ${total}`}</Text>
 
               <View className="-mt-20 rounded-xl border border-[#8b0000]/50 bg-white/90 p-4">
+                {isBossPiece({
+                  char: piece.char,
+                  name: piece.name,
+                  pieceCode: piece.pieceCode,
+                }) ? (
+                  <View className="mb-3 rounded-lg border border-[#78350f] bg-[#78350f]/95 px-3 py-2">
+                    <Text className="text-center text-xs font-black text-[#fde68a]">
+                      ボス駒（ステージ専用・マイデッキには入れません）
+                    </Text>
+                  </View>
+                ) : null}
                 {piece.moveVectors.length > 0 && (
                   <MovementGrid vectors={piece.moveVectors} isRepeatable={piece.isRepeatable} />
                 )}

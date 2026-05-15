@@ -19,6 +19,8 @@ import {
   onlineBattleHtmlAssets,
   onlineBattleHtmlPreloadTargets,
 } from '@/constants/online-battle-html-assets';
+import { stageShogiBattleAssetPreloadTargets } from '@/constants/stage-shogi-battle-assets';
+import { BattleEndResultOverlay } from '@/features/stage-shogi/ui/components/battle-end-result-overlay';
 import { homeAssets } from '@/constants/home-assets';
 import { parseOnlineBattleDisplay } from '@/features/online-battle/lib/parse-session-labels';
 import { useOnlineBattleScreen } from '@/features/online-battle/ui/use-online-battle-screen';
@@ -31,10 +33,13 @@ const HTML_APP_MAX_WIDTH = 540;
 
 export function OnlineBattleScreen() {
   const router = useRouter();
-  const { width: windowWidth } = useWindowDimensions();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const params = useLocalSearchParams<{ opponent?: string; rating?: string }>();
   const { session, isLoading } = useOnlineBattleScreen(params.opponent, params.rating);
-  const { isReady: areAssetsReady } = useAssetPreload(onlineBattleHtmlPreloadTargets);
+  const { isReady: areAssetsReady } = useAssetPreload([
+    ...onlineBattleHtmlPreloadTargets,
+    ...stageShogiBattleAssetPreloadTargets,
+  ]);
   useScreenBgm('onlineBattle');
 
   const [lanServerUrl, setLanServerUrl] = useState('ws://localhost:8080');
@@ -80,7 +85,13 @@ export function OnlineBattleScreen() {
           <View
             style={[
               styles.appColumn,
-              { maxWidth: HTML_APP_MAX_WIDTH, width: '100%', alignSelf: 'center' },
+              {
+                maxWidth: HTML_APP_MAX_WIDTH,
+                width: '100%',
+                alignSelf: 'center',
+                position: 'relative',
+                minHeight: Math.max(480, windowHeight * 0.55),
+              },
             ]}
           >
             {/* HTML .header */}
@@ -226,6 +237,8 @@ export function OnlineBattleScreen() {
                 </View>
               </View>
             </View>
+
+            {session.winnerSide ? <BattleEndResultOverlay winner={session.winnerSide} /> : null}
           </View>
         </ScrollView>
       </SafeAreaView>

@@ -17,6 +17,7 @@
     "build:check": "expo export --platform ios --output-dir /tmp/shogi-mobile-app-export-ios --clear && expo export --platform android --output-dir /tmp/shogi-mobile-app-export-android --clear",
     "lint": "expo lint",
     "sync:piece-images": "node ./scripts/sync-piece-images-from-supabase.mjs",
+    "sync:battle-piece-effect-sounds": "node ./scripts/sync-battle-piece-effect-sounds.mjs",
     "format": "biome format src docs scripts README.md package.json tsconfig.json app.config.js app.json babel.config.js eslint.config.js jest.config.js jest.setup.ts metro.config.js tailwind.config.js --write",
     "format:check": "biome format src docs scripts README.md package.json tsconfig.json app.config.js app.json babel.config.js eslint.config.js jest.config.js jest.setup.ts metro.config.js tailwind.config.js",
     "typecheck": "tsc --noEmit",

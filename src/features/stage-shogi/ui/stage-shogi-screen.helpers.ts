@@ -1,5 +1,10 @@
 import { ImageSourcePropType } from 'react-native';
 
+import {
+  findPieceCoveringCell,
+  giantAnchorFootprint,
+  isGiantPieceForEngine,
+} from '@/ai/engine/giant-piece';
 import { mapPiecesForSpringDragonAwakeningDisplay } from '@/ai/engine/spring-ryu-awakening';
 import { assembleSkillDefinitionsV2ForSession } from '@/ai/engine/session-skill-definitions-v2';
 import { ApiClientError } from '@/infra/http/api-client';
@@ -54,6 +59,7 @@ const STANDARD_PIECE_CODES = new Set(['FU', 'KY', 'KE', 'GI', 'KI', 'KA', 'HI', 
 
 /**
  * apply-move では取った側の手駒にならない駒（霊の消滅、K・実・異の取った扱いでの消滅）。
+ * 巨は通常どおり手駒化する（調査用に同期対象に含める）。
  * 手駒同期の「盤上数で手駒を打ち消す」補正の対象外にはしない（スキル仕様をここで上書きしない）。
  */
 const NO_CAPTURE_TO_CAPTOR_HAND_CODES = new Set(['SPIRIT', 'KBOSS', 'EXPERIMENT', 'MUTANT']);
@@ -186,6 +192,8 @@ export type BoardPiece = {
   yinSkillSparkle?: boolean;
   /** 「牛」スキル: 後ろ移動で溜めたチャージ（同期用、任意） */
   cowChargeCount?: number;
+  /** K 博士: 2 で初回捕獲を耐える。1 のとき 2 回目の捕獲で消える。 */
+  kbossLivesRemaining?: number;
   pigInheritedPieceCode?: string | null;
   pigInheritedChar?: string;
   pigInheritedPromoted?: boolean;
@@ -301,6 +309,11 @@ export function isEnemySide(side: string) {
 
 export function isKingChar(char: string) {
   return char === '王' || char === '玉';
+}
+
+/** 盤上スプライトをマス 2×2 相当の大きさで表示する駒（「巨」）。 */
+export function isGiantTwoByTwoBoardPiece(piece: { char: string; pieceCode?: string | null }) {
+  return isGiantPieceForEngine(piece);
 }
 
 export function getPieceImageSource(piece: {
@@ -682,6 +695,10 @@ function countPiecesOnBoardWithCode(pieces: BoardPiece[], side: Side, pieceCode:
   let n = 0;
   for (const p of pieces) {
     if (p.side !== side) continue;
+    if (want === 'GIANT' && isGiantPieceForEngine(p)) {
+      n += 1;
+      continue;
+    }
     const pc = p.pieceCode?.toUpperCase() ?? '';
     if (pc === want) {
       n += 1;
@@ -768,7 +785,7 @@ export function applyDarkVeilFromSkillStateToPieces(
   }
   return pieces.map((p) => ({
     ...p,
-    darkVeiled: keys.has(`${p.side}:${p.row}:${p.col}`),
+    darkVeiled: isGiantPieceForEngine(p) ? false : keys.has(`${p.side}:${p.row}:${p.col}`),
   }));
 }
 
@@ -808,7 +825,7 @@ export function applyATransformEffectToPieces(
   }
   return pieces.map((p) => ({
     ...p,
-    aTransformed: keys.has(`${p.side}:${p.row}:${p.col}`),
+    aTransformed: isGiantPieceForEngine(p) ? false : keys.has(`${p.side}:${p.row}:${p.col}`),
   }));
 }
 
@@ -848,7 +865,7 @@ export function applyPrisonChainEffectToPieces(
   }
   return pieces.map((p) => ({
     ...p,
-    prisonChained: keys.has(`${p.side}:${p.row}:${p.col}`),
+    prisonChained: isGiantPieceForEngine(p) ? false : keys.has(`${p.side}:${p.row}:${p.col}`),
   }));
 }
 
@@ -886,7 +903,7 @@ export function applyStunAuraEffectToPieces(
   if (keys.size === 0) return pieces.map((p) => ({ ...p, stunnedAura: false }));
   return pieces.map((p) => ({
     ...p,
-    stunnedAura: keys.has(`${p.side}:${p.row}:${p.col}`),
+    stunnedAura: isGiantPieceForEngine(p) ? false : keys.has(`${p.side}:${p.row}:${p.col}`),
   }));
 }
 
@@ -924,7 +941,7 @@ export function applyAbyssAuraEffectToPieces(
   if (keys.size === 0) return pieces.map((p) => ({ ...p, abyssAura: false }));
   return pieces.map((p) => ({
     ...p,
-    abyssAura: keys.has(`${p.side}:${p.row}:${p.col}`),
+    abyssAura: isGiantPieceForEngine(p) ? false : keys.has(`${p.side}:${p.row}:${p.col}`),
   }));
 }
 
@@ -962,7 +979,9 @@ export function applyChrysanthemumRevivalMarkToPieces(
   if (keys.size === 0) return pieces.map((p) => ({ ...p, chrysanthemumRevivalMark: false }));
   return pieces.map((p) => ({
     ...p,
-    chrysanthemumRevivalMark: keys.has(`${p.side}:${p.row}:${p.col}`),
+    chrysanthemumRevivalMark: isGiantPieceForEngine(p)
+      ? false
+      : keys.has(`${p.side}:${p.row}:${p.col}`),
   }));
 }
 
@@ -1004,7 +1023,7 @@ export function applyLightProtectionAuraEffectToPieces(
   }
   return pieces.map((p) => ({
     ...p,
-    lightProtectionAura: keys.has(`${p.side}:${p.row}:${p.col}`),
+    lightProtectionAura: isGiantPieceForEngine(p) ? false : keys.has(`${p.side}:${p.row}:${p.col}`),
   }));
 }
 
@@ -1065,8 +1084,10 @@ export function applyYinYangSkillAuraDisplayToPieces(pieces: BoardPiece[]): Boar
   }
   return pieces.map((p) => ({
     ...p,
-    yangSkillSparkle: yangKeys.has(`${p.side}:${p.row}:${p.col}`),
-    yinSkillSparkle: yinKeys.has(`${p.side}:${p.row}:${p.col}`),
+    yangSkillSparkle: isGiantPieceForEngine(p)
+      ? false
+      : yangKeys.has(`${p.side}:${p.row}:${p.col}`),
+    yinSkillSparkle: isGiantPieceForEngine(p) ? false : yinKeys.has(`${p.side}:${p.row}:${p.col}`),
   }));
 }
 
@@ -1108,6 +1129,9 @@ export function applyDeathCurseEffectToPieces(
   }
   return pieces.map((p) => {
     const turns = countdownByPiece.get(`${p.side}:${p.row}:${p.col}`) ?? null;
+    if (isGiantPieceForEngine(p)) {
+      return { ...p, deathCurseAura: false, deathCurseCountdown: null };
+    }
     return {
       ...p,
       deathCurseAura: turns != null,
@@ -1633,7 +1657,7 @@ export function piecesFromCanonicalPosition(
 }
 
 export function findPieceAt(placements: BoardPiece[], row: number, col: number) {
-  return placements.find((piece) => piece.row === row && piece.col === col) ?? null;
+  return findPieceCoveringCell(placements, row, col);
 }
 
 export function getDisplayChar(piece: BoardPiece) {
@@ -2170,7 +2194,26 @@ export function computePiecesAfterOptimisticMove(
   if (!resolved) return prev;
   const { fromRow, fromCol, toRow, toCol, moving } = resolved;
   if (moving.side !== actorSide) return prev;
-  const targetAtDestination = prev.find((p) => p.row === toRow && p.col === toCol);
+  if (move.notation === 'giant_2x2_ortho' && isGiantPieceForEngine(moving)) {
+    const nToR = normalizeCellIndex(move.toRow) ?? move.toRow;
+    const nToC = normalizeCellIndex(move.toCol) ?? move.toCol;
+    const destSet = new Set(giantAnchorFootprint(nToR, nToC).map((c) => `${c.row}:${c.col}`));
+    return prev
+      .filter((p) => {
+        if (p.side !== actorSide && destSet.has(`${p.row}:${p.col}`)) return false;
+        if (p.row === fromRow && p.col === fromCol && p.side === actorSide) return false;
+        return true;
+      })
+      .concat([
+        {
+          ...moving,
+          row: nToR,
+          col: nToC,
+          promoted: move.promote ? true : (moving.promoted ?? false),
+        },
+      ]);
+  }
+  const targetAtDestination = findPieceAt(prev, toRow, toCol);
   const movingIsHazard = PERSISTENT_HAZARD_CHARS.has(moving.char);
   if (
     targetAtDestination &&
@@ -2208,8 +2251,20 @@ export function computePiecesAfterOptimisticMove(
     move.promote && LOCAL_PROMOTED_PIECE_IMAGE_BY_CODE[baseForLocalKey]
       ? null
       : (promotedDef?.imageSignedUrl ?? moving.imageSignedUrl);
+  const captureVictim = findPieceAt(prev, toRow, toCol);
   return prev
-    .filter((p) => !(p.row === toRow && p.col === toCol && p.side !== actorSide))
+    .filter((p) => {
+      if (p.side === actorSide) return true;
+      if (captureVictim && isGiantPieceForEngine(captureVictim)) {
+        return !(
+          p.side === captureVictim.side &&
+          p.row === captureVictim.row &&
+          p.col === captureVictim.col &&
+          isGiantPieceForEngine(p)
+        );
+      }
+      return !(p.row === toRow && p.col === toCol);
+    })
     .map((p) =>
       p.row === fromRow && p.col === fromCol
         ? {

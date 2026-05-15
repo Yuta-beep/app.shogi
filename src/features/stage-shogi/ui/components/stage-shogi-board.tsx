@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { Crown, Shield } from 'lucide-react-native';
-import { memo, useEffect } from 'react';
+import { memo, useEffect, useMemo } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import Animated, {
   cancelAnimation,
@@ -36,6 +36,7 @@ import {
   getDisplayChar,
   getPieceImageSource,
   isEnemySide,
+  isGiantTwoByTwoBoardPiece,
   isKingChar,
   isPromotedVisualPiece,
   localPromotedModuleFromBaseCodeCandidates,
@@ -181,9 +182,12 @@ const BoardPieceSprite = memo(function BoardPieceSprite({
 
   const enemy = isEnemySide(piece.side);
   const king = piece.pieceCode === 'OU' || isKingChar(piece.char);
-  const pieceScalePercent =
-    BOARD_PIECE_SIZE_OVERRIDES[piece.char] ??
-    (king ? KING_PIECE_SIZE_PERCENT : NORMAL_PIECE_SIZE_PERCENT);
+  const giant2x2 = isGiantTwoByTwoBoardPiece(piece);
+  const cellSpan = giant2x2 ? 2 : 1;
+  const pieceScalePercent = giant2x2
+    ? 100
+    : (BOARD_PIECE_SIZE_OVERRIDES[piece.char] ??
+      (king ? KING_PIECE_SIZE_PERCENT : NORMAL_PIECE_SIZE_PERCENT));
   const isStage4DragonVisual =
     (piece.pieceCode?.toUpperCase() ?? '') === 'RYU' && piece.char === '竜';
   const bundledPromoted =
@@ -215,10 +219,11 @@ const BoardPieceSprite = memo(function BoardPieceSprite({
         position: 'absolute',
         top: `${rowIndex * BOARD_CELL_INNER_RATIO * 100}%`,
         left: `${colIndex * BOARD_CELL_INNER_RATIO * 100}%`,
-        width: `${BOARD_CELL_INNER_RATIO * 100}%`,
-        height: `${BOARD_CELL_INNER_RATIO * 100}%`,
+        width: `${cellSpan * BOARD_CELL_INNER_RATIO * 100}%`,
+        height: `${cellSpan * BOARD_CELL_INNER_RATIO * 100}%`,
         alignItems: 'center',
         justifyContent: 'center',
+        zIndex: giant2x2 ? 8 : 0,
       }}
     >
       <View
@@ -719,9 +724,18 @@ const BoardPiecesLayer = memo(function BoardPiecesLayer({
   promotionImageFlash?: PromotionImageFlash | null;
 }) {
   const keySeqByBase = new Map<string, number>();
+  const orderedPieces = useMemo(() => {
+    const out = [...pieces];
+    out.sort((a, b) => {
+      const ga = isGiantTwoByTwoBoardPiece(a) ? 1 : 0;
+      const gb = isGiantTwoByTwoBoardPiece(b) ? 1 : 0;
+      return ga - gb;
+    });
+    return out;
+  }, [pieces]);
   return (
     <View pointerEvents="none" style={{ position: 'absolute', inset: 0 }}>
-      {pieces.map((placement) => {
+      {orderedPieces.map((placement) => {
         const basePlacementKey = `${spriteEpoch}-${placement.side}-${placement.pieceCode ?? 'X'}-${placement.promoted ? 'P' : 'N'}-${getDisplayChar(placement)}-${placement.row}-${placement.col}`;
         const seq = keySeqByBase.get(basePlacementKey) ?? 0;
         keySeqByBase.set(basePlacementKey, seq + 1);

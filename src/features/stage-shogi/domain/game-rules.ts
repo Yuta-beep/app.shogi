@@ -1,5 +1,10 @@
 import { CHAR_TO_CODE } from '@/features/stage-shogi/domain/char-to-piece-code-map';
 import type { MoveVector } from '@/domain/models/piece';
+import {
+  giantAnchorFootprint,
+  isGiantPieceCodeUpper,
+  isGiantPieceForEngine,
+} from '@/ai/engine/giant-piece';
 
 export type Side = 'player' | 'enemy';
 export type Hands = Record<string, number>;
@@ -45,7 +50,14 @@ function isInsideBoard(row: number, col: number, boardSize: number) {
 }
 
 function findPieceAt<T extends BoardPiece>(placements: T[], row: number, col: number) {
-  return placements.find((piece) => piece.row === row && piece.col === col) ?? null;
+  const direct = placements.find((piece) => piece.row === row && piece.col === col) ?? null;
+  if (direct) return direct;
+  return (
+    placements.find((piece) => {
+      if (!isGiantPieceForEngine(piece)) return false;
+      return giantAnchorFootprint(piece.row, piece.col).some((c) => c.row === row && c.col === col);
+    }) ?? null
+  );
 }
 
 function cellKey(row: number, col: number) {
@@ -222,6 +234,7 @@ const CAPTURE_CHAR_TO_HAND_CODE: Readonly<Record<string, string>> = {
   鶏: 'CHICKEN',
   銭: 'SEN',
   財: 'ZAI',
+  巨: 'GIANT',
 };
 
 const OPAQUE_CAPTURE_CODE_TO_HAND_CODE: Readonly<Record<string, string>> = {
@@ -260,6 +273,7 @@ const OPAQUE_CAPTURE_CODE_TO_HAND_CODE: Readonly<Record<string, string>> = {
   PIECE_F1A6EF3B99DF: 'CHICKEN',
   PIECE_EACC7F540399: 'SEN',
   PIECE_7FC715661514: 'ZAI',
+  PIECE_C4AEB81F3634: 'GIANT',
 };
 
 function opaqueCapturedCodeToHandCode(rawCode: string | null): string | null {
@@ -312,6 +326,7 @@ function opaqueCapturedCodeToHandCode(rawCode: string | null): string | null {
   if (upper.includes('CHICKEN')) return 'CHICKEN';
   if (upper.includes('SEN')) return 'SEN';
   if (upper.includes('ZAI')) return 'ZAI';
+  if (upper.includes('C4AEB81F3634') || upper.includes('GIANT')) return 'GIANT';
   if (upper.includes('BLUEONI')) return 'BLUEONI';
   if (upper.includes('BLACKONI')) return 'BLACKONI';
   if (upper.includes('REDONI')) return 'REDONI';
@@ -452,7 +467,14 @@ export function canDropPiece(
   boardSize = 9,
 ) {
   if (!isInsideBoard(to.row, to.col, boardSize)) return false;
-  if (findPieceAt(placements, to.row, to.col)) return false;
+  if (isGiantPieceCodeUpper(pieceCode)) {
+    if (to.row > boardSize - 2 || to.col > boardSize - 2) return false;
+    for (const c of giantAnchorFootprint(to.row, to.col, boardSize)) {
+      if (findPieceAt(placements, c.row, c.col)) return false;
+    }
+  } else if (findPieceAt(placements, to.row, to.col)) {
+    return false;
+  }
   if (getHandCount(hands, side, pieceCode) <= 0) return false;
   if (isDropDeadEnd(pieceCode, side, to.row, boardSize)) return false;
   if (pieceCode === 'FU' && hasUnpromotedPawnInFile(placements, side, to.col)) return false;
@@ -476,7 +498,18 @@ export function applyBoardMove<T extends BoardPiece>(
   promote = false,
 ): T[] {
   const captured = findPieceAt(placements, to.row, to.col);
-  const next = placements.filter((piece) => !(piece.row === to.row && piece.col === to.col));
+  const next = placements.filter((piece) => {
+    if (!captured) return true;
+    if (isGiantPieceForEngine(captured)) {
+      return !(
+        piece.side === captured.side &&
+        piece.row === captured.row &&
+        piece.col === captured.col &&
+        isGiantPieceForEngine(piece)
+      );
+    }
+    return !(piece.row === to.row && piece.col === to.col);
+  });
   const movingIndex = next.findIndex(
     (piece) => piece.side === side && piece.row === from.row && piece.col === from.col,
   );
@@ -540,6 +573,14 @@ export function getLegalTargetsFromVectors<T extends BoardPiece>(
       if (!isInsideBoard(targetRow, targetCol, boardSize)) break;
 
       const occupied = findPieceAt(placements, targetRow, targetCol);
+      if (occupied && isGiantPieceForEngine(occupied)) {
+        if (occupied.side === piece.side) {
+          if (canJump) continue;
+          break;
+        }
+        // 敵の「巨」は取れず、貫通もしない（味方巨は上でブロック）。
+        break;
+      }
       if (occupied && occupied.side === piece.side) {
         if (canJump) continue;
         break;
