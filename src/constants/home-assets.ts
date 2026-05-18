@@ -1,5 +1,7 @@
 export const homeAssets = {
   titleBackground: require('../../assets/home/ui/真名仮名.png'),
+  /** タイトル画面右下「チュートリアル」 */
+  tutorialButton: require('../../assets/home/ui/チュートリアル.png'),
   loadingImage: require('../../assets/home/ui/読み込み中.png'),
   background: require('../../assets/home/background/home-bg.png'),
   userBar: require('../../assets/home/ui/ユーザーバー.png'),
@@ -15,6 +17,10 @@ export const homeAssets = {
     gold: require('../../assets/gacha-ball/ガチャ玉金.png'),
     black: require('../../assets/gacha-ball/ガチャ玉黒.png'),
   },
+  /** ガチャ玉ビューア右下のヘルプボタン */
+  gachaBallHelpButton: require('../../assets/gacha-ball/ヘルプ.png'),
+  /** ホーム右上「タイトルへ」 */
+  titleBackButton: require('../../assets/home/buttons/タイトルへ.png'),
   buttons: {
     normalDungeon: require('../../assets/home/buttons/normalDangeon_botton.png'),
     specialDungeon: require('../../assets/home/buttons/specialDangeon_botton.png'),
@@ -24,6 +30,7 @@ export const homeAssets = {
     pieceShop: require('../../assets/home/buttons/pieceShop_botton.png'),
   },
   preloadTargets: [
+    require('../../assets/home/ui/チュートリアル.png'),
     require('../../assets/home/background/home-bg.png'),
     require('../../assets/home/ui/ユーザーバー.png'),
     require('../../assets/home/ui/pvp-badge.png'),
@@ -34,6 +41,8 @@ export const homeAssets = {
     require('../../assets/gacha-ball/ガチャ玉赤.png'),
     require('../../assets/gacha-ball/ガチャ玉金.png'),
     require('../../assets/gacha-ball/ガチャ玉黒.png'),
+    require('../../assets/gacha-ball/ヘルプ.png'),
+    require('../../assets/home/buttons/タイトルへ.png'),
     require('../../assets/home/buttons/normalDangeon_botton.png'),
     require('../../assets/home/buttons/specialDangeon_botton.png'),
     require('../../assets/home/buttons/deckBuilder_botton.png'),

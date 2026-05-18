@@ -80,6 +80,7 @@ export function PieceSwipeCarousel({
       ref={ref}
       data={listData}
       horizontal
+      nestedScrollEnabled
       showsHorizontalScrollIndicator={false}
       keyExtractor={(cell) => `${cell.piece.pieceId ?? cell.piece.char}-${cell.rawIndex}`}
       decelerationRate="fast"

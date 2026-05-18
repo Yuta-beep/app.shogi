@@ -3,27 +3,17 @@ import { useRouter } from 'expo-router';
 import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { BackButton } from '@/components/atom/back-button';
 import { AppLoadingScreen } from '@/components/organism/app-loading-screen';
 import { GlobalHomeHud } from '@/components/organism/global-home-hud';
 import { homeAssets } from '@/constants/home-assets';
+import { pieceShopAssets, pieceShopPreloadTargets } from '@/constants/piece-shop-assets';
+import { PIECE_SHOP_BACK_BUTTON_MARGIN_RIGHT } from '@/features/piece-shop/ui/piece-shop-layout';
+import { PieceShopBackButton } from '@/features/piece-shop/ui/parts/piece-shop-back-button';
 import { usePieceShopScreen } from '@/features/piece-shop/ui/use-piece-shop-screen';
 import { useAssetPreload } from '@/hooks/common/use-asset-preload';
 import { useScreenBgm } from '@/hooks/common/use-screen-bgm';
 import { playSe } from '@/lib/audio/audio-manager';
 import { ShopItem } from '@/domain/models/shop';
-
-const shopAssets = {
-  background: require('../../../../assets/piece-shop/pieceShop.png'),
-  pieces: {
-    走: require('../../../../assets/piece-shop/piece-so.png'),
-    種: require('../../../../assets/piece-shop/piece-tane.png'),
-    麒: require('../../../../assets/piece-shop/piece-kirin.png'),
-    舞: require('../../../../assets/piece-shop/piece-mai.png'),
-    P: require('../../../../assets/piece-shop/piece-p.png'),
-    鳴: require('../../../../assets/piece-shop/piece-naku.png'),
-  },
-} as const;
 
 const piecePlacementByKey: Record<
   ShopItem['key'],
@@ -40,10 +30,7 @@ const piecePlacementByKey: Record<
 export function PieceShopScreen() {
   const router = useRouter();
   const vm = usePieceShopScreen();
-  const { isReady: areAssetsReady } = useAssetPreload([
-    shopAssets.background,
-    ...Object.values(shopAssets.pieces),
-  ]);
+  const { isReady: areAssetsReady } = useAssetPreload([...pieceShopPreloadTargets]);
   useScreenBgm('shop');
 
   function openPurchase(piece: ShopItem) {
@@ -66,7 +53,7 @@ export function PieceShopScreen() {
       <View className="flex-1">
         <View className="absolute inset-0">
           <Image
-            source={shopAssets.background}
+            source={pieceShopAssets.background}
             contentFit="cover"
             style={{ width: '100%', height: '100%' }}
           />
@@ -74,12 +61,14 @@ export function PieceShopScreen() {
 
         <View className="flex-1 px-4 pb-4">
           <View className="mt-2 flex-row justify-end">
-            <BackButton
-              onPress={() => {
-                void playSe('tap');
-                router.back();
-              }}
-            />
+            <View style={{ marginRight: PIECE_SHOP_BACK_BUTTON_MARGIN_RIGHT }}>
+              <PieceShopBackButton
+                onPress={() => {
+                  void playSe('tap');
+                  router.back();
+                }}
+              />
+            </View>
           </View>
           <ScrollView className="mt-4 flex-1" contentContainerClassName="pb-6">
             <View className="flex-row flex-wrap justify-between">
@@ -100,7 +89,7 @@ export function PieceShopScreen() {
                       className="h-[248px] items-center active:scale-95"
                     >
                       <Image
-                        source={shopAssets.pieces[piece.key]}
+                        source={pieceShopAssets.pieces[piece.key]}
                         contentFit="contain"
                         style={{
                           width: placement.width,

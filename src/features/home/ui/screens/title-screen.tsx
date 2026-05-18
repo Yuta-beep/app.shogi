@@ -1,12 +1,19 @@
+import { Image } from 'expo-image';
 import { type Href, useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ImageBackground, Pressable, Text, View } from 'react-native';
+import { ImageBackground, Pressable, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppLoadingScreen } from '@/components/organism/app-loading-screen';
 import { TapToStartScreen } from '@/components/organism/tap-to-start-screen';
 import { homeAssets } from '@/constants/home-assets';
 import { TITLE_TO_HOME_LOADING_MS } from '@/constants/loading';
+import {
+  TITLE_TUTORIAL_BUTTON_BOTTOM,
+  TITLE_TUTORIAL_BUTTON_HEIGHT,
+  TITLE_TUTORIAL_BUTTON_RIGHT,
+  TITLE_TUTORIAL_BUTTON_WIDTH,
+} from '@/features/home/ui/title-layout';
 import { useAssetPreload } from '@/hooks/common/use-asset-preload';
 import { useScreenBgm } from '@/hooks/common/use-screen-bgm';
 import { playSe } from '@/lib/audio/audio-manager';
@@ -20,7 +27,9 @@ export function TitleScreen() {
     const optionalTargets = Array.isArray(homeAssets.preloadTargets)
       ? homeAssets.preloadTargets
       : [];
-    return [homeAssets.titleBackground, ...optionalTargets].filter(Boolean);
+    return [homeAssets.titleBackground, homeAssets.tutorialButton, ...optionalTargets].filter(
+      Boolean,
+    );
   }, []);
 
   const { isReady } = useAssetPreload(preloadTargets);
@@ -66,9 +75,19 @@ export function TitleScreen() {
             accessibilityRole="button"
             accessibilityLabel="チュートリアル画面を開く"
             onPress={openTutorial}
-            className="absolute bottom-6 right-5 z-10 rounded-lg border border-[#8e6428] bg-[#d2a860] px-3 py-2 active:opacity-80"
+            style={{
+              bottom: TITLE_TUTORIAL_BUTTON_BOTTOM,
+              right: TITLE_TUTORIAL_BUTTON_RIGHT,
+              width: TITLE_TUTORIAL_BUTTON_WIDTH,
+              height: TITLE_TUTORIAL_BUTTON_HEIGHT,
+            }}
+            className="absolute z-10 active:scale-95"
           >
-            <Text className="text-center text-xs font-black text-[#4b2e1f]">チュートリアル</Text>
+            <Image
+              source={homeAssets.tutorialButton}
+              contentFit="contain"
+              style={{ width: '100%', height: '100%' }}
+            />
           </Pressable>
         </View>
       </SafeAreaView>

@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 
 import { HomeCommonHeader } from '@/components/organism/home-common-header';
 import { homeAssets } from '@/constants/home-assets';
@@ -7,8 +7,12 @@ import {
   HOME_GACHA_ICON_SIZE,
   HOME_PVP_BADGE_HEIGHT,
   HOME_PVP_BADGE_WIDTH,
+  HOME_PVP_BUTTON_RIGHT,
   HOME_SIDE_ACTION_TOP,
+  HOME_TITLE_BACK_BUTTON_HEIGHT,
+  HOME_TITLE_BACK_BUTTON_RIGHT,
   HOME_TITLE_BACK_BUTTON_TOP,
+  HOME_TITLE_BACK_BUTTON_WIDTH,
 } from '@/features/home/ui/home-layout';
 
 type HomeHeaderSectionProps = {
@@ -55,10 +59,19 @@ export function HomeHeaderSection({
         accessibilityRole="button"
         accessibilityLabel="タイトル画面へ戻る"
         onPress={onPressBackToTitle}
-        style={{ top: HOME_TITLE_BACK_BUTTON_TOP }}
-        className="absolute right-4 z-10 rounded-lg border border-[#8e6428] bg-[#d2a860] px-3 py-2 active:opacity-80"
+        style={{
+          top: HOME_TITLE_BACK_BUTTON_TOP,
+          right: HOME_TITLE_BACK_BUTTON_RIGHT,
+          width: HOME_TITLE_BACK_BUTTON_WIDTH,
+          height: HOME_TITLE_BACK_BUTTON_HEIGHT,
+        }}
+        className="absolute z-10 active:scale-95"
       >
-        <Text className="text-center text-xs font-black text-[#4b2e1f]">タイトルへ</Text>
+        <Image
+          source={homeAssets.titleBackButton}
+          contentFit="contain"
+          style={{ width: '100%', height: '100%' }}
+        />
       </Pressable>
 
       <Pressable
@@ -68,10 +81,11 @@ export function HomeHeaderSection({
         pointerEvents="auto"
         style={{
           top: HOME_SIDE_ACTION_TOP,
+          right: HOME_PVP_BUTTON_RIGHT,
           width: HOME_PVP_BADGE_WIDTH,
           height: HOME_PVP_BADGE_HEIGHT,
         }}
-        className="absolute right-[-20px] z-10 active:scale-95"
+        className="absolute z-10 active:scale-95"
       >
         <Image
           source={homeAssets.pvpBadge}

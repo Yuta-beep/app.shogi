@@ -4,26 +4,18 @@ import { useMemo } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { BackButton } from '@/components/atom/back-button';
 import { AppLoadingScreen } from '@/components/organism/app-loading-screen';
 import { GlobalHomeHud } from '@/components/organism/global-home-hud';
 import { homeAssets } from '@/constants/home-assets';
+import { pieceInfoAssets, pieceInfoPreloadTargets } from '@/constants/piece-info-assets';
 import { isBossPiece } from '@/features/deck-builder/lib/boss-pieces';
 import { PieceSwipeCarousel } from '@/features/piece-info/ui/components/piece-swipe-carousel';
+import { PieceInfoBackButton } from '@/features/piece-info/ui/parts/piece-info-back-button';
 import { usePieceCatalogScreen } from '@/features/piece-info/ui/use-piece-catalog-screen';
 import { useAssetPreload } from '@/hooks/common/use-asset-preload';
 import { useScreenBgm } from '@/hooks/common/use-screen-bgm';
 import { playSe } from '@/lib/audio/audio-manager';
 import { MoveVector } from '@/domain/models/piece';
-
-const pieceInfoBackground = require('../../../../assets/piece-info/piece-info-bg.png');
-const pieceImages: Record<string, number> = {
-  香: require('../../../../assets/piece-info/pieces/香.png'),
-  桂: require('../../../../assets/piece-info/pieces/桂.png'),
-  銀: require('../../../../assets/piece-info/pieces/銀.png'),
-  忍: require('../../../../assets/piece-info/pieces/忍.png'),
-  竜: require('../../../../assets/piece-info/pieces/竜.png'),
-};
 
 // 5x5グリッド（中心 [2][2] = 駒位置）
 const GRID_SIZE = 5;
@@ -87,7 +79,7 @@ export function PieceInfoScreen() {
     [items],
   );
   const { isReady: areAssetsReady } = useAssetPreload(
-    [pieceInfoBackground, ...Object.values(pieceImages), ...remotePieceUrls],
+    [...pieceInfoPreloadTargets, ...remotePieceUrls],
     {
       enabled: !isLoading,
     },
@@ -104,22 +96,21 @@ export function PieceInfoScreen() {
       <View className="flex-1">
         <View className="absolute inset-0">
           <Image
-            source={pieceInfoBackground}
+            source={pieceInfoAssets.background}
             contentFit="fill"
             style={{ width: '100%', height: '100%' }}
           />
         </View>
 
+        <PieceInfoBackButton
+          onPress={() => {
+            void playSe('tap');
+            router.back();
+          }}
+        />
+
         <View className="mt-4 flex-1 px-4 pb-2">
-          <View className="flex-row items-center justify-between">
-            <Text className="text-lg font-black text-[#2f1b14]">駒情報</Text>
-            <BackButton
-              onPress={() => {
-                void playSe('tap');
-                router.back();
-              }}
-            />
-          </View>
+          <Text className="text-lg font-black text-[#2f1b14]">駒情報</Text>
 
           <View className="mt-1 items-center justify-center">
             <Text
@@ -138,7 +129,8 @@ export function PieceInfoScreen() {
           <ScrollView
             className="mt-1 flex-1"
             showsVerticalScrollIndicator={false}
-            scrollEnabled={false}
+            nestedScrollEnabled
+            contentContainerStyle={{ paddingBottom: 16 }}
           >
             <View style={{ transform: [{ translateY: -24 }] }}>
               <View className="-mx-4 -mt-2 h-[300px] justify-center">

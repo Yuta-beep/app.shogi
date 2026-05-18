@@ -5,8 +5,10 @@ import { Alert, Modal, Pressable, Text, TextInput, View, ScrollView } from 'reac
 import Svg, { Line, Rect } from 'react-native-svg';
 
 import { AppLoadingScreen } from '@/components/organism/app-loading-screen';
-import { BackButton } from '@/components/atom/back-button';
+import { deckBuilderAssets, deckBuilderPreloadTargets } from '@/constants/deck-builder-assets';
 import { homeAssets } from '@/constants/home-assets';
+import { DECK_BUILDER_BACK_BUTTON_MARGIN_RIGHT } from '@/features/deck-builder/ui/deck-builder-layout';
+import { DeckBuilderBackButton } from '@/features/deck-builder/ui/parts/deck-builder-back-button';
 import { UiScreenShell } from '@/components/organism/ui-screen-shell';
 import { isBossPiece } from '@/features/deck-builder/lib/boss-pieces';
 import {
@@ -22,9 +24,6 @@ import { getDeckBuilderPieceCost } from '@/features/deck-builder/lib/deck-builde
 import { createSaveOnlineMatchSetupUseCase } from '@/usecases/online-match/create-online-match-usecases';
 import { CHAR_TO_CODE } from '@/features/stage-shogi/domain/piece-conversion';
 
-const deckAssets = {
-  bg: require('../../../../assets/deck-builder/deck-bg.png'),
-} as const;
 const BOARD_SIZE = 9;
 const BOARD_VIEWBOX = 900;
 const BOARD_PADDING = 36;
@@ -54,9 +53,12 @@ export function DeckBuilderScreen({ mode = 'default' }: DeckBuilderScreenProps) 
         .filter((url): url is string => typeof url === 'string' && url.length > 0),
     [vm.ownedPieces],
   );
-  const { isReady: areAssetsReady } = useAssetPreload([deckAssets.bg, ...remotePieceUrls], {
-    enabled: !vm.isLoading,
-  });
+  const { isReady: areAssetsReady } = useAssetPreload(
+    [...deckBuilderPreloadTargets, ...remotePieceUrls],
+    {
+      enabled: !vm.isLoading,
+    },
+  );
   useScreenBgm('deckBuilder');
   const resolveDeckPieceImageSource = useCallback(
     (piece: {
@@ -102,15 +104,18 @@ export function DeckBuilderScreen({ mode = 'default' }: DeckBuilderScreenProps) 
     <UiScreenShell
       title={screenTitle}
       subtitle={screenSubtitle}
+      compactHeader
       hideBackButton
-      fullBleedBackgroundSource={deckAssets.bg}
+      fullBleedBackgroundSource={deckBuilderAssets.bg}
       rightAction={
-        <BackButton
-          onPress={() => {
-            void playSe('tap');
-            router.back();
-          }}
-        />
+        <View style={{ marginRight: DECK_BUILDER_BACK_BUTTON_MARGIN_RIGHT }}>
+          <DeckBuilderBackButton
+            onPress={() => {
+              void playSe('tap');
+              router.back();
+            }}
+          />
+        </View>
       }
     >
       <View>

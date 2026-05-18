@@ -22,6 +22,8 @@ type UiScreenShellProps = {
   hideBackButton?: boolean;
   rightAction?: ReactNode;
   hideTitleText?: boolean;
+  /** タイトル帯を1行にまとめて縦幅を抑える（デッキビルダー等） */
+  compactHeader?: boolean;
   plainHeader?: boolean;
   homeButtonTextClassName?: string;
   /** ユーザーバー（GlobalHomeHud）直下〜画面下端までを覆う背景。タイトル帯・スクロール領域の下にまで伸びる */
@@ -39,6 +41,7 @@ export function UiScreenShell({
   hideBackButton = false,
   rightAction,
   hideTitleText = false,
+  compactHeader = false,
   plainHeader = false,
   homeButtonTextClassName = 'text-ink',
   fullBleedBackgroundSource,
@@ -48,7 +51,46 @@ export function UiScreenShell({
 }: UiScreenShellProps) {
   const router = useRouter();
 
-  const header = (
+  const header = compactHeader ? (
+    <View className="bg-black/35 px-3 py-1">
+      <View className="flex-row items-center justify-between gap-2">
+        {!hideTitleText ? (
+          <View className="min-w-0 flex-1 pr-2">
+            <Text className="text-lg font-black text-white" numberOfLines={1}>
+              {title}
+            </Text>
+            {subtitle ? (
+              <Text className="mt-0.5 text-[11px] leading-4 text-white/85" numberOfLines={2}>
+                {subtitle}
+              </Text>
+            ) : null}
+          </View>
+        ) : (
+          <View className="flex-1" />
+        )}
+        {rightAction ??
+          (hideBackButton ? null : (
+            <BackButton
+              onPress={() => {
+                void playSe('tap');
+                router.back();
+              }}
+            />
+          )) ??
+          (hideBackButton ? null : (
+            <Pressable
+              onPress={() => {
+                void playSe('tap');
+                router.replace('/home');
+              }}
+              className="rounded-md border border-accent px-3 py-1 active:scale-95"
+            >
+              <Text className={`text-sm font-bold ${homeButtonTextClassName}`}>ホーム</Text>
+            </Pressable>
+          ))}
+      </View>
+    </View>
+  ) : (
     <View
       className={
         plainHeader
@@ -95,7 +137,10 @@ export function UiScreenShell({
   );
 
   const scroll = (
-    <ScrollView className="flex-1" contentContainerClassName="p-4 pb-10">
+    <ScrollView
+      className="flex-1"
+      contentContainerClassName={compactHeader ? 'px-3 pt-2 pb-10' : 'p-4 pb-10'}
+    >
       {children}
     </ScrollView>
   );

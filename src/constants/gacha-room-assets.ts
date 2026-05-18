@@ -2,6 +2,7 @@ import type { ImageSourcePropType } from 'react-native';
 
 /** HTML 版 gacha_room と同種の画像・演出動画 */
 export const gachaRoomAssets = {
+  backButton: require('../../assets/gacha/戻る.png'),
   draw1: require('../../assets/gacha/draw-1.png'),
   draw0: require('../../assets/gacha/draw-0.png'),
   drawGold: require('../../assets/gacha/draw-gold.png'),

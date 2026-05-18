@@ -17,7 +17,13 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { AppLoadingScreen } from '@/components/organism/app-loading-screen';
 import { homeAssets } from '@/constants/home-assets';
-import { HOME_BACKGROUND_OFFSET, HOME_TOP_LAYOUT_OFFSET } from '@/features/home/ui/home-layout';
+import {
+  HOME_BACKGROUND_OFFSET,
+  HOME_GACHA_BALL_HELP_BUTTON_HEIGHT,
+  HOME_GACHA_BALL_HELP_BUTTON_RIGHT,
+  HOME_GACHA_BALL_HELP_BUTTON_WIDTH,
+  HOME_TOP_LAYOUT_OFFSET,
+} from '@/features/home/ui/home-layout';
 import { HomeActionGridSection } from '@/features/home/ui/sections/home-action-grid-section';
 import { HomeBackgroundSection } from '@/features/home/ui/sections/home-background-section';
 import { gachaBallColorIndexForCurrentPeriod } from '@/features/home/lib/gacha-ball-schedule';
@@ -301,16 +307,27 @@ export function HomeScreen() {
                 </View>
 
                 <View
-                  className="absolute right-5 z-20"
-                  style={{ bottom: Math.max(insets.bottom, 12) + 8 }}
+                  className="absolute z-20"
+                  style={{
+                    right: HOME_GACHA_BALL_HELP_BUTTON_RIGHT,
+                    bottom: Math.max(insets.bottom, 12) + 8,
+                  }}
                 >
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel="ガチャ玉の色のヘルプ"
                     onPress={openGachaHelp}
-                    className="rounded-lg border-2 border-[#8e6428] bg-[#d2a860] px-4 py-3 active:opacity-80"
+                    className="active:scale-95"
+                    style={{
+                      width: HOME_GACHA_BALL_HELP_BUTTON_WIDTH,
+                      height: HOME_GACHA_BALL_HELP_BUTTON_HEIGHT,
+                    }}
                   >
-                    <Text className="text-center text-sm font-black text-[#4b2e1f]">ヘルプ</Text>
+                    <Image
+                      source={homeAssets.gachaBallHelpButton}
+                      contentFit="contain"
+                      style={{ width: '100%', height: '100%' }}
+                    />
                   </Pressable>
                 </View>
               </>

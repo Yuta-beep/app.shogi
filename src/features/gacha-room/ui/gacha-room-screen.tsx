@@ -7,7 +7,11 @@ import { ImageBackground, Modal, Pressable, ScrollView, Text, View } from 'react
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppLoadingScreen } from '@/components/organism/app-loading-screen';
-import { BackButton } from '@/components/atom/back-button';
+import {
+  GACHA_ROOM_BACK_BUTTON_INTRO_MARGIN_LEFT,
+  GACHA_ROOM_BACK_BUTTON_LEFT,
+} from '@/features/gacha-room/ui/gacha-room-layout';
+import { GachaRoomBackButton } from '@/features/gacha-room/ui/parts/gacha-room-back-button';
 import { mergeIntroBanners } from '@/constants/gacha-intro-banners';
 import {
   bannerImageSource,
@@ -218,7 +222,11 @@ export function GachaRoomScreen() {
   }, [vm.banners, vm.selectedKey, introBanners]);
 
   const { isReady: areAssetsReady } = useAssetPreload(
-    [...(Object.values(gachaRoomAssets.bannerByKey) as number[]), ...listLocalPieceImageModules()],
+    [
+      gachaRoomAssets.backButton,
+      ...(Object.values(gachaRoomAssets.bannerByKey) as number[]),
+      ...listLocalPieceImageModules(),
+    ],
     {
       enabled: !vm.isLoading,
     },
@@ -242,15 +250,14 @@ export function GachaRoomScreen() {
         >
           <Text className="font-bold text-white">再読み込み</Text>
         </Pressable>
-        <Pressable
-          onPress={() => {
-            void playSe('tap');
-            router.back();
-          }}
-          className="mt-6 items-center py-2"
-        >
-          <Text className="text-slate-400">戻る</Text>
-        </Pressable>
+        <View className="mt-6 items-center">
+          <GachaRoomBackButton
+            onPress={() => {
+              void playSe('tap');
+              router.back();
+            }}
+          />
+        </View>
       </SafeAreaView>
     );
   }
@@ -317,8 +324,11 @@ export function GachaRoomScreen() {
           showsVerticalScrollIndicator
         >
           <View className="mb-6 rounded-2xl border border-indigo-400/30 bg-[#0f172a]/95 p-4">
-            <View className="mb-4 flex-row items-center">
-              <BackButton
+            <View
+              className="mb-4 flex-row items-center"
+              style={{ marginLeft: GACHA_ROOM_BACK_BUTTON_INTRO_MARGIN_LEFT }}
+            >
+              <GachaRoomBackButton
                 onPress={() => {
                   void playSe('tap');
                   router.back();
@@ -371,6 +381,22 @@ export function GachaRoomScreen() {
               className="min-h-[520px] flex-1 bg-black/50 px-4 pb-8 pt-2"
               style={{ paddingTop: insets.top + 48 }}
             >
+              <View
+                style={{
+                  position: 'absolute',
+                  top: 8,
+                  left: GACHA_ROOM_BACK_BUTTON_LEFT,
+                  zIndex: 55,
+                }}
+              >
+                <GachaRoomBackButton
+                  onPress={() => {
+                    void playSe('tap');
+                    router.back();
+                  }}
+                />
+              </View>
+
               {vm.noticeMessage ? (
                 <View className="mb-3 rounded-xl border border-amber-300/40 bg-amber-500/10 px-3 py-2">
                   <Text className="text-sm font-bold text-amber-200">{vm.noticeMessage}</Text>
@@ -392,15 +418,7 @@ export function GachaRoomScreen() {
                     </Text>
                   ) : null}
                 </View>
-                <View className="items-end gap-2">
-                  {currencyRow}
-                  <BackButton
-                    onPress={() => {
-                      void playSe('tap');
-                      router.back();
-                    }}
-                  />
-                </View>
+                <View className="items-end gap-2">{currencyRow}</View>
               </View>
 
               {selectedBanner?.pieceRateText ? (
