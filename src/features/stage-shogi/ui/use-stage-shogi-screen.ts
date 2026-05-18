@@ -22,6 +22,7 @@ import {
   createPieceSfenMapping,
 } from '@/features/stage-shogi/domain/piece-conversion';
 import type { PromotionImageFlash } from '@/features/stage-shogi/ui/components/stage-shogi-board';
+import { normalizePieceCatalogItemForDisplay } from '@/features/piece-info/lib/piece-catalog-display';
 import { useStageBattleScreen } from '@/features/stage-shogi/ui/use-stage-battle-screen';
 import {
   InspectingPieceState,
@@ -390,7 +391,11 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
   }, [pieces, promotionImageFlash]);
 
   /** エンジン上書き（刀・銃など）を含む。長押し説明・SFEN 解決と将棋エンジンを揃える。 */
-  const pieceCatalogNormalized = useMemo(() => normalizePieceCatalog(pieceCatalog), [pieceCatalog]);
+  const pieceCatalogNormalized = useMemo(
+    () =>
+      normalizePieceCatalog(pieceCatalog).map((item) => normalizePieceCatalogItemForDisplay(item)),
+    [pieceCatalog],
+  );
 
   const pieceDefsByChar = useMemo(
     () =>
@@ -2125,8 +2130,11 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
             birdNameOverride ??
             detail?.name ??
             displayChar),
-      desc: resolveInspectSkillDescription(displayChar, detail?.desc, target.pieceCode),
-      move: resolveInspectMoveDescription(displayChar, detail?.move, target.pieceCode),
+      skill:
+        detail?.skill ??
+        resolveInspectSkillDescription(displayChar, detail?.desc, target.pieceCode),
+      move:
+        detail?.move ?? resolveInspectMoveDescription(displayChar, detail?.move, target.pieceCode),
       imageSignedUrl: detail?.imageSignedUrl ?? target.imageSignedUrl ?? null,
     });
   }

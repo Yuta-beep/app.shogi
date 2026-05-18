@@ -3,6 +3,13 @@ import { Pressable, Text, View } from 'react-native';
 
 import { HomeCommonHeader } from '@/components/organism/home-common-header';
 import { homeAssets } from '@/constants/home-assets';
+import {
+  HOME_GACHA_ICON_SIZE,
+  HOME_PVP_BADGE_HEIGHT,
+  HOME_PVP_BADGE_WIDTH,
+  HOME_SIDE_ACTION_TOP,
+  HOME_TITLE_BACK_BUTTON_TOP,
+} from '@/features/home/ui/home-layout';
 
 type HomeHeaderSectionProps = {
   onPressBackToTitle: () => void;
@@ -48,7 +55,8 @@ export function HomeHeaderSection({
         accessibilityRole="button"
         accessibilityLabel="タイトル画面へ戻る"
         onPress={onPressBackToTitle}
-        className="absolute right-4 top-[150px] z-10 rounded-lg border border-[#8e6428] bg-[#d2a860] px-3 py-2 active:opacity-80"
+        style={{ top: HOME_TITLE_BACK_BUTTON_TOP }}
+        className="absolute right-4 z-10 rounded-lg border border-[#8e6428] bg-[#d2a860] px-3 py-2 active:opacity-80"
       >
         <Text className="text-center text-xs font-black text-[#4b2e1f]">タイトルへ</Text>
       </Pressable>
@@ -58,7 +66,12 @@ export function HomeHeaderSection({
         accessibilityLabel="PVP対戦へ"
         onPress={onPressMatching}
         pointerEvents="auto"
-        className="absolute right-[-20px] top-[262px] z-10 h-24 w-48 active:scale-95"
+        style={{
+          top: HOME_SIDE_ACTION_TOP,
+          width: HOME_PVP_BADGE_WIDTH,
+          height: HOME_PVP_BADGE_HEIGHT,
+        }}
+        className="absolute right-[-20px] z-10 active:scale-95"
       >
         <Image
           source={homeAssets.pvpBadge}
@@ -67,19 +80,17 @@ export function HomeHeaderSection({
         />
       </Pressable>
 
-      <View pointerEvents="none" className="absolute left-5 top-[150px] h-16 w-16">
-        <Image
-          source={homeAssets.gachaBallIcon}
-          contentFit="contain"
-          style={{ width: '100%', height: '100%' }}
-        />
-      </View>
-
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="ガチャ玉の色の説明を開く"
         onPress={onPressGachaBallIcon}
-        className="absolute left-5 top-[218px] z-10 h-20 w-20 active:opacity-80"
+        style={{
+          top: HOME_SIDE_ACTION_TOP,
+          left: 20,
+          width: HOME_GACHA_ICON_SIZE,
+          height: HOME_GACHA_ICON_SIZE,
+        }}
+        className="absolute z-10 active:opacity-80"
       >
         <Image
           source={homeAssets.gachaBallIcon}

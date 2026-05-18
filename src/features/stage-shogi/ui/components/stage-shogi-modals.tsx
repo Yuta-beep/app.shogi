@@ -205,9 +205,9 @@ export function StageShogiInspectModal({
           {isBossPiece ? (
             <Text className="mt-1 text-center text-xs font-black text-[#7f1d1d]">ボス駒</Text>
           ) : null}
-          <Text className="mt-3 text-xs font-black text-[#7f1d1d]">【スキルの説明】</Text>
-          <Text className="mt-1 text-sm text-[#1f2937]">{inspectingPiece?.desc}</Text>
-          <Text className="mt-3 text-xs font-black text-[#7f1d1d]">【行動範囲】</Text>
+          <Text className="mt-3 text-xs font-black text-[#7f1d1d]">【スキル】</Text>
+          <Text className="mt-1 text-sm leading-5 text-[#1f2937]">{inspectingPiece?.skill}</Text>
+          <Text className="mt-3 text-xs font-black text-[#7f1d1d]">【移動】</Text>
           <Text className="mt-1 text-sm text-[#1f2937]">{inspectingPiece?.move}</Text>
           <Pressable onPress={onClose} className="mt-4 rounded-md bg-[#8b0000] px-3 py-2">
             <Text className="text-center font-black text-[#ffd56a]">閉じる</Text>

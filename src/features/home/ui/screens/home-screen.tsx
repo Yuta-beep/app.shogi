@@ -17,6 +17,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { AppLoadingScreen } from '@/components/organism/app-loading-screen';
 import { homeAssets } from '@/constants/home-assets';
+import { HOME_BACKGROUND_OFFSET, HOME_TOP_LAYOUT_OFFSET } from '@/features/home/ui/home-layout';
 import { HomeActionGridSection } from '@/features/home/ui/sections/home-action-grid-section';
 import { HomeBackgroundSection } from '@/features/home/ui/sections/home-background-section';
 import { gachaBallColorIndexForCurrentPeriod } from '@/features/home/lib/gacha-ball-schedule';
@@ -215,26 +216,35 @@ export function HomeScreen() {
   }
 
   return (
-    <ImageBackground source={homeAssets.background} resizeMode="stretch" className="flex-1">
-      <HomeHeaderSection
-        onPressBackToTitle={() => {
-          void playSe('tap');
-          router.replace('/');
-        }}
-        onPressMatching={() => {
-          void playSe('tap');
-          router.push('/online-match-setup' as never);
-        }}
-        onPressGachaBallIcon={openGachaBallViewer}
-        playerName={snapshot.playerName}
-        playerRank={snapshot.playerRank}
-        playerExp={snapshot.playerExp}
-        pawnCurrency={snapshot.pawnCurrency}
-        goldCurrency={snapshot.goldCurrency}
-        stamina={snapshot.stamina}
-        maxStamina={snapshot.maxStamina}
-        nextRecoveryAt={snapshot.nextRecoveryAt}
-      />
+    <ImageBackground
+      source={homeAssets.background}
+      resizeMode="stretch"
+      className="flex-1"
+      imageStyle={{
+        transform: [{ translateY: HOME_BACKGROUND_OFFSET }],
+      }}
+    >
+      <View style={{ marginTop: HOME_TOP_LAYOUT_OFFSET }}>
+        <HomeHeaderSection
+          onPressBackToTitle={() => {
+            void playSe('tap');
+            router.replace('/');
+          }}
+          onPressMatching={() => {
+            void playSe('tap');
+            router.push('/online-match-setup' as never);
+          }}
+          onPressGachaBallIcon={openGachaBallViewer}
+          playerName={snapshot.playerName}
+          playerRank={snapshot.playerRank}
+          playerExp={snapshot.playerExp}
+          pawnCurrency={snapshot.pawnCurrency}
+          goldCurrency={snapshot.goldCurrency}
+          stamina={snapshot.stamina}
+          maxStamina={snapshot.maxStamina}
+          nextRecoveryAt={snapshot.nextRecoveryAt}
+        />
+      </View>
       <SafeAreaView edges={['left', 'right', 'bottom']} className="flex-1 bg-black/10">
         <View className="flex-1">
           <HomeBackgroundSection />

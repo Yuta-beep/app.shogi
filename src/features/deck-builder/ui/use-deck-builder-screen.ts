@@ -7,10 +7,17 @@ import {
   createLoadDeckBuilderUseCase,
   createSaveDeckUseCase,
 } from '@/usecases/deck-builder/create-deck-builder-usecases';
+import { createLoadPieceCatalogUseCase } from '@/usecases/piece-info/create-piece-info-usecases';
 import { isApiDataSource } from '@/lib/config/data-source';
 import { supabase } from '@/lib/supabase/supabase-client';
 import { getDeckBuilderPieceCost } from '@/features/deck-builder/lib/deck-builder-piece-cost';
 import { normalizeDeckBuilderPieceChar } from '@/features/deck-builder/lib/deck-builder-piece-char';
+import {
+  buildPieceCatalogByCharMap,
+  lookupCatalogPieceByChar,
+  normalizePieceCatalogItemForDisplay,
+} from '@/features/piece-info/lib/piece-catalog-display';
+import type { PieceCatalogItem } from '@/domain/models/piece';
 import { CHAR_TO_CODE } from '@/features/stage-shogi/domain/piece-conversion';
 import { isBossPiece } from '@/features/deck-builder/lib/boss-pieces';
 
@@ -58,6 +65,7 @@ const SPECIAL_PIECE_ALLOWED_POSITIONS = new Map<string, ReadonlySet<string>>([
   ['忍', new Set(rowCols(8, [1, 7]))],
   ['竜', new Set(rowCols(7, [1]))],
   ['鳳', new Set(rowCols(7, [7]))],
+  ['岩', new Set(rowCols(8, [1, 7]))],
   ['炎', new Set(rowCols(8, [1, 7]))],
   ['火', new Set(rowCols(8, [0, 8]))],
   ['水', new Set(rowCols(8, [0, 8]))],
@@ -221,6 +229,30 @@ function normalizeOwnedPieceText(piece: OwnedPiece): OwnedPiece {
     skill: skill.length > 0 && skill !== '準備中' ? skill : `${normalizedName}のスキル説明。`,
     move: move.length > 0 && move !== '準備中' ? move : `${normalizedName}の行動範囲。`,
   };
+}
+
+function enrichOwnedPieceWithCatalog(
+  piece: OwnedPiece,
+  catalogByChar: Map<string, PieceCatalogItem>,
+): OwnedPiece {
+  const ruleChar = normalizeDeckBuilderPieceChar(piece.char, piece.name);
+  const catalog = lookupCatalogPieceByChar(catalogByChar, ruleChar);
+  if (!catalog) return piece;
+  const display = normalizePieceCatalogItemForDisplay(catalog);
+  return {
+    ...piece,
+    name: (piece.name ?? '').trim() || display.name || piece.char,
+    desc: display.desc,
+    skill: display.skill,
+    move: display.move,
+  };
+}
+
+function enrichOwnedPiecesWithCatalog(
+  pieces: OwnedPiece[],
+  catalogByChar: Map<string, PieceCatalogItem>,
+): OwnedPiece[] {
+  return pieces.map((piece) => enrichOwnedPieceWithCatalog(piece, catalogByChar));
 }
 
 function initialBoardPlacementsFromDecks(
@@ -459,13 +491,17 @@ export function useDeckBuilderScreen() {
     }
 
     let active = true;
-    const loadUseCase = createLoadDeckBuilderUseCase(token);
+    const loadDeckUseCase = createLoadDeckBuilderUseCase(token);
+    const loadCatalogUseCase = createLoadPieceCatalogUseCase();
     setIsLoading(true);
-    loadUseCase
-      .execute()
-      .then((snapshot) => {
+    Promise.all([loadDeckUseCase.execute(), loadCatalogUseCase.execute()])
+      .then(([snapshot, catalog]) => {
         if (active) {
-          const normalizedOwnedPieces = snapshot.ownedPieces.map(normalizeOwnedPieceText);
+          const catalogByChar = buildPieceCatalogByCharMap(catalog);
+          const normalizedOwnedPieces = enrichOwnedPiecesWithCatalog(
+            snapshot.ownedPieces.map(normalizeOwnedPieceText),
+            catalogByChar,
+          );
           setOwnedPieces(normalizedOwnedPieces);
           setSavedDecks(snapshot.savedDecks);
           const initial = initialBoardPlacementsFromDecks(

@@ -4,7 +4,13 @@ import {
   hasKing,
   normalizeHandsStateKeys,
 } from '@/features/stage-shogi/domain/game-rules';
-import type { AiBattleMove, AiBattlePosition, AiBoardPiece, AiPieceDefinition, Side } from '@/ai/model';
+import type {
+  AiBattleMove,
+  AiBattlePosition,
+  AiBoardPiece,
+  AiPieceDefinition,
+  Side,
+} from '@/ai/model';
 import type {
   BattleCanonicalPosition,
   BattleCommittedMove,

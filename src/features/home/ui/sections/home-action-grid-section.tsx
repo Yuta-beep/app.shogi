@@ -2,6 +2,7 @@ import { useRouter } from 'expo-router';
 import { View } from 'react-native';
 
 import { homeAssets } from '@/constants/home-assets';
+import { HOME_PIECE_GACHA_IMAGE_HEIGHT } from '@/features/home/ui/home-layout';
 import { HomeImageButton } from '@/features/home/ui/parts/home-image-button';
 import { playSe } from '@/lib/audio/audio-manager';
 
@@ -48,7 +49,7 @@ export function HomeActionGridSection() {
           <HomeImageButton
             source={homeAssets.buttons.gacha}
             frameClassName={buttonFrameClassName}
-            imageHeight={buttonImageHeight}
+            imageHeight={HOME_PIECE_GACHA_IMAGE_HEIGHT}
             onPress={() => onPressRoute('/gacha-room')}
           />
           <HomeImageButton

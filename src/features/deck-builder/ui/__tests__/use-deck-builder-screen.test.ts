@@ -517,6 +517,105 @@ describe('useDeckBuilderScreen', () => {
     expect(result.current.isValidPlacementAt(6, 0)).toBe(false);
   });
 
+  it('岩は(9,2)と(9,8)のみに配置できる', async () => {
+    const ownedPieces = [
+      {
+        pieceId: 401,
+        char: '歩',
+        name: '歩兵',
+        imageSignedUrl: null,
+        desc: '',
+        skill: '',
+        move: '',
+      },
+      {
+        pieceId: 402,
+        char: '香',
+        name: '香車',
+        imageSignedUrl: null,
+        desc: '',
+        skill: '',
+        move: '',
+      },
+      {
+        pieceId: 403,
+        char: '桂',
+        name: '桂馬',
+        imageSignedUrl: null,
+        desc: '',
+        skill: '',
+        move: '',
+      },
+      {
+        pieceId: 404,
+        char: '銀',
+        name: '銀将',
+        imageSignedUrl: null,
+        desc: '',
+        skill: '',
+        move: '',
+      },
+      {
+        pieceId: 405,
+        char: '金',
+        name: '金将',
+        imageSignedUrl: null,
+        desc: '',
+        skill: '',
+        move: '',
+      },
+      {
+        pieceId: 406,
+        char: '角',
+        name: '角行',
+        imageSignedUrl: null,
+        desc: '',
+        skill: '',
+        move: '',
+      },
+      {
+        pieceId: 407,
+        char: '飛',
+        name: '飛車',
+        imageSignedUrl: null,
+        desc: '',
+        skill: '',
+        move: '',
+      },
+      {
+        pieceId: 408,
+        char: '玉',
+        name: '玉将',
+        imageSignedUrl: null,
+        desc: '',
+        skill: '',
+        move: '',
+      },
+      {
+        pieceId: 409,
+        char: '岩',
+        name: '岩山',
+        imageSignedUrl: null,
+        desc: '',
+        skill: '',
+        move: '',
+      },
+    ];
+    mockLoadExecute.mockResolvedValue({ ownedPieces, savedDecks: [] });
+
+    const { result } = renderHook(() => useDeckBuilderScreen());
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    const rock = ownedPieces[8]!;
+    act(() => {
+      result.current.selectPieceForPlacement(rock);
+    });
+
+    expect(result.current.isValidPlacementAt(8, 1)).toBe(true);
+    expect(result.current.isValidPlacementAt(8, 7)).toBe(true);
+    expect(result.current.isValidPlacementAt(8, 4)).toBe(false);
+  });
+
   it('読み込み時も上限なしで反映される', async () => {
     const placements = Array.from({ length: 21 }, (_, i) => ({
       rowNo: Math.floor(i / 9),

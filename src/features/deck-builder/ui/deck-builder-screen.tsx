@@ -442,10 +442,10 @@ export function DeckBuilderScreen({ mode = 'default' }: DeckBuilderScreenProps) 
                 </Text>
               </View>
             ) : null}
-            <Text className="mt-3 text-xs font-black text-[#7f1d1d]">【スキルの説明】</Text>
-            <Text className="mt-1 text-sm text-[#1f2937]">{vm.selectedPiece?.desc}</Text>
-            <Text className="mt-3 text-xs font-black text-[#7f1d1d]">【行動範囲】</Text>
-            <Text className="mt-1 text-sm text-[#1f2937]">{vm.selectedPiece?.move}</Text>
+            <Text className="mt-3 text-xs font-black text-[#7f1d1d]">【スキル】</Text>
+            <Text className="mt-1 text-sm leading-5 text-[#1f2937]">{vm.selectedPiece?.skill}</Text>
+            <Text className="mt-3 text-xs font-black text-[#7f1d1d]">【移動】</Text>
+            <Text className="mt-1 text-sm leading-5 text-[#1f2937]">{vm.selectedPiece?.move}</Text>
             <Pressable
               onPress={() => {
                 void playSe('cancel');

@@ -60,7 +60,7 @@ export type InspectingPieceState = {
   char: string;
   pieceCode?: string | null;
   name: string;
-  desc: string;
+  skill: string;
   move: string;
   imageSignedUrl: string | null;
 } | null;
