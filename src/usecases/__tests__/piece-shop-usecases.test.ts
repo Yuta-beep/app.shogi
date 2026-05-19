@@ -11,15 +11,22 @@ describe('piece shop usecases', () => {
     expect(snapshot.items).toHaveLength(6);
     expect(snapshot.pawnCurrency).toBe(100);
     expect(snapshot.goldCurrency).toBe(100);
-    expect(snapshot.owned).toEqual(['走']);
+    expect(snapshot.owned).toEqual([]);
   });
 
-  it('returns UI-only success for purchase', async () => {
+  it('deducts currency and marks item owned on purchase', async () => {
     const purchase = new MockPurchaseShopItemUseCase();
     const result = await purchase.execute({
-      item: { key: '種', desc: 'x', move: 'y', cost: 1, costType: 'gold' },
+      item: { key: '種', desc: 'x', move: 'y', cost: 3, costType: 'gold' },
     });
 
-    expect(result).toEqual({ success: true, reason: 'UI_ONLY' });
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.goldCurrency).toBe(97);
+    expect(result.owned).toContain('種');
+
+    const catalog = await new MockLoadShopCatalogUseCase().execute();
+    expect(catalog.goldCurrency).toBe(97);
+    expect(catalog.owned).toContain('種');
   });
 });

@@ -1,6 +1,6 @@
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { HomeCommonHeader } from '@/components/organism/home-common-header';
+import { EditableHomeCommonHeader } from '@/components/organism/editable-home-common-header';
 import { useHomeHudSnapshot } from '@/hooks/common/use-home-hud-snapshot';
 
 type GlobalHomeHudProps = {
@@ -14,7 +14,7 @@ export function GlobalHomeHud({ pawnCurrency, goldCurrency }: GlobalHomeHudProps
   return (
     <>
       <SafeAreaView edges={['top']} />
-      <HomeCommonHeader
+      <EditableHomeCommonHeader
         userName={snapshot.playerName}
         rank={snapshot.playerRank}
         exp={snapshot.playerExp}

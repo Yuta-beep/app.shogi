@@ -42,6 +42,7 @@ import {
   localPromotedModuleFromBaseCodeCandidates,
   normalizeCellIndex,
   resolvePromotedImageSource,
+  kirinShowsImmunityShieldMark,
 } from '@/features/stage-shogi/ui/stage-shogi-screen.helpers';
 import { BoardCell } from '@/features/stage-shogi/domain/game-rules';
 
@@ -92,6 +93,67 @@ const YangSkillSparkleRing = memo(function YangSkillSparkleRing() {
         animatedStyle,
       ]}
     />
+  );
+});
+
+const KirinImmunityShieldBadge = memo(function KirinImmunityShieldBadge() {
+  return (
+    <View
+      pointerEvents="none"
+      style={{
+        position: 'absolute',
+        top: -4,
+        left: -2,
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        backgroundColor: '#facc15',
+        borderWidth: 2,
+        borderColor: '#b45309',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 24,
+        elevation: 12,
+        shadowColor: '#000',
+        shadowOpacity: 0.4,
+        shadowRadius: 4,
+        shadowOffset: { width: 0, height: 1 },
+      }}
+    >
+      <Shield size={20} color="#92400e" strokeWidth={2.6} fill="#fef08a" />
+    </View>
+  );
+});
+
+const MaiDanceRestrictionXMark = memo(function MaiDanceRestrictionXMark() {
+  const barStyle = {
+    position: 'absolute' as const,
+    width: '86%',
+    height: 3,
+    backgroundColor: 'rgba(250, 204, 21, 0.96)',
+    borderRadius: 2,
+    shadowColor: '#ca8a04',
+    shadowOpacity: 0.85,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 4,
+  };
+  return (
+    <View
+      pointerEvents="none"
+      style={{
+        position: 'absolute',
+        left: '8%',
+        right: '8%',
+        top: '8%',
+        bottom: '8%',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <View style={[barStyle, { transform: [{ rotate: '45deg' }] }]} />
+      <View style={[barStyle, { transform: [{ rotate: '-45deg' }] }]} />
+    </View>
   );
 });
 
@@ -154,6 +216,8 @@ type BoardPieceSpriteProps = {
   chrysanthemumRevivalMark?: boolean;
   yangSkillSparkle?: boolean;
   yinSkillSparkle?: boolean;
+  maiDanceRestrictionMark?: boolean;
+  kirinImmunityShieldMark?: boolean;
 };
 
 const BoardPieceSprite = memo(function BoardPieceSprite({
@@ -173,6 +237,8 @@ const BoardPieceSprite = memo(function BoardPieceSprite({
   chrysanthemumRevivalMark = false,
   yangSkillSparkle = false,
   yinSkillSparkle = false,
+  maiDanceRestrictionMark = false,
+  kirinImmunityShieldMark = false,
 }: BoardPieceSpriteProps) {
   const rowIndex = normalizeCellIndex(piece.row);
   const colIndex = normalizeCellIndex(piece.col);
@@ -231,14 +297,22 @@ const BoardPieceSprite = memo(function BoardPieceSprite({
         style={{
           width: `${pieceScalePercent}%`,
           height: `${pieceScalePercent}%`,
-          overflow: 'hidden',
-          transform: [{ rotate: enemy ? '180deg' : '0deg' }],
-          borderWidth: aTransformed ? 2 : 0,
-          borderRadius: aTransformed ? 8 : 0,
-          borderColor: aTransformed ? 'rgba(255, 215, 64, 0.9)' : 'transparent',
-          backgroundColor: aTransformed ? 'rgba(255, 215, 64, 0.14)' : 'transparent',
+          position: 'relative',
         }}
       >
+        <View
+          className="items-center justify-center"
+          style={{
+            width: '100%',
+            height: '100%',
+            overflow: 'hidden',
+            transform: [{ rotate: enemy ? '180deg' : '0deg' }],
+            borderWidth: aTransformed ? 2 : 0,
+            borderRadius: aTransformed ? 8 : 0,
+            borderColor: aTransformed ? 'rgba(255, 215, 64, 0.9)' : 'transparent',
+            backgroundColor: aTransformed ? 'rgba(255, 215, 64, 0.14)' : 'transparent',
+          }}
+        >
         <View style={{ width: '100%', height: '100%', position: 'relative' }}>
           {localPromotedImageSource != null ? (
             <Image
@@ -437,7 +511,10 @@ const BoardPieceSprite = memo(function BoardPieceSprite({
           ) : null}
           {yinSkillSparkle && !darkVeiled ? <YinSkillSparkleRing /> : null}
           {yangSkillSparkle && !darkVeiled ? <YangSkillSparkleRing /> : null}
+          {maiDanceRestrictionMark && !darkVeiled ? <MaiDanceRestrictionXMark /> : null}
         </View>
+        </View>
+        {kirinImmunityShieldMark && !darkVeiled ? <KirinImmunityShieldBadge /> : null}
       </View>
     </View>
   );
@@ -768,6 +845,8 @@ const BoardPiecesLayer = memo(function BoardPiecesLayer({
             chrysanthemumRevivalMark={Boolean(placement.chrysanthemumRevivalMark)}
             yangSkillSparkle={Boolean(placement.yangSkillSparkle)}
             yinSkillSparkle={Boolean(placement.yinSkillSparkle)}
+            maiDanceRestrictionMark={Boolean(placement.maiDanceRestrictionMark)}
+            kirinImmunityShieldMark={kirinShowsImmunityShieldMark(pieces, placement)}
           />
         );
       })}

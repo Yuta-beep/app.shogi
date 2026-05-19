@@ -23,6 +23,7 @@ type SkillMoverFlagName =
   | 'isFishMover'
   | 'isMossMover'
   | 'isRainbowMover'
+  | 'isDanceMover'
   | 'isSwampMover'
   | 'isPoisonMover'
   | 'isWaterfallMover'
@@ -82,6 +83,7 @@ const WIND_PIECE_CODES = ['WIND', '風'] as const;
 const FISH_PIECE_CODES = ['FISH', '魚'] as const;
 const MOSS_PIECE_CODES = ['MOSS', '苔'] as const;
 const RAINBOW_PIECE_CODES = ['RAINBOW', '虹'] as const;
+const DANCE_PIECE_CODES = ['MAI', 'SHOP_MAI', '舞'] as const;
 const SWAMP_PIECE_CODES = ['SWAMP', '沼'] as const;
 const POISON_PIECE_CODES = ['POISON', '毒'] as const;
 const WATERFALL_PIECE_CODES = ['WATERFALL', '滝', '8CC9287B7E93'] as const;
@@ -131,6 +133,7 @@ const MOVER_SPECS: readonly SkillMoverSpec[] = [
   { key: 'isFishMover', aliases: FISH_PIECE_CODES },
   { key: 'isMossMover', aliases: MOSS_PIECE_CODES },
   { key: 'isRainbowMover', aliases: RAINBOW_PIECE_CODES },
+  { key: 'isDanceMover', aliases: DANCE_PIECE_CODES },
   { key: 'isSwampMover', aliases: SWAMP_PIECE_CODES },
   { key: 'isPoisonMover', aliases: POISON_PIECE_CODES },
   { key: 'isWaterfallMover', aliases: WATERFALL_PIECE_CODES },
@@ -183,18 +186,20 @@ export function normalizedPieceCodeUpper(piece: PieceLike): string {
   return (toBasePieceCode(piece.pieceCode) ?? piece.pieceCode ?? '').toUpperCase();
 }
 
+/** 1文字の canonical（例: `A`）は部分一致させない。`MAI` が `A` に誤マッチするのを防ぐ。 */
+function aliasAllowsSubstringMatch(normalizedAlias: string): boolean {
+  return normalizedAlias.length >= 4;
+}
+
 function pieceMatchesAliases(piece: PieceLike, aliases: readonly string[]): boolean {
   const base = normalizeSkillPieceCode(toBasePieceCode(piece.pieceCode) ?? '');
   const raw = pieceRawUpper(piece);
   const char = normKanjiForEngineRules(piece.char);
   return aliases.some((alias) => {
     const normalizedAlias = normalizeSkillPieceCode(alias);
-    return (
-      normalizedAlias === base ||
-      normalizedAlias === raw ||
-      alias === char ||
-      raw.includes(normalizedAlias)
-    );
+    if (normalizedAlias === base || normalizedAlias === raw || alias === char) return true;
+    if (!aliasAllowsSubstringMatch(normalizedAlias)) return false;
+    return raw.includes(normalizedAlias);
   });
 }
 
@@ -206,7 +211,9 @@ function codeMatchesAliases(
   if (!normalized) return false;
   return aliases.some((alias) => {
     const normalizedAlias = normalizeSkillPieceCode(alias);
-    return normalized === normalizedAlias || normalized.includes(normalizedAlias);
+    if (normalized === normalizedAlias) return true;
+    if (!aliasAllowsSubstringMatch(normalizedAlias)) return false;
+    return normalized.includes(normalizedAlias);
   });
 }
 
@@ -298,6 +305,90 @@ export function isMachinePiece(piece: PieceLike): boolean {
 
 export function isGunPiece(piece: PieceLike): boolean {
   return normKanjiForEngineRules(piece.char) === '銃' || toBasePieceCode(piece.pieceCode) === 'GUN';
+}
+
+/** 駒ショップ「走」: 前方に最大2マス（1マス目に駒があると2マス目には進めない）。 */
+export function isRunPiece(piece: PieceLike): boolean {
+  const char = normKanjiForEngineRules(piece.char);
+  if (char === '走') return true;
+  const base = toBasePieceCode(piece.pieceCode);
+  if (base === 'SO' || base === 'SHOP_SO') return true;
+  const raw = pieceRawUpper(piece);
+  return raw.includes('PIECE_SHOP_SO') || raw.includes('SHOP_SO');
+}
+
+/** 駒ショップ「麒」: 敵の歩・金・銀から取られない。 */
+export function isKirinPiece(piece: PieceLike): boolean {
+  const char = normKanjiForEngineRules(piece.char);
+  if (char === '麒') return true;
+  const base = toBasePieceCode(piece.pieceCode);
+  if (base === 'KIRIN' || base === 'SHOP_KIRIN') return true;
+  const raw = pieceRawUpper(piece);
+  return raw.includes('PIECE_SHOP_KIRIN') || raw.includes('SHOP_KIRIN');
+}
+
+/** 麒の取り免疫対象（HTML: 金・銀・歩のみ）。 */
+export function isKirinImmuneCapturerPiece(piece: PieceLike): boolean {
+  const char = normKanjiForEngineRules(piece.char);
+  if (char === '歩' || char === '金' || char === '銀' || char === 'と' || char === '成銀') {
+    return true;
+  }
+  const base = toBasePieceCode(piece.pieceCode);
+  return base === 'FU' || base === 'KI' || base === 'GI';
+}
+
+export function isKirinCaptureBlocked(captor: PieceLike, target: PieceLike): boolean {
+  return isKirinPiece(target) && isKirinImmuneCapturerPiece(captor);
+}
+
+/** 駒ショップ「種」: 移動時20%で周囲ランダム1マスに「葉」を召喚。 */
+export function isTanePiece(piece: PieceLike): boolean {
+  const char = normKanjiForEngineRules(piece.char);
+  if (char === '種') return true;
+  const base = toBasePieceCode(piece.pieceCode);
+  if (base === 'TANE' || base === 'SHOP_TANE') return true;
+  const raw = pieceRawUpper(piece);
+  return raw.includes('PIECE_SHOP_TANE') || raw.includes('SHOP_TANE');
+}
+
+/** 駒ショップ「舞」: 移動時、その時点で周囲8マスの敵の移動を斜め前1マスのみに制限。 */
+export function isMaiPiece(piece: PieceLike): boolean {
+  const char = normKanjiForEngineRules(piece.char);
+  if (char === '舞') return true;
+  const base = toBasePieceCode(piece.pieceCode);
+  if (base === 'MAI' || base === 'SHOP_MAI') return true;
+  const raw = pieceRawUpper(piece);
+  return raw.includes('PIECE_SHOP_MAI') || raw.includes('SHOP_MAI');
+}
+
+/** 駒ショップ「P」: 縦横1マス。移動時同じ行・列の敵を行動不能にする。 */
+export function isShopPPiece(piece: PieceLike): boolean {
+  const char = normKanjiForEngineRules(piece.char);
+  if (char === 'P') return true;
+  const base = toBasePieceCode(piece.pieceCode);
+  if (base === 'SHOP_P') return true;
+  const raw = pieceRawUpper(piece);
+  return raw.includes('PIECE_SHOP_P') || raw.includes('SHOP_P');
+}
+
+/** 駒ショップ「鳴」: 銀と同じ移動。 */
+export function isNakuPiece(piece: PieceLike): boolean {
+  const char = normKanjiForEngineRules(piece.char);
+  if (char === '鳴') return true;
+  const base = toBasePieceCode(piece.pieceCode);
+  if (base === 'NAKU' || base === 'SHOP_NAKU') return true;
+  const raw = pieceRawUpper(piece);
+  return raw.includes('PIECE_SHOP_NAKU') || raw.includes('SHOP_NAKU');
+}
+
+/** 鳴のポン取り: 盤上で同一種の敵駒か（canonical / 表示漢字）。 */
+export function isSameEnemyPieceTypeForNakuPon(a: PieceLike, b: PieceLike): boolean {
+  const baseA = toBasePieceCode(a.pieceCode);
+  const baseB = toBasePieceCode(b.pieceCode);
+  if (baseA && baseB && baseA === baseB) return true;
+  const charA = normKanjiForEngineRules(a.char);
+  const charB = normKanjiForEngineRules(b.char);
+  return charA.length > 0 && charA === charB;
 }
 
 export function isKatanaPiece(piece: PieceLike): boolean {
@@ -512,6 +603,7 @@ export function buildSkillMoverFlags(input: {
     isFishMover: false,
     isMossMover: false,
     isRainbowMover: false,
+    isDanceMover: false,
     isSwampMover: false,
     isPoisonMover: false,
     isWaterfallMover: false,
@@ -549,9 +641,16 @@ export function buildSkillMoverFlags(input: {
   }
 
   flags.isAMover =
-    codeMatchesAliases(input.movedCode, A_PIECE_CODES) ||
-    codeMatchesAliases(moveCode, A_PIECE_CODES) ||
-    (input.movedPiece != null && isAPieceInstance(input.movedPiece));
+    (input.movedPiece != null && isAPieceInstance(input.movedPiece)) ||
+    normalizeSkillPieceCode(input.movedCode) === 'A' ||
+    normalizeSkillPieceCode(moveCode) === 'A';
+  flags.isDanceMover =
+    flags.isDanceMover ||
+    (input.movedPiece != null && isMaiPiece(input.movedPiece)) ||
+    normalizeSkillPieceCode(input.movedCode) === 'MAI' ||
+    normalizeSkillPieceCode(input.movedCode) === 'SHOP_MAI' ||
+    normalizeSkillPieceCode(moveCode) === 'MAI' ||
+    normalizeSkillPieceCode(moveCode) === 'SHOP_MAI';
   flags.isBoatMover =
     input.movedCode === 'BOAT' || moveCode === 'BOAT' || input.movedPiece?.char === '舟';
   flags.isBirdMover =

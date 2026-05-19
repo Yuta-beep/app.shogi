@@ -181,6 +181,63 @@ describe('useDeckBuilderScreen', () => {
     expect(result.current.getRemainingCount(pawn)).toBe(Infinity);
   });
 
+  it('removePieceAt で盤上の駒をデッキから外せる', async () => {
+    const rook = { pieceId: 201, char: '飛', name: '飛車', imageSignedUrl: null, desc: '', skill: '', move: '' };
+    mockLoadExecute.mockResolvedValue({
+      ownedPieces: [rook, { pieceId: 202, char: '王', name: '王将', imageSignedUrl: null }],
+      savedDecks: [],
+    });
+
+    const { result } = renderHook(() => useDeckBuilderScreen());
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    act(() => {
+      result.current.selectPieceForPlacement(rook);
+      result.current.placeSelectedPieceAt(6, 7);
+    });
+    expect(result.current.boardPlacements.some((p) => p.row === 7 && p.col === 7)).toBe(true);
+
+    act(() => {
+      result.current.removePieceAt(7, 7);
+    });
+    expect(result.current.boardPlacements.some((p) => p.row === 7 && p.col === 7)).toBe(false);
+  });
+
+  it('駒未選択の placeSelectedPieceAt は盤面を変更しない', async () => {
+    const rook = { pieceId: 201, char: '飛', name: '飛車', imageSignedUrl: null, desc: '', skill: '', move: '' };
+    mockLoadExecute.mockResolvedValue({
+      ownedPieces: [rook, { pieceId: 202, char: '王', name: '王将', imageSignedUrl: null }],
+      savedDecks: [],
+    });
+
+    const { result } = renderHook(() => useDeckBuilderScreen());
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    act(() => {
+      result.current.selectPieceForPlacement(rook);
+      result.current.placeSelectedPieceAt(6, 7);
+    });
+    const countBefore = result.current.boardPlacements.length;
+
+    act(() => {
+      result.current.selectPieceForPlacement({
+        pieceId: 999,
+        char: 'K',
+        name: 'ボス',
+        imageSignedUrl: null,
+        desc: '',
+        skill: '',
+        move: '',
+      });
+    });
+    expect(result.current.selectedPieceForPlacement).toBeNull();
+
+    act(() => {
+      result.current.placeSelectedPieceAt(7, 7);
+    });
+    expect(result.current.boardPlacements.length).toBe(countBefore);
+  });
+
   it('特殊駒はHTML版の許可マスにしか配置できない', async () => {
     const piece = {
       pieceId: 401,
@@ -609,6 +666,32 @@ describe('useDeckBuilderScreen', () => {
     const rock = ownedPieces[8]!;
     act(() => {
       result.current.selectPieceForPlacement(rock);
+    });
+
+    expect(result.current.isValidPlacementAt(8, 1)).toBe(true);
+    expect(result.current.isValidPlacementAt(8, 7)).toBe(true);
+    expect(result.current.isValidPlacementAt(8, 4)).toBe(false);
+  });
+
+  it('麒は(8,2)と(8,8)のみに配置できる', async () => {
+    const ownedPieces = [
+      {
+        pieceId: 9003,
+        char: '麒',
+        name: '麒',
+        imageSignedUrl: null,
+        desc: '',
+        skill: '',
+        move: '',
+      },
+    ];
+    mockLoadExecute.mockResolvedValue({ ownedPieces, savedDecks: [] });
+
+    const { result } = renderHook(() => useDeckBuilderScreen());
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    act(() => {
+      result.current.selectPieceForPlacement(ownedPieces[0]!);
     });
 
     expect(result.current.isValidPlacementAt(8, 1)).toBe(true);

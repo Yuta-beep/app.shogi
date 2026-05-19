@@ -46,6 +46,8 @@ function mapOwnedPiece(piece: ApiOwnedPiece): OwnedPiece {
     name: piece.name,
     imageSignedUrl: piece.imageSignedUrl,
     quantity: piece.quantity,
+    acquiredAt: piece.acquiredAt,
+    source: piece.source,
     desc: `${piece.name}の詳細は準備中です。`,
     skill: '準備中',
     move: '準備中',

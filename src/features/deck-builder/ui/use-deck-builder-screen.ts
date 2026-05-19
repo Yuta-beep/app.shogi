@@ -11,6 +11,7 @@ import { createLoadPieceCatalogUseCase } from '@/usecases/piece-info/create-piec
 import { isApiDataSource } from '@/lib/config/data-source';
 import { supabase } from '@/lib/supabase/supabase-client';
 import { getDeckBuilderPieceCost } from '@/features/deck-builder/lib/deck-builder-piece-cost';
+import { sortOwnedPiecesForDeckBuilder } from '@/features/piece-shop/lib/sort-owned-pieces-for-deck-builder';
 import { normalizeDeckBuilderPieceChar } from '@/features/deck-builder/lib/deck-builder-piece-char';
 import {
   buildPieceCatalogByCharMap,
@@ -57,6 +58,7 @@ function rowCols(row: number, cols: readonly number[]): string[] {
 const SPECIAL_PIECE_ALLOWED_POSITIONS = new Map<string, ReadonlySet<string>>([
   ['走', new Set(rowCols(6, ALL_COLS))],
   ['種', new Set(rowCols(8, [2, 6]))],
+  ['麒', new Set(rowCols(8, [1, 7]))],
   ['舞', new Set(rowCols(8, [3, 5]))],
   ['P', new Set(rowCols(7, [4]))],
   ['鳴', new Set(rowCols(8, [2, 6]))],
@@ -498,9 +500,11 @@ export function useDeckBuilderScreen() {
       .then(([snapshot, catalog]) => {
         if (active) {
           const catalogByChar = buildPieceCatalogByCharMap(catalog);
-          const normalizedOwnedPieces = enrichOwnedPiecesWithCatalog(
-            snapshot.ownedPieces.map(normalizeOwnedPieceText),
-            catalogByChar,
+          const normalizedOwnedPieces = sortOwnedPiecesForDeckBuilder(
+            enrichOwnedPiecesWithCatalog(
+              snapshot.ownedPieces.map(normalizeOwnedPieceText),
+              catalogByChar,
+            ),
           );
           setOwnedPieces(normalizedOwnedPieces);
           setSavedDecks(snapshot.savedDecks);
@@ -660,12 +664,15 @@ export function useDeckBuilderScreen() {
     setSelectedPiece(null);
   }, []);
 
+  const removePieceAt = useCallback((row: number, col: number) => {
+    setBoardPlacements((prev) =>
+      prev.filter((placement) => !(placement.row === row && placement.col === col)),
+    );
+  }, []);
+
   const placeSelectedPieceAt = useCallback(
     (row: number, col: number) => {
       if (!selectedPieceForPlacement) {
-        setBoardPlacements((prev) =>
-          prev.filter((placement) => !(placement.row === row && placement.col === col)),
-        );
         return;
       }
       setBoardPlacements((prev) => {
@@ -694,6 +701,7 @@ export function useDeckBuilderScreen() {
     getRemainingCount,
     isValidPlacementAt,
     placeSelectedPieceAt,
+    removePieceAt,
     openPieceDetail,
     closePieceDetail,
     saveModalOpen,

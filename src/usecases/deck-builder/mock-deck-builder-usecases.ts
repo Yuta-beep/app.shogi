@@ -1,10 +1,11 @@
 import type { DeckBuilderSnapshot } from '@/domain/models/deck-builder';
+import { getPieceShopMockOwnedPiecesForDeckBuilder } from '@/features/piece-shop/lib/piece-shop-mock-store';
+import { sortOwnedPiecesForDeckBuilder } from '@/features/piece-shop/lib/sort-owned-pieces-for-deck-builder';
 import type { LoadDeckBuilderUseCase } from '@/usecases/deck-builder/load-deck-builder-usecase';
 
 export class MockLoadDeckBuilderUseCase implements LoadDeckBuilderUseCase {
   async execute(): Promise<DeckBuilderSnapshot> {
-    return {
-      ownedPieces: [
+    const baseOwnedPieces = [
         {
           char: '忍',
           name: '忍者',
@@ -96,7 +97,11 @@ export class MockLoadDeckBuilderUseCase implements LoadDeckBuilderUseCase {
           skill: '透明化：1ターン攻撃対象にならない',
           move: '全方向1マス',
         },
-      ],
+    ];
+    const shopOwnedPieces = getPieceShopMockOwnedPiecesForDeckBuilder();
+
+    return {
+      ownedPieces: sortOwnedPiecesForDeckBuilder([...shopOwnedPieces, ...baseOwnedPieces]),
       savedDecks: [
         {
           id: 'deck-1',

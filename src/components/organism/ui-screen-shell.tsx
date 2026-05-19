@@ -20,6 +20,8 @@ type UiScreenShellProps = {
   subtitle?: string;
   children: ReactNode;
   hideBackButton?: boolean;
+  /** 指定時は既定のテキスト「戻る」ボタンの代わりに表示する */
+  backAction?: ReactNode;
   rightAction?: ReactNode;
   hideTitleText?: boolean;
   /** タイトル帯を1行にまとめて縦幅を抑える（デッキビルダー等） */
@@ -39,6 +41,7 @@ export function UiScreenShell({
   subtitle,
   children,
   hideBackButton = false,
+  backAction,
   rightAction,
   hideTitleText = false,
   compactHeader = false,
@@ -70,12 +73,14 @@ export function UiScreenShell({
         )}
         {rightAction ??
           (hideBackButton ? null : (
-            <BackButton
-              onPress={() => {
-                void playSe('tap');
-                router.back();
-              }}
-            />
+            backAction ?? (
+              <BackButton
+                onPress={() => {
+                  void playSe('tap');
+                  router.back();
+                }}
+              />
+            )
           )) ??
           (hideBackButton ? null : (
             <Pressable
@@ -102,12 +107,14 @@ export function UiScreenShell({
         {hideBackButton ? (
           <View />
         ) : (
-          <BackButton
-            onPress={() => {
-              void playSe('tap');
-              router.back();
-            }}
-          />
+          backAction ?? (
+            <BackButton
+              onPress={() => {
+                void playSe('tap');
+                router.back();
+              }}
+            />
+          )
         )}
         {rightAction ?? (
           <Pressable

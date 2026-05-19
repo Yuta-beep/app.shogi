@@ -4,13 +4,18 @@ import { ImageSourcePropType, Text, View } from 'react-native';
 type CurrencyChipProps = {
   iconSource: ImageSourcePropType;
   value: number;
+  valueClassName?: string;
 };
 
-export function CurrencyChip({ iconSource, value }: CurrencyChipProps) {
+export function CurrencyChip({
+  iconSource,
+  value,
+  valueClassName = 'text-[14px] font-black text-[#4b2e1f]',
+}: CurrencyChipProps) {
   return (
     <View className="flex-row items-center gap-1" style={{ transform: [{ translateY: 2 }] }}>
       <Image source={iconSource} contentFit="contain" style={{ width: 32, height: 32 }} />
-      <Text className="text-[14px] font-black text-[#4b2e1f]">{value}</Text>
+      <Text className={valueClassName}>{value}</Text>
     </View>
   );
 }

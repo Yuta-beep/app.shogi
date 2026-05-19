@@ -537,6 +537,44 @@ const pieceCatalog: AiPieceDefinition[] = [
     isRepeatable: true,
   },
   {
+    pieceCode: 'TANE',
+    canonicalCode: 'TANE',
+    sfenCode: ',',
+    char: '種',
+    name: '種',
+    unlock: 'shop',
+    desc: '',
+    skill: '移動時20%の確率で、周囲8マスのランダムな空きマス1マスに「葉」駒を召喚する。',
+    move: '',
+    moveVectors: [
+      { dx: -1, dy: -1, maxStep: 1 },
+      { dx: 0, dy: -1, maxStep: 1 },
+      { dx: 1, dy: -1, maxStep: 1 },
+      { dx: -1, dy: 1, maxStep: 1 },
+      { dx: 1, dy: 1, maxStep: 1 },
+    ],
+    isRepeatable: false,
+  },
+  {
+    pieceCode: 'piece_shop_tane',
+    canonicalCode: 'TANE',
+    sfenCode: ',',
+    char: '種',
+    name: '種',
+    unlock: 'shop',
+    desc: '',
+    skill: '',
+    move: '',
+    moveVectors: [
+      { dx: -1, dy: -1, maxStep: 1 },
+      { dx: 0, dy: -1, maxStep: 1 },
+      { dx: 1, dy: -1, maxStep: 1 },
+      { dx: -1, dy: 1, maxStep: 1 },
+      { dx: 1, dy: 1, maxStep: 1 },
+    ],
+    isRepeatable: false,
+  },
+  {
     pieceCode: 'HOS',
     canonicalCode: 'HOS',
     sfenCode: 'S',
@@ -1785,6 +1823,186 @@ describe('ai engine apply move', () => {
     expect(ortho.every((m) => (m.remaining_turns as number) === 2)).toBe(true);
   });
 
+  it('mai move applies diagonal-forward restriction to adjacent enemies at that moment', () => {
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: '4k4/9/9/9/3p1p3/4.4/9/9/4K4 b - 1',
+      stateHash: 'seed',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'enemy', row: 4, col: 3, pieceCode: 'FU', char: '歩', promoted: false },
+          { side: 'enemy', row: 4, col: 5, pieceCode: 'FU', char: '歩', promoted: false },
+          {
+            side: 'player',
+            row: 5,
+            col: 4,
+            pieceCode: 'piece_shop_mai',
+            char: '舞',
+            promoted: false,
+          },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+      },
+      hands: { player: {}, enemy: {} },
+    };
+
+    const committed = applyMove({
+      position,
+      pieceCatalog,
+      move: {
+        fromRow: 5,
+        fromCol: 4,
+        toRow: 4,
+        toCol: 4,
+        pieceCode: 'piece_shop_mai',
+        promote: false,
+        dropPieceCode: null,
+        capturedPieceCode: null,
+        notation: null,
+      },
+    });
+
+    const skillState = committed.position.boardState.skill_state as
+      | { movement_modifiers?: Record<string, unknown>[] }
+      | undefined;
+    const danceMods = (skillState?.movement_modifiers ?? []).filter(
+      (m) => (m.movement_rule as string) === 'diagonal_forward_step_only',
+    );
+    expect(danceMods.length).toBeGreaterThanOrEqual(2);
+    expect(danceMods.every((m) => (m.remaining_turns as number) === 999)).toBe(true);
+  });
+
+  it('mai move does not transform adjacent enemies into pawns', () => {
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: '4k4/9/9/9/3s1n3/4.4/9/9/4K4 b - 1',
+      stateHash: 'seed',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'enemy', row: 4, col: 3, pieceCode: 'GI', char: '銀', promoted: false },
+          { side: 'enemy', row: 4, col: 5, pieceCode: 'KE', char: '桂', promoted: false },
+          {
+            side: 'player',
+            row: 5,
+            col: 4,
+            pieceCode: 'piece_shop_mai',
+            char: '舞',
+            promoted: false,
+          },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+      },
+      hands: { player: {}, enemy: {} },
+    };
+    const committed = applyMove({
+      position,
+      pieceCatalog,
+      move: {
+        fromRow: 5,
+        fromCol: 4,
+        toRow: 4,
+        toCol: 4,
+        pieceCode: 'piece_shop_mai',
+        promote: false,
+        dropPieceCode: null,
+        capturedPieceCode: null,
+        notation: null,
+      },
+    });
+    const pieces = committed.position.boardState.pieces as {
+      side: 'player' | 'enemy';
+      row: number;
+      col: number;
+      pieceCode: string;
+      char: string;
+    }[];
+    const left = pieces.find((p) => p.side === 'enemy' && p.row === 4 && p.col === 3);
+    const right = pieces.find((p) => p.side === 'enemy' && p.row === 4 && p.col === 5);
+    expect(left?.pieceCode).toBe('GI');
+    expect(left?.char).toBe('銀');
+    expect(right?.pieceCode).toBe('KE');
+    expect(right?.char).toBe('桂');
+    const statuses = (
+      committed.position.boardState as {
+        skill_state?: { piece_statuses?: Record<string, unknown>[] };
+      }
+    ).skill_state?.piece_statuses ?? [];
+    expect(statuses.some((s) => (s.status_type as string) === 'a_transform')).toBe(false);
+  });
+
+  it('dance movement restriction is removed when mai is no longer adjacent', () => {
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: '4k4/9/9/9/3p1p3/9/4.4/9/9/4K4 b - 1',
+      stateHash: 'seed',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'enemy', row: 4, col: 3, pieceCode: 'FU', char: '歩', promoted: false },
+          { side: 'enemy', row: 4, col: 5, pieceCode: 'FU', char: '歩', promoted: false },
+          {
+            side: 'player',
+            row: 5,
+            col: 4,
+            pieceCode: 'piece_shop_mai',
+            char: '舞',
+            promoted: false,
+          },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+        skill_state: {
+          movement_modifiers: [
+            {
+              row: 4,
+              col: 3,
+              side: 'enemy',
+              movement_rule: 'diagonal_forward_step_only',
+              remaining_turns: 999,
+            },
+            {
+              row: 4,
+              col: 5,
+              side: 'enemy',
+              movement_rule: 'diagonal_forward_step_only',
+              remaining_turns: 999,
+            },
+          ],
+        },
+      },
+      hands: { player: {}, enemy: {} },
+    };
+    const committed = applyMove({
+      position,
+      pieceCatalog,
+      move: {
+        fromRow: 5,
+        fromCol: 4,
+        toRow: 6,
+        toCol: 4,
+        pieceCode: 'piece_shop_mai',
+        promote: false,
+        dropPieceCode: null,
+        capturedPieceCode: null,
+        notation: null,
+      },
+    });
+    const skillState = committed.position.boardState.skill_state as
+      | { movement_modifiers?: Record<string, unknown>[] }
+      | undefined;
+    const danceMods = (skillState?.movement_modifiers ?? []).filter(
+      (m) => (m.movement_rule as string) === 'diagonal_forward_step_only',
+    );
+    expect(danceMods).toHaveLength(0);
+  });
+
   it('cloud piece captures allied piece and adds it to hand', () => {
     const position: AiBattlePosition = {
       sideToMove: 'player',
@@ -2192,6 +2410,57 @@ describe('ai engine apply move', () => {
         (piece) => piece.side === 'player' && piece.pieceCode === 'MOK',
       ).length ?? 0;
     expect(woodCount).toBe(2);
+  });
+
+  it('tane skill summons one leaf piece on random adjacent cell when 20% proc succeeds', () => {
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: '4k4/9/9/9/9/4T4/9/9/4K4 b - 1',
+      stateHash: 'seed',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          {
+            side: 'player',
+            row: 5,
+            col: 4,
+            pieceCode: 'piece_shop_tane',
+            char: '種',
+            promoted: false,
+          },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+      },
+      hands: { player: {}, enemy: {} },
+    };
+
+    const randomSpy = jest.spyOn(Math, 'random');
+    randomSpy.mockReturnValueOnce(0.1); // 20% 抽選成功
+    randomSpy.mockReturnValueOnce(0.6); // 候補セル index
+    const committed = applyMove({
+      position,
+      pieceCatalog,
+      move: {
+        fromRow: 5,
+        fromCol: 4,
+        toRow: 4,
+        toCol: 4,
+        pieceCode: 'piece_shop_tane',
+        promote: false,
+        dropPieceCode: null,
+        capturedPieceCode: null,
+        notation: null,
+      },
+    });
+    randomSpy.mockRestore();
+
+    const leafCount =
+      boardPieces(committed.position).filter(
+        (piece) => piece.side === 'player' && piece.char === '葉',
+      ).length ?? 0;
+    expect(leafCount).toBe(1);
   });
 
   it('leaf skill summons one leaf piece when proc succeeds', () => {
@@ -3093,5 +3362,170 @@ describe('ai engine apply move', () => {
     expect(second.position.sideToMove).toBe('enemy');
     expect(second.position.moveCount).toBe(1);
     expect(Math.max(0, second.position.hands.player.FU ?? 0)).toBeGreaterThanOrEqual(2);
+  });
+
+  const nakuCatalog: AiPieceDefinition = {
+    pieceCode: 'piece_shop_naku',
+    canonicalCode: 'NAKU',
+    sfenCode: 'n',
+    char: '鳴',
+    name: '鳴',
+    unlock: 'default',
+    desc: '',
+    skill: '',
+    move: '',
+    moveVectors: [
+      { dx: -1, dy: -1, maxStep: 1 },
+      { dx: 0, dy: -1, maxStep: 1 },
+      { dx: 1, dy: -1, maxStep: 1 },
+      { dx: -1, dy: 1, maxStep: 1 },
+      { dx: 1, dy: 1, maxStep: 1 },
+    ],
+    isRepeatable: true,
+  };
+
+  it('鳴が敵歩を取ったとき同種が盤面に2体以上いれば合計3体までまとめて取る', () => {
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: '4k4/9/9/9/9/3ppp3/4N4/9/4K4 b - 1',
+      stateHash: 'naku-pon',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'enemy', row: 5, col: 3, pieceCode: 'FU', char: '歩', promoted: false },
+          { side: 'enemy', row: 5, col: 4, pieceCode: 'FU', char: '歩', promoted: false },
+          { side: 'enemy', row: 5, col: 5, pieceCode: 'FU', char: '歩', promoted: false },
+          {
+            side: 'player',
+            row: 6,
+            col: 4,
+            pieceCode: 'piece_shop_naku',
+            char: '鳴',
+            promoted: false,
+          },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+      },
+      hands: { player: {}, enemy: {} },
+    };
+
+    const committed = applyMove({
+      position,
+      pieceCatalog: [...pieceCatalog, nakuCatalog],
+      move: {
+        fromRow: 6,
+        fromCol: 4,
+        toRow: 5,
+        toCol: 4,
+        pieceCode: 'piece_shop_naku',
+        promote: false,
+        dropPieceCode: null,
+        capturedPieceCode: 'FU',
+        notation: null,
+      },
+    });
+
+    const enemyPawns = boardPieces(committed.position).filter(
+      (p) => p.side === 'enemy' && p.pieceCode === 'FU',
+    );
+    expect(enemyPawns).toHaveLength(0);
+    expect(handTotal(committed.position.hands.player)).toBe(3);
+    expect(committed.skillTriggered).toBe(true);
+  });
+
+  it('鳴のポン取りは同種が1体だけのとき追加で取らない', () => {
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: '4k4/9/9/9/9/1p7/4N4/9/4K4 b - 1',
+      stateHash: 'naku-single',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'enemy', row: 5, col: 4, pieceCode: 'FU', char: '歩', promoted: false },
+          {
+            side: 'player',
+            row: 6,
+            col: 3,
+            pieceCode: 'piece_shop_naku',
+            char: '鳴',
+            promoted: false,
+          },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+      },
+      hands: { player: {}, enemy: {} },
+    };
+
+    const committed = applyMove({
+      position,
+      pieceCatalog: [...pieceCatalog, nakuCatalog],
+      move: {
+        fromRow: 6,
+        fromCol: 3,
+        toRow: 5,
+        toCol: 4,
+        pieceCode: 'piece_shop_naku',
+        promote: false,
+        dropPieceCode: null,
+        capturedPieceCode: 'FU',
+        notation: null,
+      },
+    });
+
+    expect(handTotal(committed.position.hands.player)).toBe(1);
+  });
+
+  it('鳴のポン取りは同種が4体以上いても合計3体まで', () => {
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: '4k4/9/9/9/9/4pppp1/4N4/9/4K4 b - 1',
+      stateHash: 'naku-cap',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'enemy', row: 5, col: 2, pieceCode: 'FU', char: '歩', promoted: false },
+          { side: 'enemy', row: 5, col: 3, pieceCode: 'FU', char: '歩', promoted: false },
+          { side: 'enemy', row: 5, col: 4, pieceCode: 'FU', char: '歩', promoted: false },
+          { side: 'enemy', row: 5, col: 5, pieceCode: 'FU', char: '歩', promoted: false },
+          {
+            side: 'player',
+            row: 6,
+            col: 4,
+            pieceCode: 'piece_shop_naku',
+            char: '鳴',
+            promoted: false,
+          },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+      },
+      hands: { player: {}, enemy: {} },
+    };
+
+    const committed = applyMove({
+      position,
+      pieceCatalog: [...pieceCatalog, nakuCatalog],
+      move: {
+        fromRow: 6,
+        fromCol: 4,
+        toRow: 5,
+        toCol: 4,
+        pieceCode: 'piece_shop_naku',
+        promote: false,
+        dropPieceCode: null,
+        capturedPieceCode: 'FU',
+        notation: null,
+      },
+    });
+
+    expect(handTotal(committed.position.hands.player)).toBe(3);
+    expect(
+      boardPieces(committed.position).filter((p) => p.side === 'enemy' && p.pieceCode === 'FU'),
+    ).toHaveLength(1);
   });
 });

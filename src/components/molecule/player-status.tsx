@@ -6,6 +6,7 @@ import { HeaderLabel } from '@/components/atom/header-label';
 
 type PlayerStatusProps = {
   userName: string;
+  onUserNamePress?: () => void;
   rank: number;
   exp: number;
   expPerLevel: number;
@@ -45,6 +46,7 @@ function useCountdown(nextRecoveryAt?: string | null): string | null {
 
 export function PlayerStatus({
   userName,
+  onUserNamePress,
   rank,
   exp,
   expPerLevel,
@@ -61,7 +63,7 @@ export function PlayerStatus({
 
   return (
     <View className="mr-3 flex-1 pr-2">
-      <HeaderLabel text={userName} />
+          <HeaderLabel text={userName} onPress={onUserNamePress} />
       <View className="mt-2 flex-row items-center">
         <View className="flex-1 gap-1">
           <View className="flex-row items-center">

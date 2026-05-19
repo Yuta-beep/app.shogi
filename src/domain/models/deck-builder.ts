@@ -4,6 +4,8 @@ export type OwnedPiece = {
   name: string;
   imageSignedUrl?: string | null;
   quantity?: number;
+  acquiredAt?: string;
+  source?: string;
   desc: string;
   skill: string;
   move: string;

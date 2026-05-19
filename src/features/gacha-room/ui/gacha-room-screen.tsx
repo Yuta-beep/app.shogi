@@ -7,11 +7,6 @@ import { ImageBackground, Modal, Pressable, ScrollView, Text, View } from 'react
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppLoadingScreen } from '@/components/organism/app-loading-screen';
-import {
-  GACHA_ROOM_BACK_BUTTON_INTRO_MARGIN_LEFT,
-  GACHA_ROOM_BACK_BUTTON_LEFT,
-} from '@/features/gacha-room/ui/gacha-room-layout';
-import { GachaRoomBackButton } from '@/features/gacha-room/ui/parts/gacha-room-back-button';
 import { mergeIntroBanners } from '@/constants/gacha-intro-banners';
 import {
   bannerImageSource,
@@ -19,6 +14,9 @@ import {
   resolveGachaBannerKey,
 } from '@/constants/gacha-room-assets';
 import { homeAssets } from '@/constants/home-assets';
+import { GACHA_ROOM_BACK_BUTTON_INTRO_MARGIN_LEFT } from '@/features/gacha-room/ui/gacha-room-layout';
+import { GachaLineupSection } from '@/features/gacha-room/ui/parts/gacha-lineup-section';
+import { GachaRoomBackButton } from '@/features/gacha-room/ui/parts/gacha-room-back-button';
 import { GachaRoomVM, useGachaRoomScreen } from '@/features/gacha-room/ui/use-gacha-room-screen';
 import { useAssetPreload } from '@/hooks/common/use-asset-preload';
 import { useScreenBgm } from '@/hooks/common/use-screen-bgm';
@@ -250,14 +248,6 @@ export function GachaRoomScreen() {
         >
           <Text className="font-bold text-white">再読み込み</Text>
         </Pressable>
-        <View className="mt-6 items-center">
-          <GachaRoomBackButton
-            onPress={() => {
-              void playSe('tap');
-              router.back();
-            }}
-          />
-        </View>
       </SafeAreaView>
     );
   }
@@ -381,22 +371,6 @@ export function GachaRoomScreen() {
               className="min-h-[520px] flex-1 bg-black/50 px-4 pb-8 pt-2"
               style={{ paddingTop: insets.top + 48 }}
             >
-              <View
-                style={{
-                  position: 'absolute',
-                  top: 8,
-                  left: GACHA_ROOM_BACK_BUTTON_LEFT,
-                  zIndex: 55,
-                }}
-              >
-                <GachaRoomBackButton
-                  onPress={() => {
-                    void playSe('tap');
-                    router.back();
-                  }}
-                />
-              </View>
-
               {vm.noticeMessage ? (
                 <View className="mb-3 rounded-xl border border-amber-300/40 bg-amber-500/10 px-3 py-2">
                   <Text className="text-sm font-bold text-amber-200">{vm.noticeMessage}</Text>
@@ -429,35 +403,7 @@ export function GachaRoomScreen() {
                 </View>
               ) : null}
 
-              <View className="mb-4 rounded-xl border border-white/15 bg-white/10 p-4">
-                <View className="flex-row items-center gap-2">
-                  <MaterialIcons name="info" size={20} color="#bfdbfe" />
-                  <Text className="text-lg font-semibold text-white">ガチャ内容</Text>
-                </View>
-                <View className="mt-3 gap-2">
-                  {(selectedBanner?.lineup ?? []).map((entry, i) => (
-                    <View key={`${entry.char}-${i}`} className="flex-row gap-2">
-                      <MaterialIcons
-                        name="star"
-                        size={18}
-                        color="#fde68a"
-                        style={{ marginTop: 2 }}
-                      />
-                      <View className="flex-1">
-                        <Text className="font-semibold text-white">
-                          {entry.name}（{entry.rarity}）
-                        </Text>
-                        {typeof entry.description === 'string' &&
-                        entry.description.trim().length > 0 ? (
-                          <Text className="text-xs text-slate-300/90">
-                            {entry.description.trim()}
-                          </Text>
-                        ) : null}
-                      </View>
-                    </View>
-                  ))}
-                </View>
-              </View>
+              <GachaLineupSection banner={selectedBanner} />
 
               <Pressable
                 disabled={!canRoll}

@@ -48,8 +48,11 @@ import {
   isCowPiece as isCowPieceForApply,
   isDeathPiece as isDeathPieceForApply,
   isGunPiece as isGunPieceForApply,
+  isKirinCaptureBlocked,
   isHolePiece as isHolePieceForApply,
   isKatanaPiece as isKatanaPieceForApply,
+  isNakuPiece as isNakuPieceForApply,
+  isSameEnemyPieceTypeForNakuPon,
   isKbossPiece,
   isKenSwordPiece as isKenSwordPieceForApply,
   isKingPiece as isKingPieceForApply,
@@ -521,6 +524,7 @@ function applyIntrinsicKatanaSideCaptures(input: {
       row,
       col,
       fallbackCapturedCode: null,
+      capturer: input.movedPiece,
     });
     nextPieces = res.nextPieces;
     hands = res.hands;
@@ -528,6 +532,107 @@ function applyIntrinsicKatanaSideCaptures(input: {
     if (res.starReturnProcTriggered) starReturnProcTriggered = true;
   }
   return { nextPieces, hands, starReturnProcTriggered, didSideSweep };
+}
+
+const NAKU_PON_CAPTURE_MAX = 3;
+
+function canApplyHostileCaptureAtCellForNakuPon(input: {
+  boardState: Record<string, unknown> | undefined;
+  nextPieces: AiBoardPiece[];
+  actorSide: Side;
+  row: number;
+  col: number;
+  capturer: AiBoardPiece;
+}): boolean {
+  const captured = findPieceAt(input.nextPieces, input.row, input.col);
+  if (!captured || captured.side === input.actorSide) return false;
+  if (isGiantPieceForEngine(captured)) return false;
+  if (isArmorPieceForApply(captured)) return false;
+  if (isKirinCaptureBlocked(input.capturer, captured)) return false;
+  if (
+    pieceHasActiveCaptureImmunityFromBoardState(
+      input.boardState,
+      captured.side,
+      input.row,
+      input.col,
+      input.nextPieces,
+    )
+  ) {
+    return false;
+  }
+  return true;
+}
+
+/** 鳴: 敵を取ったとき、同種の敵駒が盤面に2体以上あれば合計3体までまとめて取る。 */
+function applyIntrinsicNakuPonCaptures(input: {
+  boardState: Record<string, unknown> | undefined;
+  boardBeforeMove: AiBoardPiece[];
+  nextPieces: AiBoardPiece[];
+  hands: HandsBag;
+  actorSide: Side;
+  didCapture: boolean;
+  movedPiece: AiBoardPiece | null;
+  move: Pick<BattleMove, 'fromRow' | 'fromCol' | 'toRow' | 'toCol' | 'dropPieceCode'>;
+}): {
+  nextPieces: AiBoardPiece[];
+  hands: HandsBag;
+  starReturnProcTriggered: boolean;
+  didPonSweep: boolean;
+} {
+  let { nextPieces, hands } = input;
+  let starReturnProcTriggered = false;
+  if (!input.movedPiece || !isNakuPieceForApply(input.movedPiece)) {
+    return { nextPieces, hands, starReturnProcTriggered, didPonSweep: false };
+  }
+  if (!input.didCapture || input.move.dropPieceCode) {
+    return { nextPieces, hands, starReturnProcTriggered, didPonSweep: false };
+  }
+  const primaryVictim = findPieceAt(input.boardBeforeMove, input.move.toRow, input.move.toCol);
+  if (!primaryVictim || primaryVictim.side === input.actorSide) {
+    return { nextPieces, hands, starReturnProcTriggered, didPonSweep: false };
+  }
+  const enemySide: Side = input.actorSide === 'player' ? 'enemy' : 'player';
+  const sameTypeOnBoardBefore = input.boardBeforeMove.filter(
+    (p) => p.side === enemySide && isSameEnemyPieceTypeForNakuPon(p, primaryVictim),
+  );
+  if (sameTypeOnBoardBefore.length < 2) {
+    return { nextPieces, hands, starReturnProcTriggered, didPonSweep: false };
+  }
+  const targetTotal = Math.min(sameTypeOnBoardBefore.length, NAKU_PON_CAPTURE_MAX);
+  const extraCells = sameTypeOnBoardBefore
+    .filter((p) => !(p.row === input.move.toRow && p.col === input.move.toCol))
+    .sort((a, b) => a.row - b.row || a.col - b.col)
+    .slice(0, targetTotal - 1);
+  let didPonSweep = false;
+  for (const cell of extraCells) {
+    if (
+      !canApplyHostileCaptureAtCellForNakuPon({
+        boardState: input.boardState,
+        nextPieces,
+        actorSide: input.actorSide,
+        row: cell.row,
+        col: cell.col,
+        capturer: input.movedPiece,
+      })
+    ) {
+      continue;
+    }
+    const res = applyHostileCaptureAtCell({
+      boardState: input.boardState,
+      nextPieces,
+      hands,
+      actorSide: input.actorSide,
+      row: cell.row,
+      col: cell.col,
+      fallbackCapturedCode: null,
+      capturer: input.movedPiece,
+    });
+    nextPieces = res.nextPieces;
+    hands = res.hands;
+    if (res.didCapture) didPonSweep = true;
+    if (res.starReturnProcTriggered) starReturnProcTriggered = true;
+  }
+  return { nextPieces, hands, starReturnProcTriggered, didPonSweep };
 }
 
 function hasSoulOnBoardForSide(pieces: AiBoardPiece[], side: Side): boolean {
@@ -720,6 +825,7 @@ function applyHostileCaptureAtCell(input: {
   row: number;
   col: number;
   fallbackCapturedCode: string | null;
+  capturer?: AiBoardPiece | null;
   /** 巨の 2×2 同時取りなど: 剣回避・朧・幻影の取り逃がしを無効化する。 */
   skipProcCaptureEvasions?: boolean;
 }): {
@@ -750,6 +856,9 @@ function applyHostileCaptureAtCell(input: {
   }
   if (isArmorPieceForApply(captured)) {
     throw new Error('cannot capture armor');
+  }
+  if (input.capturer && isKirinCaptureBlocked(input.capturer, captured)) {
+    throw new Error('cannot capture kirin');
   }
   if (
     pieceHasActiveCaptureImmunityFromBoardState(
@@ -1045,6 +1154,7 @@ function applyGiantOrthogonalBoardMove(input: {
       row: c.row,
       col: c.col,
       fallbackCapturedCode: null,
+      capturer: movingPiece,
       skipProcCaptureEvasions: true,
     });
     work = res.nextPieces;
@@ -1097,6 +1207,7 @@ export function applyMove(input: {
   const current = normalizeBattlePosition(input.position);
   const move = normalizeBattleMove(input.move);
   const pieces = piecesFromBoardState(current);
+  const boardBeforeMove = pieces.map((piece) => ({ ...piece }));
   let hands = normalizeHandsStateKeys({
     player: sanitizeHandsBag(current.hands.player),
     enemy: sanitizeHandsBag(current.hands.enemy),
@@ -1248,6 +1359,7 @@ export function applyMove(input: {
             row: gunPen.midRow,
             col: gunPen.midCol,
             fallbackCapturedCode: null,
+            capturer: movingPiece,
           });
           if (midRes.rebuffKboss) {
             throw new Error('invalid gun move: kboss midpoint');
@@ -1294,6 +1406,7 @@ export function applyMove(input: {
               row: r,
               col: c,
               fallbackCapturedCode: null,
+              capturer: movingPiece,
             });
             if (midRes.rebuffKboss) {
               throw new Error('invalid cow move: kboss path');
@@ -1325,6 +1438,9 @@ export function applyMove(input: {
         }
         if (!captureOwnPiece && !isCloudMover && isArmorPieceForApply(captured)) {
           throw new Error('cannot capture armor');
+        }
+        if (!captureOwnPiece && isKirinCaptureBlocked(movingPiece, captured)) {
+          throw new Error('cannot capture kirin');
         }
         if (
           !captureOwnPiece &&
@@ -1565,7 +1681,8 @@ export function applyMove(input: {
           isKatanaPieceForApply(moving) ||
           isGunPieceForApply(moving) ||
           isCowPieceForApply(moving) ||
-          isPigPieceForApply(moving)
+          isPigPieceForApply(moving) ||
+          isNakuPieceForApply(moving)
             ? moving.char
             : resolvedChar === '?' ||
                 (toBasePieceCode(moving.pieceCode) != null &&
@@ -1876,6 +1993,22 @@ export function applyMove(input: {
     hands = intrinsicKatana.hands;
     if (intrinsicKatana.starReturnProcTriggered) starReturnProcTriggered = true;
     if (intrinsicKatana.didSideSweep) {
+      intrinsicCombatSkillTriggered = true;
+    }
+    const intrinsicNaku = applyIntrinsicNakuPonCaptures({
+      boardState: current.boardState as Record<string, unknown> | undefined,
+      boardBeforeMove,
+      nextPieces,
+      hands,
+      actorSide,
+      didCapture,
+      movedPiece: movedPieceForIntrinsic,
+      move,
+    });
+    nextPieces = intrinsicNaku.nextPieces;
+    hands = intrinsicNaku.hands;
+    if (intrinsicNaku.starReturnProcTriggered) starReturnProcTriggered = true;
+    if (intrinsicNaku.didPonSweep) {
       intrinsicCombatSkillTriggered = true;
     }
   }

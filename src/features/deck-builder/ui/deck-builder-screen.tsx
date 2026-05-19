@@ -1,14 +1,19 @@
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { Alert, Modal, Pressable, Text, TextInput, View, ScrollView } from 'react-native';
 import Svg, { Line, Rect } from 'react-native-svg';
 
 import { AppLoadingScreen } from '@/components/organism/app-loading-screen';
 import { deckBuilderAssets, deckBuilderPreloadTargets } from '@/constants/deck-builder-assets';
 import { homeAssets } from '@/constants/home-assets';
-import { DECK_BUILDER_BACK_BUTTON_MARGIN_RIGHT } from '@/features/deck-builder/ui/deck-builder-layout';
+import {
+  DECK_BUILDER_HEADER_ACTION_GAP,
+  DECK_BUILDER_HEADER_ACTIONS_MARGIN_RIGHT,
+} from '@/features/deck-builder/ui/deck-builder-layout';
 import { DeckBuilderBackButton } from '@/features/deck-builder/ui/parts/deck-builder-back-button';
+import { DeckBuilderHelpButton } from '@/features/deck-builder/ui/parts/deck-builder-help-button';
+import { DeckBuilderHelpModal } from '@/features/deck-builder/ui/parts/deck-builder-help-modal';
 import { UiScreenShell } from '@/components/organism/ui-screen-shell';
 import { isBossPiece } from '@/features/deck-builder/lib/boss-pieces';
 import {
@@ -33,6 +38,7 @@ const BOARD_PADDING_RATIO = BOARD_PADDING / BOARD_VIEWBOX;
 const BOARD_CELL_INNER_RATIO = 1 / BOARD_SIZE;
 const PLACED_PIECE_OFFSET_X = 0;
 const PLACED_PIECE_OFFSET_Y = -2;
+const BOARD_CELL_DOUBLE_TAP_MS = 320;
 
 type DeckBuilderScreenProps = {
   mode?: 'default' | 'online-match-setup';
@@ -42,10 +48,17 @@ export function DeckBuilderScreen({ mode = 'default' }: DeckBuilderScreenProps) 
   const router = useRouter();
   const { accessToken } = useAuthSession();
   const vm = useDeckBuilderScreen();
-  const { placeSelectedPieceAt, isValidPlacementAt, selectedPieceForPlacement, openPieceDetail } =
-    vm;
+  const {
+    placeSelectedPieceAt,
+    removePieceAt,
+    isValidPlacementAt,
+    selectedPieceForPlacement,
+    openPieceDetail,
+  } = vm;
   const [activeCell, setActiveCell] = useState<{ row: number; col: number } | null>(null);
+  const lastBoardCellTapRef = useRef<{ row: number; col: number; time: number } | null>(null);
   const [applyBattleBusy, setApplyBattleBusy] = useState(false);
+  const [helpModalOpen, setHelpModalOpen] = useState(false);
   const remotePieceUrls = useMemo(
     () =>
       vm.ownedPieces
@@ -76,10 +89,10 @@ export function DeckBuilderScreen({ mode = 'default' }: DeckBuilderScreenProps) 
   const screenTitle = isOnlineMatchSetup ? '対戦準備' : 'マイデッキ作成';
   const screenSubtitle = isOnlineMatchSetup
     ? 'オンライン対戦の初期盤面を試しながら整える'
-    : '将棋盤に駒を配置して保存';
+    : '駒を配置して保存';
   const paletteDescription = isOnlineMatchSetup
     ? '所持駒からオンライン対戦用の並びを試せます。今はマイデッキ編集UIを流用しています。'
-    : '所持駒（駒を選択して盤面マスをタップで配置・未選択ならマスの駒を削除）。K・実・異・朧・死・魂・巨などはマイデッキに入れません。';
+    : '所持駒（駒を選択して緑マスをタップで配置・盤上の駒をダブルタップでデッキから外す）。';
   const applyButtonTitle = isOnlineMatchSetup ? '対戦準備として反映' : '反映';
   const applyButtonSubtitle = isOnlineMatchSetup
     ? '現在の盤面をオンライン対戦の準備用として試す'
@@ -88,12 +101,36 @@ export function DeckBuilderScreen({ mode = 'default' }: DeckBuilderScreenProps) 
     ? '対戦準備の盤面として反映されました。'
     : '反映されました';
 
-  const applyCellAction = useCallback(
-    (row: number, col: number) => {
+  const handleBoardCellPress = useCallback(
+    (row: number, col: number, hasPiece: boolean) => {
+      const now = Date.now();
+      const lastTap = lastBoardCellTapRef.current;
+      const isDoubleTap =
+        hasPiece &&
+        lastTap != null &&
+        lastTap.row === row &&
+        lastTap.col === col &&
+        now - lastTap.time < BOARD_CELL_DOUBLE_TAP_MS;
+
+      if (isDoubleTap) {
+        lastBoardCellTapRef.current = null;
+        setActiveCell({ row, col });
+        removePieceAt(row, col);
+        void playSe('cancel');
+        return;
+      }
+
+      lastBoardCellTapRef.current = { row, col, time: now };
       setActiveCell({ row, col });
+      void playSe('tap');
+
+      if (hasPiece && !selectedPieceForPlacement) {
+        return;
+      }
+
       placeSelectedPieceAt(row, col);
     },
-    [placeSelectedPieceAt],
+    [placeSelectedPieceAt, removePieceAt, selectedPieceForPlacement],
   );
 
   if (vm.isLoading || !areAssetsReady) {
@@ -108,7 +145,20 @@ export function DeckBuilderScreen({ mode = 'default' }: DeckBuilderScreenProps) 
       hideBackButton
       fullBleedBackgroundSource={deckBuilderAssets.bg}
       rightAction={
-        <View style={{ marginRight: DECK_BUILDER_BACK_BUTTON_MARGIN_RIGHT }}>
+        <View
+          style={{
+            marginRight: DECK_BUILDER_HEADER_ACTIONS_MARGIN_RIGHT,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: DECK_BUILDER_HEADER_ACTION_GAP,
+          }}
+        >
+          <DeckBuilderHelpButton
+            onPress={() => {
+              void playSe('tap');
+              setHelpModalOpen(true);
+            }}
+          />
           <DeckBuilderBackButton
             onPress={() => {
               void playSe('tap');
@@ -221,8 +271,7 @@ export function DeckBuilderScreen({ mode = 'default' }: DeckBuilderScreenProps) 
                     }}
                     delayLongPress={420}
                     onPress={() => {
-                      void playSe('tap');
-                      applyCellAction(row, col);
+                      handleBoardCellPress(row, col, placement != null);
                     }}
                     onLongPress={placement ? () => openPieceDetail(placement.piece) : undefined}
                   >
@@ -384,14 +433,18 @@ export function DeckBuilderScreen({ mode = 'default' }: DeckBuilderScreenProps) 
           })()
             .then((ok) => {
               if (ok) {
-                Alert.alert(appliedSuccessMessage, undefined, [
-                  {
-                    text: 'OK',
-                    onPress: () => {
-                      router.replace('/matching');
+                if (isOnlineMatchSetup) {
+                  Alert.alert(appliedSuccessMessage, undefined, [
+                    {
+                      text: 'OK',
+                      onPress: () => {
+                        router.replace('/matching');
+                      },
                     },
-                  },
-                ]);
+                  ]);
+                } else {
+                  Alert.alert(appliedSuccessMessage);
+                }
               } else {
                 Alert.alert('反映に失敗しました', '通信または保存処理を確認してください。');
               }
@@ -463,6 +516,14 @@ export function DeckBuilderScreen({ mode = 'default' }: DeckBuilderScreenProps) 
           </View>
         </View>
       </Modal>
+
+      <DeckBuilderHelpModal
+        visible={helpModalOpen}
+        onClose={() => {
+          void playSe('cancel');
+          setHelpModalOpen(false);
+        }}
+      />
 
       {/* デッキ保存モーダル */}
       <Modal

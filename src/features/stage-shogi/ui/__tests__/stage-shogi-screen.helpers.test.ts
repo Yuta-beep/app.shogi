@@ -1,5 +1,10 @@
 import type { BoardPiece } from '@/features/stage-shogi/ui/stage-shogi-screen.helpers';
-import { reconcileExtendedPieceHandsAgainstBoard } from '@/features/stage-shogi/ui/stage-shogi-screen.helpers';
+import {
+  applyKirinImmunityShieldMarkToPieces,
+  immobilizedKeysFromCanonical,
+  kirinShowsImmunityShieldMark,
+  reconcileExtendedPieceHandsAgainstBoard,
+} from '@/features/stage-shogi/ui/stage-shogi-screen.helpers';
 
 describe('reconcileExtendedPieceHandsAgainstBoard', () => {
   it('does not subtract on-board GEAR from in-hand count (canonical hands are already in-hand only)', () => {
@@ -148,5 +153,113 @@ describe('reconcileExtendedPieceHandsAgainstBoard', () => {
     ];
     const out = reconcileExtendedPieceHandsAgainstBoard(hands, pieces);
     expect(out.enemy.HAA).toBe(1);
+  });
+});
+
+describe('immobilizedKeysFromCanonical', () => {
+  it('駒ショップPの同行・同列の敵を移動不能キーに含める', () => {
+    const keys = immobilizedKeysFromCanonical({
+      sideToMove: 'enemy',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: '9/9/9/9/9/9/9/9/9 b - 1',
+      stateHash: 'p-ui',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 4, col: 2, pieceCode: 'FU', char: '歩', promoted: false },
+          {
+            side: 'player',
+            row: 4,
+            col: 4,
+            pieceCode: 'piece_shop_p',
+            char: 'P',
+            promoted: false,
+          },
+        ],
+      },
+      hands: { player: {}, enemy: {} },
+    });
+    expect(keys.has('enemy:4:2')).toBe(true);
+    expect(keys.has('player:4:4')).toBe(false);
+  });
+});
+
+describe('applyKirinImmunityShieldMarkToPieces', () => {
+  const kirin: BoardPiece = {
+    side: 'player',
+    row: 4,
+    col: 4,
+    pieceCode: 'piece_shop_kirin',
+    char: '麒',
+    promoted: false,
+    imageSignedUrl: null,
+  };
+
+  it('敵の歩・金・銀に隣接しているときだけ盾マークを付ける', () => {
+    const withPawn = applyKirinImmunityShieldMarkToPieces([
+      kirin,
+      {
+        side: 'enemy',
+        row: 4,
+        col: 5,
+        pieceCode: 'FU',
+        char: '歩',
+        promoted: false,
+        imageSignedUrl: null,
+      },
+    ]);
+    expect(withPawn[0]?.kirinImmunityShieldMark).toBe(true);
+
+    const withKnight = applyKirinImmunityShieldMarkToPieces([
+      kirin,
+      {
+        side: 'enemy',
+        row: 2,
+        col: 4,
+        pieceCode: 'KE',
+        char: '桂',
+        promoted: false,
+        imageSignedUrl: null,
+      },
+    ]);
+    expect(withKnight[0]?.kirinImmunityShieldMark).toBe(false);
+  });
+
+  it('敵が隣接から離れると盾マークが消える', () => {
+    const kirin: BoardPiece = {
+      side: 'player',
+      row: 4,
+      col: 4,
+      pieceCode: 'piece_shop_kirin',
+      char: '麒',
+      promoted: false,
+      imageSignedUrl: null,
+    };
+    const adjacent = [
+      kirin,
+      {
+        side: 'enemy',
+        row: 4,
+        col: 5,
+        pieceCode: 'FU',
+        char: '歩',
+        promoted: false,
+        imageSignedUrl: null,
+      },
+    ];
+    expect(kirinShowsImmunityShieldMark(adjacent, kirin)).toBe(true);
+    const far = [
+      kirin,
+      {
+        side: 'enemy',
+        row: 2,
+        col: 2,
+        pieceCode: 'FU',
+        char: '歩',
+        promoted: false,
+        imageSignedUrl: null,
+      },
+    ];
+    expect(kirinShowsImmunityShieldMark(far, kirin)).toBe(false);
   });
 });

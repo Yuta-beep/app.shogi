@@ -5,6 +5,13 @@ import {
   giantAnchorFootprint,
   isGiantPieceForEngine,
 } from '@/ai/engine/giant-piece';
+import { immobilizedCellKeysForPosition } from '@/ai/engine/skill-runtime';
+import {
+  isKirinImmuneCapturerPiece,
+  isKirinPiece,
+  isMaiPiece,
+} from '@/ai/engine/piece-identifiers';
+import type { AiBattlePosition } from '@/ai/model';
 import { mapPiecesForSpringDragonAwakeningDisplay } from '@/ai/engine/spring-ryu-awakening';
 import { assembleSkillDefinitionsV2ForSession } from '@/ai/engine/session-skill-definitions-v2';
 import { ApiClientError } from '@/infra/http/api-client';
@@ -190,6 +197,10 @@ export type BoardPiece = {
   yangSkillSparkle?: boolean;
   /** 敵「陰」の周囲8マス内（陰のスキル封じ圏）の表示 */
   yinSkillSparkle?: boolean;
+  /** 「舞」スキルで移動が斜め前1マスのみに制限されている表示（黄色×） */
+  maiDanceRestrictionMark?: boolean;
+  /** 「麒」が敵の歩・金・銀に隣接している間の表示（黄色盾） */
+  kirinImmunityShieldMark?: boolean;
   /** 「牛」スキル: 後ろ移動で溜めたチャージ（同期用、任意） */
   cowChargeCount?: number;
   /** K 博士: 2 で初回捕獲を耐える。1 のとき 2 回目の捕獲で消える。 */
@@ -1091,6 +1102,43 @@ export function applyYinYangSkillAuraDisplayToPieces(pieces: BoardPiece[]): Boar
   }));
 }
 
+export function applyMaiDanceRestrictionMarkToPieces(
+  pieces: BoardPiece[],
+  movementRuleByCell: Map<string, string>,
+): BoardPiece[] {
+  return pieces.map((p) => ({
+    ...p,
+    maiDanceRestrictionMark: isGiantPieceForEngine(p)
+      ? false
+      : movementRuleByCell.get(`${p.side}:${p.row}:${p.col}`) === 'diagonal_forward_step_only',
+  }));
+}
+
+/** 麒が周囲8マスに敵の歩・金・銀（と・成銀含む）に隣接しているか。 */
+export function kirinShowsImmunityShieldMark(pieces: BoardPiece[], piece: BoardPiece): boolean {
+  if (!isKirinPiece(piece) || isGiantPieceForEngine(piece)) {
+    return false;
+  }
+  for (let dr = -1; dr <= 1; dr++) {
+    for (let dc = -1; dc <= 1; dc++) {
+      if (dr === 0 && dc === 0) continue;
+      const neighbor = findPieceAt(pieces, piece.row + dr, piece.col + dc);
+      if (!neighbor || neighbor.side === piece.side) continue;
+      if (!isKirinImmuneCapturerPiece(neighbor)) continue;
+      return true;
+    }
+  }
+  return false;
+}
+
+/** 麒: 敵の歩・金・銀に隣接している間、黄色の盾マークを付与する。 */
+export function applyKirinImmunityShieldMarkToPieces(pieces: BoardPiece[]): BoardPiece[] {
+  return pieces.map((piece) => ({
+    ...piece,
+    kirinImmunityShieldMark: kirinShowsImmunityShieldMark(pieces, piece),
+  }));
+}
+
 function deathCurseCountdownByPieceFromCanonical(
   position: BattleCanonicalPosition,
 ): Map<string, number> {
@@ -1260,6 +1308,44 @@ export function thornHazardCellsForDisplay(position: BattleCanonicalPosition): B
   return out;
 }
 
+function isChebyshevAdjacentCells(
+  aRow: number,
+  aCol: number,
+  bRow: number,
+  bCol: number,
+): boolean {
+  const dr = Math.abs(aRow - bRow);
+  const dc = Math.abs(aCol - bCol);
+  return dr <= 1 && dc <= 1 && (dr !== 0 || dc !== 0);
+}
+
+/** エンジンと同様、盤上に味方「舞」が隣接していない舞制限 modifier は表示・合法手から除外する。 */
+export function pruneDanceMovementRulesForDisplay(
+  rules: Map<string, string>,
+  boardPieces: BoardPiece[],
+): Map<string, string> {
+  const maiAllies = boardPieces.filter((p) => isMaiPiece(p));
+  const out = new Map<string, string>();
+  for (const [key, rule] of rules) {
+    if (rule !== 'diagonal_forward_step_only') {
+      out.set(key, rule);
+      continue;
+    }
+    if (maiAllies.length === 0) continue;
+    const [sideRaw, rowRaw, colRaw] = key.split(':');
+    const row = Number(rowRaw);
+    const col = Number(colRaw);
+    if (!Number.isFinite(row) || !Number.isFinite(col)) continue;
+    const targetSide = sideRaw === 'enemy' ? 'enemy' : 'player';
+    const kept = maiAllies.some(
+      (mai) =>
+        mai.side !== targetSide && isChebyshevAdjacentCells(mai.row, mai.col, row, col),
+    );
+    if (kept) out.set(key, rule);
+  }
+  return out;
+}
+
 export function movementRuleByCellFromCanonical(position: BattleCanonicalPosition) {
   const out = new Map<string, string>();
   const boardState = asRecord(position.boardState);
@@ -1286,38 +1372,7 @@ export function movementRuleByCellFromCanonical(position: BattleCanonicalPositio
 }
 
 export function immobilizedKeysFromCanonical(position: BattleCanonicalPosition) {
-  const out = new Set<string>();
-  const boardState = asRecord(position.boardState);
-  if (!boardState) return out;
-  const skillState = asRecord(boardState.skill_state ?? boardState.skillState);
-  const rawList = (skillState?.piece_statuses ??
-    skillState?.pieceStatuses ??
-    boardState.piece_statuses ??
-    boardState.pieceStatuses) as unknown;
-  if (!Array.isArray(rawList)) return out;
-  for (const raw of rawList) {
-    const entry = asRecord(raw);
-    if (!entry) continue;
-    const remaining = Number(entry.remaining_turns ?? entry.remainingTurns ?? 1);
-    if (!Number.isFinite(remaining) || remaining <= 0) continue;
-    const statusType = asString(entry.status_type ?? entry.statusType) ?? '';
-    if (
-      statusType !== 'stun' &&
-      statusType !== 'abyss_stun' &&
-      statusType !== 'time_stop' &&
-      statusType !== 'dark_blind' &&
-      statusType !== 'prison_fence_stun' &&
-      statusType !== 'peak_lock'
-    ) {
-      continue;
-    }
-    const side = normalizeSide(asString(entry.side) ?? 'player');
-    const row = normalizeCellIndex(Number(entry.row));
-    const col = normalizeCellIndex(Number(entry.col));
-    if (row === null || col === null) continue;
-    out.add(`${side}:${row}:${col}`);
-  }
-  return out;
+  return immobilizedCellKeysForPosition(position as unknown as AiBattlePosition);
 }
 
 export function applyMovementRuleToTargets(
@@ -1344,6 +1399,18 @@ export function applyMovementRuleToTargets(
       if (peopleFieldBuff && adr === 1 && adc === 1) return true;
       return false;
     });
+  }
+  if (movementRule === 'diagonal_forward_step_only' && context?.movingPiece) {
+    const forwardDr = context.movingPiece.side === 'player' ? -1 : 1;
+    const nextRow = origin.row + forwardDr;
+    const synth: BoardCell[] = [];
+    for (const dc of [-1, 1] as const) {
+      const col = origin.col + dc;
+      if (nextRow >= 0 && nextRow <= 8 && col >= 0 && col <= 8) {
+        synth.push({ row: nextRow, col });
+      }
+    }
+    return synth;
   }
   return targets;
 }
@@ -2336,7 +2403,7 @@ export function syncCanonicalState(params: {
   const rockObstacleCells = rockObstacleCellsForDisplay(position);
   const batsuHazardCells = batsuHazardCellsForDisplay(position);
   const thornHazardCells = thornHazardCellsForDisplay(position);
-  const movementRuleByCell = movementRuleByCellFromCanonical(position);
+  const rawMovementRuleByCell = movementRuleByCellFromCanonical(position);
   const immobilizedKeys = immobilizedKeysFromCanonical(position);
   const nextHands = remapHandsStateToDisplayPieceCodes(
     normalizeHandsStateKeys(handsFromCanonical(position)),
@@ -2352,12 +2419,21 @@ export function syncCanonicalState(params: {
     pieceDefsByChar,
   );
   const withYinYangSkillAura = applyYinYangSkillAuraDisplayToPieces(withSpringDragonAwakening);
-  const nextPersistentHazards = withYinYangSkillAura.filter((p) =>
+  const movementRuleByCell = pruneDanceMovementRulesForDisplay(
+    rawMovementRuleByCell,
+    withYinYangSkillAura,
+  );
+  const withMaiDanceMark = applyMaiDanceRestrictionMarkToPieces(
+    withYinYangSkillAura,
+    movementRuleByCell,
+  );
+  const withKirinShieldMark = applyKirinImmunityShieldMarkToPieces(withMaiDanceMark);
+  const nextPersistentHazards = withKirinShieldMark.filter((p) =>
     PERSISTENT_SYNC_GUARD_CHARS.has(p.char),
   );
 
   return {
-    pieces: withYinYangSkillAura,
+    pieces: withKirinShieldMark,
     persistentHazards: nextPersistentHazards,
     poisonHazardCells,
     rockObstacleCells,

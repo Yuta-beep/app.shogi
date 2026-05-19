@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 
 import { generateLegalMoves } from '@/ai/engine';
+import { passiveAuraImmobilizedCellKeys } from '@/ai/engine/skill-runtime';
 import type { AiBattlePosition } from '@/ai/model';
 import { getLocalBattleGame, setLocalBattlePieceCatalog } from '@/ai/local-battle-registry';
 import { normalizePieceCatalog } from '@/ai/model';
@@ -65,6 +66,7 @@ import {
   resolveBattleMovePlacements,
   syncCanonicalState,
   uniqueTargetsFromMoves,
+  applyKirinImmunityShieldMarkToPieces,
 } from '@/features/stage-shogi/ui/stage-shogi-screen.helpers';
 import { createLoadPieceCatalogUseCase } from '@/usecases/piece-info/create-piece-info-usecases';
 import type { PieceCatalogItem } from '@/usecases/piece-info/load-piece-catalog-usecase';
@@ -629,7 +631,7 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
       return;
     }
 
-    setPieces(next);
+    setPieces(applyKirinImmunityShieldMarkToPieces(next));
     persistentHazardsRef.current = snapshotPersistentHazards;
     setSideToMove('player');
     setMoveNo(1);
@@ -1906,36 +1908,52 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
       }
 
       if (previewTargets.length === 0) {
-        const enemyPieceDef =
-          piece.promoted && piece.pieceCode
-            ? (promotedPieceDefsByCode[piece.pieceCode] ?? pieceDefsByCode[piece.pieceCode])
-            : ((piece.pieceCode ? pieceDefsByCode[piece.pieceCode] : null) ??
-              pieceDefsByChar[piece.char] ??
-              null);
-        const previewVectorsWithField = mergePeopleFieldDiagonalMoveVectors(
-          piece,
-          enemyPieceDef?.moveVectors ?? [],
-          pieces,
+        const immobilizedKey = `${piece.side}:${piece.row}:${piece.col}`;
+        const auraImmobilized = passiveAuraImmobilizedCellKeys(
+          pieces.map((p) => ({
+            side: p.side,
+            row: p.row,
+            col: p.col,
+            pieceCode: p.pieceCode ?? null,
+            char: p.char,
+            promoted: Boolean(p.promoted),
+            imageSignedUrl: p.imageSignedUrl ?? null,
+          })),
         );
-        const previewVectors = applyAdjacentMedicineMoveRangeBuff(
-          piece,
-          previewVectorsWithField,
-          pieces,
-        );
-        const rawTargets = previewVectors.length
-          ? getLegalTargetsFromVectors(pieces, piece, previewVectors, BOARD_SIZE, {
-              canJump: enemyPieceDef?.canJump === true,
-            })
-          : [];
-        const movementRule =
-          latestMovementRuleByCellRef.current.get(`${piece.side}:${piece.row}:${piece.col}`) ??
-          null;
-        previewTargets = applyMovementRuleToTargets(
-          { row: piece.row, col: piece.col },
-          rawTargets,
-          movementRule,
-          { movingPiece: piece, allPieces: pieces },
-        );
+        const immobilizedByAura =
+          latestImmobilizedByCellRef.current.has(immobilizedKey) || auraImmobilized.has(immobilizedKey);
+        if (!immobilizedByAura) {
+          const enemyPieceDef =
+            piece.promoted && piece.pieceCode
+              ? (promotedPieceDefsByCode[piece.pieceCode] ?? pieceDefsByCode[piece.pieceCode])
+              : ((piece.pieceCode ? pieceDefsByCode[piece.pieceCode] : null) ??
+                pieceDefsByChar[piece.char] ??
+                null);
+          const previewVectorsWithField = mergePeopleFieldDiagonalMoveVectors(
+            piece,
+            enemyPieceDef?.moveVectors ?? [],
+            pieces,
+          );
+          const previewVectors = applyAdjacentMedicineMoveRangeBuff(
+            piece,
+            previewVectorsWithField,
+            pieces,
+          );
+          const rawTargets = previewVectors.length
+            ? getLegalTargetsFromVectors(pieces, piece, previewVectors, BOARD_SIZE, {
+                canJump: enemyPieceDef?.canJump === true,
+              })
+            : [];
+          const movementRule =
+            latestMovementRuleByCellRef.current.get(`${piece.side}:${piece.row}:${piece.col}`) ??
+            null;
+          previewTargets = applyMovementRuleToTargets(
+            { row: piece.row, col: piece.col },
+            rawTargets,
+            movementRule,
+            { movingPiece: piece, allPieces: pieces },
+          );
+        }
       }
 
       setSelectedCell(null);
@@ -2220,6 +2238,11 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
     hasEnteredBattleRef.current = true;
   }
 
+  const boardDisplayPieces = useMemo(
+    () => applyKirinImmunityShieldMarkToPieces(pieces),
+    [pieces],
+  );
+
   return {
     snapshot,
     isLoading,
@@ -2227,7 +2250,7 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
     isFinished,
     isBootstrappingBattle,
     failedImageKeys,
-    pieces,
+    pieces: boardDisplayPieces,
     boardSpriteEpoch,
     sideToMove,
     moveNo,

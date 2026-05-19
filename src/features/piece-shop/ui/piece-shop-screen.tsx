@@ -4,11 +4,16 @@ import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppLoadingScreen } from '@/components/organism/app-loading-screen';
-import { GlobalHomeHud } from '@/components/organism/global-home-hud';
 import { homeAssets } from '@/constants/home-assets';
 import { pieceShopAssets, pieceShopPreloadTargets } from '@/constants/piece-shop-assets';
-import { PIECE_SHOP_BACK_BUTTON_MARGIN_RIGHT } from '@/features/piece-shop/ui/piece-shop-layout';
+import {
+  PIECE_SHOP_BACK_BUTTON_MARGIN_RIGHT,
+  PIECE_SHOP_CURRENCY_MARGIN_LEFT,
+  PIECE_SHOP_CURRENCY_MARGIN_TOP,
+  PIECE_SHOP_HEADER_PADDING_TOP,
+} from '@/features/piece-shop/ui/piece-shop-layout';
 import { PieceShopBackButton } from '@/features/piece-shop/ui/parts/piece-shop-back-button';
+import { PieceShopCurrencyBar } from '@/features/piece-shop/ui/parts/piece-shop-currency-bar';
 import { usePieceShopScreen } from '@/features/piece-shop/ui/use-piece-shop-screen';
 import { useAssetPreload } from '@/hooks/common/use-asset-preload';
 import { useScreenBgm } from '@/hooks/common/use-screen-bgm';
@@ -47,9 +52,7 @@ export function PieceShopScreen() {
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-[#140b06]" edges={['left', 'right', 'bottom']}>
-      <GlobalHomeHud pawnCurrency={vm.pawnCurrency} goldCurrency={vm.goldCurrency} />
-
+    <SafeAreaView className="flex-1 bg-[#140b06]" edges={['top', 'left', 'right', 'bottom']}>
       <View className="flex-1">
         <View className="absolute inset-0">
           <Image
@@ -60,8 +63,11 @@ export function PieceShopScreen() {
         </View>
 
         <View className="flex-1 px-4 pb-4">
-          <View className="mt-2 flex-row justify-end">
-            <View style={{ marginRight: PIECE_SHOP_BACK_BUTTON_MARGIN_RIGHT }}>
+          <View className="z-20" style={{ paddingTop: PIECE_SHOP_HEADER_PADDING_TOP }}>
+            <View
+              className="items-end"
+              style={{ marginRight: PIECE_SHOP_BACK_BUTTON_MARGIN_RIGHT }}
+            >
               <PieceShopBackButton
                 onPress={() => {
                   void playSe('tap');
@@ -69,8 +75,20 @@ export function PieceShopScreen() {
                 }}
               />
             </View>
+            <View
+              className="items-start"
+              style={{
+                marginTop: PIECE_SHOP_CURRENCY_MARGIN_TOP,
+                marginLeft: PIECE_SHOP_CURRENCY_MARGIN_LEFT,
+              }}
+            >
+              <PieceShopCurrencyBar
+                pawnCurrency={vm.pawnCurrency}
+                goldCurrency={vm.goldCurrency}
+              />
+            </View>
           </View>
-          <ScrollView className="mt-4 flex-1" contentContainerClassName="pb-6">
+          <ScrollView className="mt-2 flex-1" contentContainerClassName="pb-6">
             <View className="flex-row flex-wrap justify-between">
               {vm.items.map((piece, index) => {
                 const isOwned = vm.owned.includes(piece.key);
@@ -135,7 +153,7 @@ export function PieceShopScreen() {
             <Text className="mt-1 text-sm text-[#f4e8d6]">{vm.detailPiece?.desc}</Text>
             <Text className="mt-3 text-xs font-black text-[#f2c98b]">【移動範囲】</Text>
             <Text className="mt-1 text-sm text-[#f4e8d6]">{vm.detailPiece?.move}</Text>
-            <Text className="mt-3 text-xs font-black text-[#f2c98b]">【デッキコスト】</Text>
+            <Text className="mt-3 text-xs font-black text-[#f2c98b]">【購入コスト】</Text>
             <Text className="mt-1 text-sm text-[#f4e8d6]">
               {vm.detailPiece
                 ? `${vm.detailPiece.costType === 'pawn' ? '歩' : '金'} ${vm.detailPiece.cost}`

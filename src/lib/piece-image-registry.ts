@@ -737,6 +737,42 @@ const pieceImageRecords: PieceImageRecord[] = [
     char: '龍',
     source: require('../../assets/pieces/0134-piece_shogi_ry.png'),
   },
+  {
+    pieceId: 9001,
+    pieceCode: 'piece_shop_so',
+    char: '走',
+    source: require('../../assets/pieces/走.png'),
+  },
+  {
+    pieceId: 9002,
+    pieceCode: 'piece_shop_tane',
+    char: '種',
+    source: require('../../assets/pieces/種.png'),
+  },
+  {
+    pieceId: 9003,
+    pieceCode: 'piece_shop_kirin',
+    char: '麒',
+    source: require('../../assets/pieces/麒.png'),
+  },
+  {
+    pieceId: 9004,
+    pieceCode: 'piece_shop_mai',
+    char: '舞',
+    source: require('../../assets/pieces/舞.png'),
+  },
+  {
+    pieceId: 9005,
+    pieceCode: 'piece_shop_p',
+    char: 'P',
+    source: require('../../assets/pieces/P.png'),
+  },
+  {
+    pieceId: 9006,
+    pieceCode: 'piece_shop_naku',
+    char: '鳴',
+    source: require('../../assets/pieces/鳴.png'),
+  },
 ];
 
 const pieceImageById = new Map<number, number>();
@@ -796,6 +832,18 @@ const aliasCodeToChar: Readonly<Record<string, string>> = {
   BIRD: '禽',
   SATORI: '悟',
   HEART: '心',
+  SO: '走',
+  TANE: '種',
+  KIRIN: '麒',
+  MAI: '舞',
+  SHOP_P: 'P',
+  NAKU: '鳴',
+  shop_so: '走',
+  shop_tane: '種',
+  shop_kirin: '麒',
+  shop_mai: '舞',
+  shop_p: 'P',
+  shop_naku: '鳴',
 };
 for (const [code, char] of Object.entries(aliasCodeToChar)) {
   const source = pieceImageByChar.get(char);

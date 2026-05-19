@@ -22,13 +22,20 @@ import {
   toBasePieceCode,
 } from '@/ai/model';
 import { CHAR_TO_CODE, CODE_TO_CHAR } from '@/features/stage-shogi/domain/piece-conversion';
-import { createMove, resolvePieceDef } from '@/ai/engine/shared';
+import { createMove, diagonalForwardStepCells, resolvePieceDef } from '@/ai/engine/shared';
 import {
   giantAnchorFootprint,
   isGiantPieceForEngine,
   isValidGiantAnchor,
 } from '@/ai/engine/giant-piece';
 import { effectivePieceForRulesAfterSpring } from '@/ai/engine/spring-ryu-awakening';
+import {
+  KIRIN_MOVE_VECTORS,
+  MAI_MOVE_VECTORS,
+  NAKU_MOVE_VECTORS,
+  P_MOVE_VECTORS,
+  TANE_SILVER_MOVE_VECTORS,
+} from '@/ai/engine/shop-piece-moves';
 import { createSkillRuntimeView, type SkillRuntimeView } from '@/ai/engine/skill-runtime';
 import {
   isAnyOniVariantPiece,
@@ -48,6 +55,13 @@ import {
   isOpaquePieceInstanceId,
   isRedOniPiece,
   isReflectivePiece,
+  isKirinCaptureBlocked,
+  isKirinPiece,
+  isMaiPiece,
+  isNakuPiece,
+  isRunPiece,
+  isShopPPiece,
+  isTanePiece,
   isSenPiece,
   isSoulPiece as isSoulPieceForLegal,
   isZaiPiece,
@@ -611,6 +625,24 @@ function resolvePieceCodeForLegalMove(piece: AiBoardPiece, lookups: AiPieceLooku
   if (ch === '巨' || rawUp.includes('C4AEB81F3634')) {
     return 'GIANT';
   }
+  if (ch === 'P' || rawUp.includes('SHOP_P') || rawUp.includes('PIECE_SHOP_P')) {
+    return 'SHOP_P';
+  }
+  if (ch === '鳴' || rawUp.includes('NAKU') || rawUp.includes('SHOP_NAKU')) {
+    return 'NAKU';
+  }
+  if (ch === '走' || rawUp.includes('SHOP_SO')) {
+    return 'SO';
+  }
+  if (ch === '種' || rawUp.includes('SHOP_TANE')) {
+    return 'TANE';
+  }
+  if (ch === '舞' || rawUp.includes('SHOP_MAI')) {
+    return 'MAI';
+  }
+  if (ch === '麒' || rawUp.includes('SHOP_KIRIN')) {
+    return 'KIRIN';
+  }
   const legacy = toBasePieceCode(CHAR_TO_CODE[piece.char]);
   if (legacy) return legacy;
   return 'FU';
@@ -844,6 +876,54 @@ function generateGunForwardTargets(
   return finishForward();
 }
 
+/** 走: 前方1マス（移動・取り）。1マス目が空のときのみ前方2マス目へ（HTML runMoves 準拠）。 */
+function generateRunForwardTargets(
+  occupancy: OccupancyMap,
+  piece: AiBoardPiece,
+): { row: number; col: number }[] {
+  const out: { row: number; col: number }[] = [];
+  const seen = new Set<string>();
+  const d = gunForwardRowDelta(piece.side);
+  const fromRow = piece.row;
+  const fromCol = piece.col;
+  const r1 = fromRow + d;
+  const r2 = fromRow + 2 * d;
+  const col = fromCol;
+
+  const push = (row: number, c: number) => {
+    if (row < 0 || row > 8 || c < 0 || c > 8) return;
+    const key = `${row}:${c}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push({ row, col: c });
+  };
+
+  const canLandOn = (target: AiBoardPiece | null): boolean => {
+    if (!target) return true;
+    if (target.side === piece.side) return false;
+    if (isRockObstacleVirtualPiece(target)) return false;
+    if (isKingPiece(target)) return false;
+    if (isArmorPiece(target)) return false;
+    if (isGiantPieceForEngine(target)) return false;
+    if (isKirinCaptureBlocked(piece, target)) return false;
+    return true;
+  };
+
+  if (r1 < 0 || r1 > 8) return out;
+
+  const p1 = findPieceAtFast(occupancy, r1, col);
+  if (p1 && isRockObstacleVirtualPiece(p1)) return out;
+  if (canLandOn(p1)) push(r1, col);
+
+  if (!p1 && r2 >= 0 && r2 <= 8) {
+    const p2 = findPieceAtFast(occupancy, r2, col);
+    if (p2 && isRockObstacleVirtualPiece(p2)) return out;
+    if (canLandOn(p2)) push(r2, col);
+  }
+
+  return out;
+}
+
 /** 銃: 斜め後ろ最大2マス（中間に味方・王・鎧・K耐久2はブロック）。前方2マス貫通と同じルールで2マス目着地を生成。 */
 function generateGunBackDiagonalTargets(
   occupancy: OccupancyMap,
@@ -1064,6 +1144,10 @@ function generateCowForwardChargedTargets(input: {
           break;
         }
         if (isGiantPieceForEngine(p)) {
+          ok = false;
+          break;
+        }
+        if (isKirinCaptureBlocked(piece, p)) {
           ok = false;
           break;
         }
@@ -1498,6 +1582,24 @@ function resolveEffectiveVectorsForPiece(
   if (isKatanaPiece(piece)) {
     return [{ dx: 0, dy: -1, maxStep: 1 }];
   }
+  if (isRunPiece(piece)) {
+    return [];
+  }
+  if (isTanePiece(piece)) {
+    return TANE_SILVER_MOVE_VECTORS;
+  }
+  if (isKirinPiece(piece)) {
+    return KIRIN_MOVE_VECTORS;
+  }
+  if (isMaiPiece(piece)) {
+    return MAI_MOVE_VECTORS;
+  }
+  if (isShopPPiece(piece)) {
+    return P_MOVE_VECTORS;
+  }
+  if (isNakuPiece(piece)) {
+    return NAKU_MOVE_VECTORS;
+  }
   if (isConcavePieceForLegal(piece)) {
     return CONCAVE_SLIDE_VECTORS;
   }
@@ -1850,6 +1952,12 @@ function generateBoardPieceMoves(input: {
     !pieceDef &&
     (isGunPiece(mover) ||
       isKatanaPiece(mover) ||
+      isRunPiece(mover) ||
+      isTanePiece(mover) ||
+      isKirinPiece(mover) ||
+      isMaiPiece(mover) ||
+      isShopPPiece(mover) ||
+      isNakuPiece(mover) ||
       isBookPiece(mover) ||
       isAnyOniVariantPiece(mover) ||
       isBeastPieceForLegal(mover) ||
@@ -1877,6 +1985,12 @@ function generateBoardPieceMoves(input: {
     !isBookPiece(mover) &&
     !isGunPiece(mover) &&
     !isKatanaPiece(mover) &&
+    !isRunPiece(mover) &&
+    !isTanePiece(mover) &&
+    !isKirinPiece(mover) &&
+    !isMaiPiece(mover) &&
+    !isShopPPiece(mover) &&
+    !isNakuPiece(mover) &&
     !isAnyOniVariantPiece(mover) &&
     !isBeastPieceForLegal(mover) &&
     !isBirdPieceForLegal(mover) &&
@@ -1954,6 +2068,7 @@ function generateBoardPieceMoves(input: {
     // 銃の前方ちょうど2マス（1マス目に敵がいても2マス目へ）: generateGunForwardTargets が担当する。
     // テンプレ (0,-1) maxStep 2 を getLegalTargetsFromVectors に渡すと、1マス目の敵で打ち切られ 2マス目が出ない。
     if (isGunPiece(mover) && v.dx === 0 && v.dy === -1) return false;
+    if (isRunPiece(mover) && v.dx === 0 && v.dy === -1) return false;
     // 牛の前方チャージ直進は generateCowForwardChargedTargets が担当（道中の敵を通過）。
     if (isCowPiece(mover) && v.dx === 0 && v.dy === -1) return false;
     return true;
@@ -2001,6 +2116,14 @@ function generateBoardPieceMoves(input: {
     cowForwardTargets.length > 0
       ? new Set(cowForwardTargets.map((t) => `${t.row}:${t.col}`))
       : null;
+  const runForwardTargets =
+    isRunPiece(mover) && !isMirrorPiece(mover)
+      ? generateRunForwardTargets(pathOccupancy, input.piece)
+      : [];
+  const runForwardKeySet =
+    runForwardTargets.length > 0
+      ? new Set(runForwardTargets.map((t) => `${t.row}:${t.col}`))
+      : null;
   const leapTargets = generateLeapOverOneTargets(pathOccupancy, input.piece, leapVectors);
   const reflectiveTargets = isReflectivePiece(mover)
     ? generateReflectiveTargets(pathOccupancy, input.piece)
@@ -2009,6 +2132,7 @@ function generateBoardPieceMoves(input: {
     ...normalTargets,
     ...gunLineTargets,
     ...cowForwardTargets,
+    ...runForwardTargets,
     ...leapTargets,
     ...reflectiveTargets,
   ];
@@ -2041,7 +2165,13 @@ function generateBoardPieceMoves(input: {
             if (peopleFieldBuff && adr === 1 && adc === 1) return true;
             return false;
           })
-        : targets;
+        : movementRule === 'diagonal_forward_step_only'
+          ? diagonalForwardStepCells(
+              input.piece.side,
+              input.piece.row,
+              input.piece.col,
+            )
+          : targets;
 
   // 銃の前方2マス貫通・斜め後ろ2マス／牛の前方チャージは 2 マス以上のため、縦1マス／直交1マス制限だけだと誤って除外される。復元する。
   if (
@@ -2065,6 +2195,14 @@ function generateBoardPieceMoves(input: {
         filteredTargets.push(t);
       }
     }
+    if (runForwardKeySet && isRunPiece(mover)) {
+      for (const t of targets) {
+        const k = `${t.row}:${t.col}`;
+        if (!runForwardKeySet.has(k) || seenF.has(k)) continue;
+        seenF.add(k);
+        filteredTargets.push(t);
+      }
+    }
   }
 
   const captureFilteredTargets = filteredTargets.filter((target) => {
@@ -2080,6 +2218,7 @@ function generateBoardPieceMoves(input: {
       return false;
     }
     if (isArmorPiece(captured)) return false;
+    if (isKirinCaptureBlocked(mover, captured)) return false;
     if (captured.side !== input.piece.side && isArmorPiece(mover)) return false;
     if (
       input.skillView.captureImmunityCells.has(`${captured.side}:${captured.row}:${captured.col}`)

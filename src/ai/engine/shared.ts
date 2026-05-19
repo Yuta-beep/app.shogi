@@ -30,6 +30,24 @@ export const PIECE_VALUES: Readonly<Record<string, number>> = {
   TIME: 400,
 };
 
+/** 舞スキル等: 斜め前1マスのみ移動可能にするときの到達マス（盤外は除外）。 */
+export function diagonalForwardStepCells(
+  side: 'player' | 'enemy',
+  row: number,
+  col: number,
+): BoardCell[] {
+  const forwardDr = side === 'player' ? -1 : 1;
+  const nextRow = row + forwardDr;
+  const out: BoardCell[] = [];
+  for (const dc of [-1, 1] as const) {
+    const nextCol = col + dc;
+    if (nextRow >= 0 && nextRow <= 8 && nextCol >= 0 && nextCol <= 8) {
+      out.push({ row: nextRow, col: nextCol });
+    }
+  }
+  return out;
+}
+
 export function pieceChar(pieceCode: string | null, promoted = false): string {
   const normalized = toBasePieceCode(pieceCode);
   if (!normalized) return '?';

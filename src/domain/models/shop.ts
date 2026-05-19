@@ -15,10 +15,21 @@ export const ShopCatalogSnapshotSchema = z.object({
   owned: z.array(ShopItemSchema.shape.key),
 });
 
-export const PurchaseShopItemResultSchema = z.object({
-  success: z.boolean(),
-  reason: z.enum(['UI_ONLY']).optional(),
-});
+export const PurchaseShopItemResultSchema = z.discriminatedUnion('success', [
+  z.object({
+    success: z.literal(true),
+    itemKey: ShopItemSchema.shape.key,
+    pawnCurrency: z.number(),
+    goldCurrency: z.number(),
+    owned: z.array(ShopItemSchema.shape.key),
+    grantedPieceId: z.number(),
+    alreadyOwned: z.boolean(),
+  }),
+  z.object({
+    success: z.literal(false),
+    reason: z.enum(['UI_ONLY']).optional(),
+  }),
+]);
 
 export type ShopItem = z.infer<typeof ShopItemSchema>;
 export type ShopCatalogSnapshot = z.infer<typeof ShopCatalogSnapshotSchema>;

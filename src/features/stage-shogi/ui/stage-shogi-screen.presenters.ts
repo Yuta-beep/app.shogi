@@ -1,6 +1,14 @@
 import { ApiClientError } from '@/infra/http/api-client';
 
 const LEAF_SKILL_DESCRIPTION = '移動時10%の確率で「葉」駒を周囲1マスに召喚する。';
+const TANE_SKILL_DESCRIPTION =
+  '移動時20%の確率で、周囲8マスのランダムな空きマス1マスに「葉」駒を召喚する。';
+const KIRIN_SKILL_DESCRIPTION = '「金」「銀」「歩」駒から取られない。';
+const KIRIN_MOVE_DESCRIPTION =
+  '前後左右に何マスでも進める。斜め4方向に1マス進める。';
+const MAI_SKILL_DESCRIPTION =
+  '移動時、その時点で周囲8マスにいる敵駒の移動範囲を斜め前1マスのみに制限する。';
+const MAI_MOVE_DESCRIPTION = '前・前斜め左右・左右・後に各1マス進める。';
 const ELECTRIC_SKILL_DESCRIPTION = '移動時20%の確率で周囲8マスの敵駒1体を3ターン行動不能にする。';
 const ICE_SKILL_DESCRIPTION = '移動時30%の確率で周囲の敵駒1体を2ターン行動不能にする。';
 const FISH_SKILL_DESCRIPTION = '移動時30%の確率で周囲の敵駒1体を3ターン行動不能にする。';
@@ -131,6 +139,16 @@ export function resolveInspectSkillDescription(
   if (byCode.blueOni) return BLUE_ONI_SKILL_INSPECT;
   if (byCode.blackOni) return BLACK_ONI_SKILL_INSPECT;
   if (char === '葉') return LEAF_SKILL_DESCRIPTION;
+  if (char === '種') return TANE_SKILL_DESCRIPTION;
+  if (char === '麒') return KIRIN_SKILL_DESCRIPTION;
+  if (char === '舞') return MAI_SKILL_DESCRIPTION;
+  const code = (pieceCode ?? '').toUpperCase();
+  if (code.includes('PIECE_SHOP_TANE') || code === 'TANE' || code === 'SHOP_TANE') {
+    return TANE_SKILL_DESCRIPTION;
+  }
+  if (code.includes('PIECE_SHOP_KIRIN') || code === 'KIRIN' || code === 'SHOP_KIRIN') {
+    return KIRIN_SKILL_DESCRIPTION;
+  }
   if (char === '電') return ELECTRIC_SKILL_DESCRIPTION;
   if (char === '氷') return ICE_SKILL_DESCRIPTION;
   if (char === '魚') return FISH_SKILL_DESCRIPTION;
@@ -244,6 +262,23 @@ export function resolveInspectMoveDescription(
   pieceCode?: string | null,
 ): string {
   const byCode = inspectPieceFlagsByCode(pieceCode);
+  if (char === '麒') return KIRIN_MOVE_DESCRIPTION;
+  if (char === '舞') return MAI_MOVE_DESCRIPTION;
+  const inspectCode = (pieceCode ?? '').toUpperCase();
+  if (
+    inspectCode.includes('PIECE_SHOP_KIRIN') ||
+    inspectCode === 'KIRIN' ||
+    inspectCode === 'SHOP_KIRIN'
+  ) {
+    return KIRIN_MOVE_DESCRIPTION;
+  }
+  if (
+    inspectCode.includes('PIECE_SHOP_MAI') ||
+    inspectCode === 'MAI' ||
+    inspectCode === 'SHOP_MAI'
+  ) {
+    return MAI_MOVE_DESCRIPTION;
+  }
   if (char === '刀') return '前方1マス。';
   if (char === '銃') return '前1～2マス、または斜め後ろ2マス。';
   if (

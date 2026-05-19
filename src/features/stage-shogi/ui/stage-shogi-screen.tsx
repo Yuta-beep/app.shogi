@@ -1,4 +1,4 @@
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Text, View } from 'react-native';
 
 import { AppLoadingScreen } from '@/components/organism/app-loading-screen';
@@ -16,13 +16,16 @@ import {
   StageShogiSkillToast,
   StageShogiTimeActionModal,
 } from '@/features/stage-shogi/ui/components/stage-shogi-modals';
+import { StageShogiBackButton } from '@/features/stage-shogi/ui/parts/stage-shogi-back-button';
 import { useStageShogiScreen } from '@/features/stage-shogi/ui/use-stage-shogi-screen';
 import { useAssetPreload } from '@/hooks/common/use-asset-preload';
+import { playSe } from '@/lib/audio/audio-manager';
 import { useAuthSession } from '@/hooks/common/use-auth-session';
 import { useScreenBgm } from '@/hooks/common/use-screen-bgm';
 import { listLocalPieceImageModules } from '@/lib/piece-image';
 
 export function StageShogiScreen() {
+  const router = useRouter();
   const params = useLocalSearchParams<{ stage?: string }>();
   const stageParam = Array.isArray(params.stage) ? params.stage[0] : params.stage;
   const { isReady: isAuthReady, userId } = useAuthSession();
@@ -59,18 +62,20 @@ export function StageShogiScreen() {
       : null;
 
   return (
-    <UiScreenShell
-      title="Stage Shogi"
-      subtitle="バトル画面（AI接続）"
-      hideTitleText
-      plainHeader
-      homeButtonTextClassName="text-white"
-      fullBleedBackgroundSource={stageBattleBackgroundSource ?? undefined}
-      useBlackBackgroundWhenNoImage={forceBlackBackground}
-      noImageBackgroundColor={
-        forceGreenBackground ? '#166534' : forceBlueBackground ? '#1e40af' : undefined
-      }
-    >
+    <View className="flex-1">
+      <UiScreenShell
+        title="Stage Shogi"
+        subtitle="バトル画面（AI接続）"
+        hideTitleText
+        hideBackButton
+        plainHeader
+        homeButtonTextClassName="text-white"
+        fullBleedBackgroundSource={stageBattleBackgroundSource ?? undefined}
+        useBlackBackgroundWhenNoImage={forceBlackBackground}
+        noImageBackgroundColor={
+          forceGreenBackground ? '#166534' : forceBlueBackground ? '#1e40af' : undefined
+        }
+      >
       <View className="relative">
         <View className="rounded-xl border-2 border-accent bg-[#f3ead3] p-3">
           <Text className="text-sm font-bold text-[#6b4532]">{`TURN ${vm.moveNo}`}</Text>
@@ -190,6 +195,13 @@ export function StageShogiScreen() {
 
         <StageShogiResultOverlay winner={vm.winner} />
       </View>
-    </UiScreenShell>
+      </UiScreenShell>
+      <StageShogiBackButton
+        onPress={() => {
+          void playSe('tap');
+          router.back();
+        }}
+      />
+    </View>
   );
 }

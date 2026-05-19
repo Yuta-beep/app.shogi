@@ -1,6 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import { Alert } from 'react-native';
 
 import { ShopItem } from '@/domain/models/shop';
+import { ApiClientError } from '@/infra/http/api-client';
+import { loadHomeSnapshot } from '@/hooks/common/home-snapshot-store';
 import { useModalState } from '@/hooks/common/use-modal-state';
 import {
   createLoadShopCatalogUseCase,
@@ -35,27 +39,36 @@ export function usePieceShopScreen(): PieceShopVM {
   const loadUseCase = useMemo(() => createLoadShopCatalogUseCase(), []);
   const purchaseUseCase = useMemo(() => createPurchaseShopItemUseCase(), []);
 
-  useEffect(() => {
-    let active = true;
-    setIsLoading(true);
-    loadUseCase
-      .execute()
-      .then((snapshot) => {
-        if (!active) return;
-        setItems(snapshot.items);
-        setPawnCurrency(snapshot.pawnCurrency);
-        setGoldCurrency(snapshot.goldCurrency);
-        setOwned(snapshot.owned);
-      })
-      .finally(() => {
-        if (active) {
-          setIsLoading(false);
-        }
-      });
-    return () => {
-      active = false;
-    };
-  }, [loadUseCase]);
+  const applyWallet = useCallback((shopPawn: number, shopGold: number) => {
+    setPawnCurrency(shopPawn);
+    setGoldCurrency(shopGold);
+  }, []);
+
+  const reloadCatalog = useCallback(async () => {
+    const snapshot = await loadUseCase.execute();
+    setItems(snapshot.items);
+    applyWallet(snapshot.pawnCurrency, snapshot.goldCurrency);
+    setOwned(snapshot.owned);
+    return snapshot;
+  }, [applyWallet, loadUseCase]);
+
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      setIsLoading(true);
+      void loadHomeSnapshot(true)
+        .catch(() => undefined)
+        .then(() => reloadCatalog())
+        .finally(() => {
+          if (active) {
+            setIsLoading(false);
+          }
+        });
+      return () => {
+        active = false;
+      };
+    }, [reloadCatalog]),
+  );
 
   async function purchase() {
     if (!confirm.payload) {
@@ -66,16 +79,32 @@ export function usePieceShopScreen(): PieceShopVM {
     setIsLoading(true);
     try {
       const result = await purchaseUseCase.execute({ item: target });
-      if (result.success || result.reason === 'UI_ONLY') {
-        setOwned((prev) => (prev.includes(target.key) ? prev : [...prev, target.key]));
+      if (result.success) {
+        setPawnCurrency(result.pawnCurrency);
+        setGoldCurrency(result.goldCurrency);
+        setOwned(result.owned);
+        await loadHomeSnapshot(true).catch(() => undefined);
+      } else {
+        Alert.alert('購入できません', '通貨が足りないか、すでに購入済みです。');
       }
-
-      if (result.success && result.reason !== 'UI_ONLY') {
-        const snapshot = await loadUseCase.execute();
-        setItems(snapshot.items);
-        setPawnCurrency(snapshot.pawnCurrency);
-        setGoldCurrency(snapshot.goldCurrency);
-        setOwned(snapshot.owned);
+    } catch (error: unknown) {
+      if (error instanceof ApiClientError) {
+        if (error.code === 'INSUFFICIENT_CURRENCY') {
+          Alert.alert('購入できません', '通貨が足りません。');
+        } else if (error.code === 'ALREADY_OWNED') {
+          Alert.alert('購入できません', 'すでに購入済みです。');
+        } else if (error.code === 'UNAUTHORIZED') {
+          Alert.alert('購入できません', 'ログインが必要です。');
+        } else if (error.code === 'ITEM_NOT_FOUND') {
+          Alert.alert(
+            '購入できません',
+            'ショップの駒データが未登録です。サーバー管理者にマスタ登録を確認してください。',
+          );
+        } else {
+          Alert.alert('購入できません', error.message);
+        }
+      } else {
+        Alert.alert('購入できません', 'しばらくしてから再度お試しください。');
       }
     } finally {
       setIsLoading(false);

@@ -6,6 +6,7 @@ import { homeAssets } from '@/constants/home-assets';
 
 type HomeCommonHeaderProps = {
   userName: string;
+  onUserNamePress?: () => void;
   rank?: number;
   exp?: number;
   pawnCurrency?: number;
@@ -24,6 +25,7 @@ const USER_BAR_IMAGE_OFFSET_Y = 4;
 
 export function HomeCommonHeader({
   userName,
+  onUserNamePress,
   rank = 1,
   exp = 0,
   pawnCurrency = 0,
@@ -63,6 +65,7 @@ export function HomeCommonHeader({
 
           <PlayerStatus
             userName={userName}
+            onUserNamePress={onUserNamePress}
             rank={rank}
             exp={exp}
             expPerLevel={MOCK_EXP_PER_LEVEL}

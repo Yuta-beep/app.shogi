@@ -6,7 +6,11 @@ import { piecesFromBoardState, toBasePieceCode } from '@/ai/model';
 import {
   buildSkillMoverFlags,
   isAPieceInstance,
+  isKingPiece,
+  isMaiPiece,
+  isShopPPiece,
   isSpecialTenPlusPiece,
+  isTanePiece,
   normalizeSkillPieceCode,
 } from '@/ai/engine/piece-identifiers';
 import {
@@ -964,6 +968,39 @@ function cellKey(side: Side, row: number, col: number): string {
   return `${side}:${row}:${col}`;
 }
 
+function isChebyshevAdjacent(
+  aRow: number,
+  aCol: number,
+  bRow: number,
+  bCol: number,
+): boolean {
+  const dr = Math.abs(aRow - bRow);
+  const dc = Math.abs(aCol - bCol);
+  return dr <= 1 && dc <= 1 && (dr !== 0 || dc !== 0);
+}
+
+/** 舞の移動制限は、盤上の味方「舞」の周囲8マスにいる敵にだけ効く。 */
+function pruneDanceMovementModifiersNotAdjacentToMai(
+  modifiers: Record<string, unknown>[],
+  pieces: AiBoardPiece[],
+): Record<string, unknown>[] {
+  const maiAllies = pieces.filter((p) => isMaiPiece(p));
+  return modifiers.filter((entry) => {
+    const rule = asString(entry.movement_rule ?? entry.movementRule) ?? '';
+    if (rule !== 'diagonal_forward_step_only') return true;
+    const side = (asString(entry.side) ?? 'player') === 'enemy' ? 'enemy' : 'player';
+    const row = asNumber(entry.row);
+    const col = asNumber(entry.col);
+    if (row == null || col == null) return false;
+    if (maiAllies.length === 0) return false;
+    return maiAllies.some(
+      (mai) =>
+        mai.side !== side &&
+        isChebyshevAdjacent(mai.row, mai.col, row, col),
+    );
+  });
+}
+
 function anyGiantFootprintContainsCell(pieces: AiBoardPiece[], row: number, col: number): boolean {
   for (const p of pieces) {
     if (!isGiantPieceForEngine(p)) continue;
@@ -1195,6 +1232,45 @@ export function pieceHasActiveCaptureImmunityFromBoardState(
   return false;
 }
 
+/** 封・駒ショップPなど、盤上オーラで移動不能になるマス（`side:row:col`）。 */
+export function passiveAuraImmobilizedCellKeys(
+  boardPieces: AiBoardPiece[],
+): Set<string> {
+  const immobilizedCells = new Set<string>();
+  for (const piece of boardPieces) {
+    if (isSealPieceForAura(piece)) {
+      for (const [dr, dc] of [
+        [-1, -1],
+        [-1, 1],
+        [1, -1],
+        [1, 1],
+      ] as const) {
+        const row = piece.row + dr;
+        const col = piece.col + dc;
+        if (row < 0 || row > 8 || col < 0 || col > 8) continue;
+        const target = findPieceCoveringCell(boardPieces, row, col);
+        if (!target || target.side === piece.side) continue;
+        if (isGiantPieceForEngine(target)) continue;
+        immobilizedCells.add(cellKey(target.side, target.row, target.col));
+      }
+    }
+  }
+  for (const piece of boardPieces) {
+    if (!isShopPPiece(piece)) continue;
+    for (const target of boardPieces) {
+      if (target.side === piece.side) continue;
+      if (target.row !== piece.row && target.col !== piece.col) continue;
+      if (isKingPiece(target) || isGiantPieceForEngine(target)) continue;
+      immobilizedCells.add(cellKey(target.side, target.row, target.col));
+    }
+  }
+  return immobilizedCells;
+}
+
+export function immobilizedCellKeysForPosition(position: AiBattlePosition): Set<string> {
+  return createSkillRuntimeView(position).immobilizedCells;
+}
+
 export function createSkillRuntimeView(position: AiBattlePosition): SkillRuntimeView {
   const state = readSkillState(position);
   const boardPieces = piecesFromBoardState(position);
@@ -1210,7 +1286,11 @@ export function createSkillRuntimeView(position: AiBattlePosition): SkillRuntime
     return Boolean(at && isGiantPieceForEngine(at) && at.side === statusSide);
   }
 
-  for (const entry of state.movement_modifiers) {
+  const danceAwareModifiers = pruneDanceMovementModifiersNotAdjacentToMai(
+    state.movement_modifiers,
+    boardPieces,
+  );
+  for (const entry of danceAwareModifiers) {
     const side = (asString(entry.side) ?? 'player') === 'enemy' ? 'enemy' : 'player';
     const row = asNumber(entry.row);
     const col = asNumber(entry.col);
@@ -1251,23 +1331,8 @@ export function createSkillRuntimeView(position: AiBattlePosition): SkillRuntime
     }
   }
 
-  // 封: 斜め4方向に隣接する敵駒を移動不可にする常時オーラ。
-  for (const piece of boardPieces) {
-    if (!isSealPieceForAura(piece)) continue;
-    for (const [dr, dc] of [
-      [-1, -1],
-      [-1, 1],
-      [1, -1],
-      [1, 1],
-    ] as const) {
-      const row = piece.row + dr;
-      const col = piece.col + dc;
-      if (row < 0 || row > 8 || col < 0 || col > 8) continue;
-      const target = findPieceCoveringCell(boardPieces, row, col);
-      if (!target || target.side === piece.side) continue;
-      if (isGiantPieceForEngine(target)) continue;
-      immobilizedCells.add(cellKey(target.side, target.row, target.col));
-    }
+  for (const key of passiveAuraImmobilizedCellKeys(boardPieces)) {
+    immobilizedCells.add(key);
   }
 
   for (const entry of state.board_hazards) {
@@ -1371,7 +1436,12 @@ export function tickSkillStateDurations(position: AiBattlePosition) {
   state.movement_modifiers = tick(state.movement_modifiers);
   state.piece_statuses = tick(state.piece_statuses);
   state.piece_defenses = tick(state.piece_defenses);
-  stripSkillStateForGiantImmunity(state, piecesFromBoardState(position));
+  const boardPieces = piecesFromBoardState(position);
+  state.movement_modifiers = pruneDanceMovementModifiersNotAdjacentToMai(
+    state.movement_modifiers,
+    boardPieces,
+  );
+  stripSkillStateForGiantImmunity(state, boardPieces);
   writeSkillState(position, state);
 }
 
@@ -1569,6 +1639,20 @@ export function applyMoveSkillEffects(input: {
         col: movedPiece.col,
       };
     });
+    state.movement_modifiers = state.movement_modifiers.map((entry) => {
+      const rule = asString(entry.movement_rule ?? entry.movementRule) ?? '';
+      if (rule !== 'diagonal_forward_step_only') return entry;
+      const side = (asString(entry.side) ?? 'player') === 'enemy' ? 'enemy' : 'player';
+      const row = asNumber(entry.row);
+      const col = asNumber(entry.col);
+      if (side !== movedPiece.side) return entry;
+      if (row !== input.move.fromRow || col !== input.move.fromCol) return entry;
+      return {
+        ...entry,
+        row: movedPiece.row,
+        col: movedPiece.col,
+      };
+    });
   }
   const {
     isAMover,
@@ -1597,6 +1681,7 @@ export function applyMoveSkillEffects(input: {
     isPoisonMover,
     isPrisonFenceMover,
     isRainbowMover,
+    isDanceMover,
     isRedOniMover,
     isRidgeMover,
     isRockMover,
@@ -1952,6 +2037,37 @@ export function applyMoveSkillEffects(input: {
       markMoveSkillFx();
     }
   }
+  // 舞: 移動時、その時点で周囲8マスにいる敵駒の移動範囲を斜め前1マスのみに制限する。
+  if (
+    (isDanceMover || (input.movedPiece != null && isMaiPiece(input.movedPiece))) &&
+    input.move.fromRow != null &&
+    input.move.fromCol != null &&
+    input.movedPiece
+  ) {
+    let danceMods = 0;
+    for (let dr = -1; dr <= 1; dr += 1) {
+      for (let dc = -1; dc <= 1; dc += 1) {
+        if (dr === 0 && dc === 0) continue;
+        const row = input.movedPiece.row + dr;
+        const col = input.movedPiece.col + dc;
+        if (row < 0 || row > 8 || col < 0 || col > 8) continue;
+        const target = input.pieces.find((piece) => piece.row === row && piece.col === col);
+        if (!target || target.side === input.actorSide) continue;
+        if (isGiantPieceForEngine(target)) continue;
+        state.movement_modifiers.push({
+          row,
+          col,
+          side: target.side,
+          movement_rule: 'diagonal_forward_step_only',
+          remaining_turns: 999,
+        });
+        danceMods += 1;
+      }
+    }
+    if (danceMods > 0) {
+      markMoveSkillFx();
+    }
+  }
   // 毒: 移動前マスを4ターンの毒マスにする（敵が踏むと消滅）。
   if (isPoisonMover && input.move.fromRow != null && input.move.fromCol != null) {
     const durationTurns = 4;
@@ -2300,6 +2416,28 @@ export function applyMoveSkillEffects(input: {
       if (boardSignatureForSkillFx(input.pieces) !== sigHouse) {
         markMoveSkillFx();
       }
+    }
+  }
+  // 種: 移動時20%で周囲8マスのランダム1マスに葉を召喚。
+  if (
+    input.movedPiece &&
+    isTanePiece(input.movedPiece) &&
+    input.move.fromRow != null &&
+    input.move.fromCol != null
+  ) {
+    const procChance = 0.2;
+    const triggered = skillProcRoll(procChance);
+    const taneSum = triggered
+      ? summonRandomAdjacentEmptyPiece({
+          pieces: input.pieces,
+          center: input.movedPiece,
+          actorSide: input.actorSide,
+          summonCode: 'HAA',
+          summonChar: '葉',
+        })
+      : { summoned: false, row: null, col: null };
+    if (taneSum.summoned) {
+      markMoveSkillFx();
     }
   }
   // 木: 移動時10%で周囲8マスのランダム1マスに木を召喚。
@@ -2857,7 +2995,11 @@ export function applyMoveSkillEffects(input: {
       markMoveSkillFx();
     }
   }
-  const skipGenericAdjacentSummon = isWoodMover || isLeafMover || isBullMover;
+  const skipGenericAdjacentSummon =
+    isWoodMover ||
+    isLeafMover ||
+    isBullMover ||
+    (input.movedPiece != null && isTanePiece(input.movedPiece));
   const skipGenericAdjacentRemove = isDemonMover || isTatsuGodMover;
   if (defs.length === 0) {
     stripSkillStateForGiantImmunity(state, input.pieces);
@@ -3926,6 +4068,10 @@ export function applyMoveSkillEffects(input: {
   }
 
   applyExperimentMutantReverts(input.pieces);
+  state.movement_modifiers = pruneDanceMovementModifiersNotAdjacentToMai(
+    state.movement_modifiers,
+    input.pieces,
+  );
   stripSkillStateForGiantImmunity(state, input.pieces);
   writeSkillState(input.position, state);
   return { moveSkillEffectTriggered };

@@ -1,3 +1,4 @@
+import { formatPieceRateTextFromLineup } from '@/features/gacha-room/lib/gacha-lineup-rates';
 import {
   GachaLineupEntry,
   GachaLobbySnapshot,
@@ -9,14 +10,6 @@ import {
   RollGachaResult,
   RollGachaUseCase,
 } from '@/usecases/gacha-room/roll-gacha-usecase';
-
-function formatPieceRateFromLineup(lineup: GachaLineupEntry[]): string {
-  const total = lineup.reduce((sum, e) => sum + Math.max(0, e.weight), 0);
-  if (total <= 0) return '';
-  return lineup
-    .map((e) => `${e.char}${Math.round((Math.max(0, e.weight) / total) * 100)}%`)
-    .join('・');
-}
 
 const ukanmuriLineup: GachaLineupEntry[] = [
   { char: '歩', name: '歩', rarity: 'N', weight: 45, description: '歩通貨が1増える。' },
@@ -87,7 +80,7 @@ const banners: GachaLobbySnapshot['banners'] = [
     key: 'ukanmuri',
     name: 'うかんむりガチャ',
     rareRateText: 'UR 3% / SSR 8%',
-    pieceRateText: formatPieceRateFromLineup(ukanmuriLineup),
+    pieceRateText: formatPieceRateTextFromLineup(ukanmuriLineup),
     description: '定・室・安・宋・歩・金のいずれかがランダムで排出されます。',
     lineup: ukanmuriLineup,
     pawnCost: 30,
@@ -97,7 +90,7 @@ const banners: GachaLobbySnapshot['banners'] = [
     key: 'hiHen',
     name: 'ひへんガチャ',
     rareRateText: 'UR 4% / SSR 10%',
-    pieceRateText: formatPieceRateFromLineup(hiHenLineup),
+    pieceRateText: formatPieceRateTextFromLineup(hiHenLineup),
     description: '歩・金・爆・煽・灯のいずれかがランダムで排出されます。',
     lineup: hiHenLineup,
     pawnCost: 30,
@@ -107,7 +100,7 @@ const banners: GachaLobbySnapshot['banners'] = [
     key: 'shinnyo',
     name: 'しんにょうガチャ',
     rareRateText: 'UR 3% / SSR 9%',
-    pieceRateText: formatPieceRateFromLineup(shinnyoLineup),
+    pieceRateText: formatPieceRateTextFromLineup(shinnyoLineup),
     description: '歩・金・辺・逸・進・逃のいずれかがランダムで排出されます。',
     lineup: shinnyoLineup,
     pawnCost: 30,
@@ -117,7 +110,7 @@ const banners: GachaLobbySnapshot['banners'] = [
     key: 'kanken1',
     name: '漢検１級ガチャ',
     rareRateText: 'UR 7% / SSR 15%',
-    pieceRateText: formatPieceRateFromLineup(kanken1Lineup),
+    pieceRateText: formatPieceRateTextFromLineup(kanken1Lineup),
     description: '歩・金・艸・閹・膠のいずれかがランダムで排出されます。',
     lineup: kanken1Lineup,
     usesGold: true,

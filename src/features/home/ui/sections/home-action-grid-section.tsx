@@ -18,7 +18,7 @@ export function HomeActionGridSection() {
 
   return (
     <View className="mt-auto px-4 pb-8">
-      <View className="rounded-xl border-2 border-[#8b0000]/70 bg-[#2f1b14]/70 p-3">
+      <View className="rounded-xl bg-[#2f1b14]/70 p-3">
         <View className="flex-row gap-2">
           <HomeImageButton
             source={homeAssets.buttons.normalDungeon}

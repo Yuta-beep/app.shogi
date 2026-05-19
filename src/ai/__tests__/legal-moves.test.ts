@@ -915,4 +915,601 @@ describe('ai engine legal moves', () => {
     );
     expect(diagEnemyMoves).toHaveLength(0);
   });
+
+  it('tane piece generates silver-like moves even when catalog vectors are empty', () => {
+    const taneCatalog: AiPieceDefinition = {
+      pieceCode: 'piece_shop_tane',
+      canonicalCode: 'TANE',
+      sfenCode: ',',
+      char: '種',
+      name: '種',
+      unlock: 'shop',
+      desc: '',
+      skill: '',
+      move: '',
+      moveVectors: [],
+      isRepeatable: false,
+    };
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: '9/9/9/9/9/9/9/9/4K4 b - 1',
+      stateHash: 'tane-silver',
+      boardState: {
+        pieces: [
+          {
+            side: 'player',
+            row: 6,
+            col: 4,
+            pieceCode: 'piece_shop_tane',
+            char: '種',
+            promoted: false,
+          },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+      },
+      hands: { player: {}, enemy: {} },
+    };
+    const legal = generateLegalMoves({ position, pieceCatalog: [...pieceCatalog, taneCatalog] });
+    const taneMoves = legal.legalMoves.filter((m) => m.fromRow === 6 && m.fromCol === 4);
+    expect(taneMoves.some((m) => m.toRow === 5 && m.toCol === 4)).toBe(true);
+    expect(taneMoves.some((m) => m.toRow === 5 && m.toCol === 3)).toBe(true);
+    expect(taneMoves.some((m) => m.toRow === 5 && m.toCol === 5)).toBe(true);
+  });
+
+  it('run piece moves up to 2 squares forward when path is clear', () => {
+    const runCatalog: AiPieceDefinition = {
+      pieceCode: 'piece_shop_so',
+      canonicalCode: 'SO',
+      sfenCode: '+',
+      char: '走',
+      name: '走',
+      unlock: 'shop',
+      desc: 'なし',
+      skill: '',
+      move: '前方に最大2マス進める。1マス目に駒がある場合は2マス目には進めない。',
+      moveVectors: [],
+      isRepeatable: false,
+    };
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: '9/9/9/9/9/9/9/9/4K4 b - 1',
+      stateHash: 'run-clear',
+      boardState: {
+        pieces: [
+          { side: 'player', row: 6, col: 4, pieceCode: 'piece_shop_so', char: '走', promoted: false },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+      },
+      hands: { player: {}, enemy: {} },
+    };
+    const legal = generateLegalMoves({ position, pieceCatalog: [...pieceCatalog, runCatalog] });
+    const runMoves = legal.legalMoves.filter((m) => m.fromRow === 6 && m.fromCol === 4);
+    expect(runMoves.some((m) => m.toRow === 5 && m.toCol === 4)).toBe(true);
+    expect(runMoves.some((m) => m.toRow === 4 && m.toCol === 4)).toBe(true);
+  });
+
+  it('run piece cannot reach 2nd square when 1st square is occupied', () => {
+    const runCatalog: AiPieceDefinition = {
+      pieceCode: 'piece_shop_so',
+      canonicalCode: 'SO',
+      sfenCode: '+',
+      char: '走',
+      name: '走',
+      unlock: 'shop',
+      desc: 'なし',
+      skill: '',
+      move: '',
+      moveVectors: [],
+      isRepeatable: false,
+    };
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: '9/9/9/9/9/9/9/9/4K4 b - 1',
+      stateHash: 'run-blocked',
+      boardState: {
+        pieces: [
+          { side: 'player', row: 6, col: 4, pieceCode: 'piece_shop_so', char: '走', promoted: false },
+          { side: 'enemy', row: 5, col: 4, pieceCode: 'FU', char: '歩', promoted: false },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+      },
+      hands: { player: {}, enemy: {} },
+    };
+    const legal = generateLegalMoves({ position, pieceCatalog: [...pieceCatalog, runCatalog] });
+    const runMoves = legal.legalMoves.filter((m) => m.fromRow === 6 && m.fromCol === 4);
+    expect(runMoves.some((m) => m.toRow === 5 && m.toCol === 4)).toBe(true);
+    expect(runMoves.some((m) => m.toRow === 4 && m.toCol === 4)).toBe(false);
+  });
+
+  it('kirin piece generates moves even when catalog vectors are empty', () => {
+    const kirinCatalog: AiPieceDefinition = {
+      pieceCode: 'piece_shop_kirin',
+      canonicalCode: 'KIRIN',
+      sfenCode: '-',
+      char: '麒',
+      name: '麒',
+      unlock: 'shop',
+      desc: '',
+      skill: '',
+      move: '',
+      moveVectors: [],
+      isRepeatable: true,
+    };
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: '9/9/9/9/9/9/9/9/4K4 b - 1',
+      stateHash: 'kirin-moves',
+      boardState: {
+        pieces: [
+          {
+            side: 'player',
+            row: 4,
+            col: 4,
+            pieceCode: 'piece_shop_kirin',
+            char: '麒',
+            promoted: false,
+          },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+      },
+      hands: { player: {}, enemy: {} },
+    };
+    const legal = generateLegalMoves({ position, pieceCatalog: [...pieceCatalog, kirinCatalog] });
+    const kirinMoves = legal.legalMoves.filter((m) => m.fromRow === 4 && m.fromCol === 4);
+    expect(kirinMoves.some((m) => m.toRow === 3 && m.toCol === 4)).toBe(true);
+    expect(kirinMoves.some((m) => m.toRow === 4 && m.toCol === 3)).toBe(true);
+    expect(kirinMoves.some((m) => m.toRow === 3 && m.toCol === 3)).toBe(true);
+  });
+
+  it('kirin cannot be captured by enemy pawn gold or silver', () => {
+    const kirinCatalog: AiPieceDefinition = {
+      pieceCode: 'piece_shop_kirin',
+      canonicalCode: 'KIRIN',
+      sfenCode: '-',
+      char: '麒',
+      name: '麒',
+      unlock: 'shop',
+      desc: '',
+      skill: '',
+      move: '',
+      moveVectors: [
+        { dx: -1, dy: 0, maxStep: 9 },
+        { dx: 1, dy: 0, maxStep: 9 },
+        { dx: 0, dy: -1, maxStep: 9 },
+        { dx: 0, dy: 1, maxStep: 9 },
+        { dx: -1, dy: -1, maxStep: 1 },
+        { dx: 1, dy: -1, maxStep: 1 },
+        { dx: -1, dy: 1, maxStep: 1 },
+        { dx: 1, dy: 1, maxStep: 1 },
+      ],
+      isRepeatable: true,
+    };
+    const silverCatalog: AiPieceDefinition = {
+      pieceCode: 'GI',
+      canonicalCode: 'GI',
+      sfenCode: 'S',
+      char: '銀',
+      name: '銀',
+      unlock: 'default',
+      desc: '',
+      skill: '',
+      move: '',
+      moveVectors: [
+        { dx: -1, dy: -1, maxStep: 1 },
+        { dx: 0, dy: -1, maxStep: 1 },
+        { dx: 1, dy: -1, maxStep: 1 },
+        { dx: -1, dy: 1, maxStep: 1 },
+        { dx: 1, dy: 1, maxStep: 1 },
+      ],
+      isRepeatable: false,
+    };
+    const catalog = [...pieceCatalog, kirinCatalog, silverCatalog];
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: '9/9/9/9/9/9/9/9/4K4 b - 1',
+      stateHash: 'kirin-immune',
+      boardState: {
+        pieces: [
+          {
+            side: 'enemy',
+            row: 4,
+            col: 4,
+            pieceCode: 'piece_shop_kirin',
+            char: '麒',
+            promoted: false,
+          },
+          { side: 'player', row: 5, col: 4, pieceCode: 'FU', char: '歩', promoted: false },
+          { side: 'player', row: 5, col: 3, pieceCode: 'GI', char: '銀', promoted: false },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+      },
+      hands: { player: {}, enemy: {} },
+    };
+    const legal = generateLegalMoves({ position, pieceCatalog: catalog });
+    const pawnCapture = legal.legalMoves.some(
+      (m) => m.fromRow === 5 && m.fromCol === 4 && m.toRow === 4 && m.toCol === 4,
+    );
+    const silverCapture = legal.legalMoves.some(
+      (m) => m.fromRow === 5 && m.fromCol === 3 && m.toRow === 4 && m.toCol === 4,
+    );
+    expect(pawnCapture).toBe(false);
+    expect(silverCapture).toBe(false);
+  });
+
+  it('shop P piece generates orthogonal moves even when catalog vectors are empty', () => {
+    const pCatalog: AiPieceDefinition = {
+      pieceCode: 'piece_shop_p',
+      canonicalCode: 'SHOP_P',
+      sfenCode: '!',
+      char: 'P',
+      name: 'P',
+      unlock: 'shop',
+      desc: '',
+      skill: '',
+      move: '',
+      moveVectors: [],
+      isRepeatable: false,
+    };
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: '9/9/9/9/9/9/9/9/4K4 b - 1',
+      stateHash: 'shop-p-moves',
+      boardState: {
+        pieces: [
+          {
+            side: 'player',
+            row: 4,
+            col: 4,
+            pieceCode: 'piece_shop_p',
+            char: 'P',
+            promoted: false,
+          },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+      },
+      hands: { player: {}, enemy: {} },
+    };
+    const legal = generateLegalMoves({ position, pieceCatalog: [...pieceCatalog, pCatalog] });
+    const pMoves = legal.legalMoves.filter((m) => m.fromRow === 4 && m.fromCol === 4);
+    expect(pMoves.some((m) => m.toRow === 3 && m.toCol === 4)).toBe(true);
+    expect(pMoves.some((m) => m.toRow === 5 && m.toCol === 4)).toBe(true);
+    expect(pMoves.some((m) => m.toRow === 4 && m.toCol === 3)).toBe(true);
+    expect(pMoves.some((m) => m.toRow === 4 && m.toCol === 5)).toBe(true);
+    expect(pMoves).toHaveLength(4);
+  });
+
+  it('shop P immobilizes enemies on the same row or column', () => {
+    const pCatalog: AiPieceDefinition = {
+      pieceCode: 'piece_shop_p',
+      canonicalCode: 'SHOP_P',
+      sfenCode: '!',
+      char: 'P',
+      name: 'P',
+      unlock: 'shop',
+      desc: '',
+      skill: '',
+      move: '',
+      moveVectors: [],
+      isRepeatable: false,
+    };
+    const position: AiBattlePosition = {
+      sideToMove: 'enemy',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: '4k4/9/9/9/9/1p1p1p3/4P4/9/4K4 w - 1',
+      stateHash: 'shop-p-lock',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'enemy', row: 4, col: 2, pieceCode: 'FU', char: '歩', promoted: false },
+          { side: 'enemy', row: 3, col: 4, pieceCode: 'FU', char: '歩', promoted: false },
+          { side: 'enemy', row: 2, col: 2, pieceCode: 'FU', char: '歩', promoted: false },
+          {
+            side: 'player',
+            row: 4,
+            col: 4,
+            pieceCode: 'piece_shop_p',
+            char: 'P',
+            promoted: false,
+          },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+      },
+      hands: { player: {}, enemy: {} },
+    };
+    const legal = generateLegalMoves({ position, pieceCatalog: [...pieceCatalog, pCatalog] });
+    const lockedEnemyMoves = legal.legalMoves.filter(
+      (m) =>
+        m.fromRow != null &&
+        m.fromCol != null &&
+        ((m.fromRow === 4 && m.fromCol === 2) || (m.fromRow === 3 && m.fromCol === 4)),
+    );
+    const freeEnemyMoves = legal.legalMoves.filter(
+      (m) => m.fromRow === 2 && m.fromCol === 2,
+    );
+    expect(lockedEnemyMoves).toHaveLength(0);
+    expect(freeEnemyMoves.length).toBeGreaterThan(0);
+  });
+
+  it('shop P does not immobilize enemy king or giant on same row or column', () => {
+    const pCatalog: AiPieceDefinition = {
+      pieceCode: 'piece_shop_p',
+      canonicalCode: 'SHOP_P',
+      sfenCode: '!',
+      char: 'P',
+      name: 'P',
+      unlock: 'shop',
+      desc: '',
+      skill: '',
+      move: '',
+      moveVectors: [],
+      isRepeatable: false,
+    };
+    const giantCatalog: AiPieceDefinition = {
+      pieceCode: 'GIANT',
+      canonicalCode: 'GIANT',
+      sfenCode: 'g',
+      char: '巨',
+      name: '巨',
+      unlock: 'default',
+      desc: '',
+      skill: '',
+      move: '',
+      moveVectors: [],
+      isRepeatable: false,
+    };
+    const position: AiBattlePosition = {
+      sideToMove: 'enemy',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: '4k4/9/9/9/9/9/4G4/4P4/4K4 w - 1',
+      stateHash: 'shop-p-exempt',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          {
+            side: 'enemy',
+            row: 4,
+            col: 6,
+            pieceCode: 'GIANT',
+            char: '巨',
+            promoted: false,
+          },
+          {
+            side: 'player',
+            row: 4,
+            col: 4,
+            pieceCode: 'piece_shop_p',
+            char: 'P',
+            promoted: false,
+          },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+      },
+      hands: { player: {}, enemy: {} },
+    };
+    const legal = generateLegalMoves({
+      position,
+      pieceCatalog: [...pieceCatalog, pCatalog, giantCatalog],
+    });
+    const kingMoves = legal.legalMoves.filter((m) => m.fromRow === 0 && m.fromCol === 4);
+    const giantMoves = legal.legalMoves.filter((m) => m.fromRow === 4 && m.fromCol === 6);
+    expect(kingMoves.length).toBeGreaterThan(0);
+    expect(giantMoves.length).toBeGreaterThan(0);
+  });
+
+  it('naku piece generates silver-like moves even when catalog vectors are empty', () => {
+    const nakuCatalog: AiPieceDefinition = {
+      pieceCode: 'piece_shop_naku',
+      canonicalCode: 'NAKU',
+      sfenCode: '@',
+      char: '鳴',
+      name: '鳴',
+      unlock: 'shop',
+      desc: '',
+      skill: '',
+      move: '',
+      moveVectors: [],
+      isRepeatable: false,
+    };
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: '9/9/9/9/9/9/9/9/4K4 b - 1',
+      stateHash: 'naku-silver',
+      boardState: {
+        pieces: [
+          {
+            side: 'player',
+            row: 6,
+            col: 4,
+            pieceCode: 'piece_shop_naku',
+            char: '鳴',
+            promoted: false,
+          },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+      },
+      hands: { player: {}, enemy: {} },
+    };
+    const legal = generateLegalMoves({ position, pieceCatalog: [...pieceCatalog, nakuCatalog] });
+    const nakuMoves = legal.legalMoves.filter((m) => m.fromRow === 6 && m.fromCol === 4);
+    expect(nakuMoves.some((m) => m.toRow === 5 && m.toCol === 4)).toBe(true);
+    expect(nakuMoves.some((m) => m.toRow === 5 && m.toCol === 3)).toBe(true);
+    expect(nakuMoves.some((m) => m.toRow === 5 && m.toCol === 5)).toBe(true);
+    expect(nakuMoves.some((m) => m.toRow === 7 && m.toCol === 3)).toBe(true);
+    expect(nakuMoves.some((m) => m.toRow === 7 && m.toCol === 5)).toBe(true);
+  });
+
+  it('mai piece generates gold-like moves even when catalog vectors are empty', () => {
+    const maiCatalog: AiPieceDefinition = {
+      pieceCode: 'piece_shop_mai',
+      canonicalCode: 'MAI',
+      sfenCode: '.',
+      char: '舞',
+      name: '舞',
+      unlock: 'shop',
+      desc: '',
+      skill: '',
+      move: '',
+      moveVectors: [],
+      isRepeatable: false,
+    };
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: '9/9/9/9/9/9/9/9/4K4 b - 1',
+      stateHash: 'mai-moves',
+      boardState: {
+        pieces: [
+          {
+            side: 'player',
+            row: 4,
+            col: 4,
+            pieceCode: 'piece_shop_mai',
+            char: '舞',
+            promoted: false,
+          },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+      },
+      hands: { player: {}, enemy: {} },
+    };
+    const legal = generateLegalMoves({ position, pieceCatalog: [...pieceCatalog, maiCatalog] });
+    const maiMoves = legal.legalMoves.filter((m) => m.fromRow === 4 && m.fromCol === 4);
+    expect(maiMoves).toHaveLength(6);
+    expect(maiMoves.some((m) => m.toRow === 3 && m.toCol === 4)).toBe(true);
+    expect(maiMoves.some((m) => m.toRow === 5 && m.toCol === 4)).toBe(true);
+  });
+
+  it('mai without moving does not restrict adjacent enemies', () => {
+    const position: AiBattlePosition = {
+      sideToMove: 'enemy',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: '4k4/9/9/9/4G4/4.4/9/9/4K4 w - 1',
+      stateHash: 'mai-idle',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'enemy', row: 4, col: 4, pieceCode: 'KI', char: '金', promoted: false },
+          {
+            side: 'player',
+            row: 5,
+            col: 4,
+            pieceCode: 'piece_shop_mai',
+            char: '舞',
+            promoted: false,
+          },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+      },
+      hands: { player: {}, enemy: {} },
+    };
+    const legal = generateLegalMoves({ position, pieceCatalog });
+    const goldMoves = legal.legalMoves.filter((m) => m.fromRow === 4 && m.fromCol === 4);
+    expect(goldMoves.some((m) => m.toRow === 5 && m.toCol === 4)).toBe(true);
+    expect(goldMoves.length).toBeGreaterThan(2);
+  });
+
+  it('applies diagonal_forward_step_only movement modifier', () => {
+    const position: AiBattlePosition = {
+      sideToMove: 'enemy',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: '4k4/9/9/9/4G4/9/9/9/4K4 w - 1',
+      stateHash: 'mai-restrict',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'enemy', row: 4, col: 4, pieceCode: 'KI', char: '金', promoted: false },
+          {
+            side: 'player',
+            row: 5,
+            col: 4,
+            pieceCode: 'piece_shop_mai',
+            char: '舞',
+            promoted: false,
+          },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+        skill_state: {
+          movement_modifiers: [
+            {
+              side: 'enemy',
+              row: 4,
+              col: 4,
+              movement_rule: 'diagonal_forward_step_only',
+              remaining_turns: 999,
+            },
+          ],
+        },
+      },
+      hands: { player: {}, enemy: {} },
+    };
+    const legal = generateLegalMoves({ position, pieceCatalog });
+    const goldMoves = legal.legalMoves.filter((m) => m.fromRow === 4 && m.fromCol === 4);
+    expect(goldMoves.some((m) => m.toRow === 5 && m.toCol === 3)).toBe(true);
+    expect(goldMoves.some((m) => m.toRow === 5 && m.toCol === 5)).toBe(true);
+    expect(goldMoves.some((m) => m.toRow === 5 && m.toCol === 4)).toBe(false);
+    expect(goldMoves.some((m) => m.toRow === 3 && m.toCol === 4)).toBe(false);
+    expect(goldMoves).toHaveLength(2);
+  });
+
+  it('diagonal_forward_step_only gives pawn only synthesized diagonal-forward moves', () => {
+    const position: AiBattlePosition = {
+      sideToMove: 'enemy',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: '4k4/9/9/9/4P4/9/9/9/4K4 w - 1',
+      stateHash: 'mai-pawn-restrict',
+      boardState: {
+        pieces: [
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'enemy', row: 4, col: 4, pieceCode: 'FU', char: '歩', promoted: false },
+          {
+            side: 'player',
+            row: 5,
+            col: 4,
+            pieceCode: 'piece_shop_mai',
+            char: '舞',
+            promoted: false,
+          },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+        ],
+        skill_state: {
+          movement_modifiers: [
+            {
+              side: 'enemy',
+              row: 4,
+              col: 4,
+              movement_rule: 'diagonal_forward_step_only',
+              remaining_turns: 999,
+            },
+          ],
+        },
+      },
+      hands: { player: {}, enemy: {} },
+    };
+    const legal = generateLegalMoves({ position, pieceCatalog });
+    const pawnMoves = legal.legalMoves.filter((m) => m.fromRow === 4 && m.fromCol === 4);
+    expect(pawnMoves.some((m) => m.toRow === 5 && m.toCol === 3)).toBe(true);
+    expect(pawnMoves.some((m) => m.toRow === 5 && m.toCol === 5)).toBe(true);
+    expect(pawnMoves.some((m) => m.toRow === 5 && m.toCol === 4)).toBe(false);
+    expect(pawnMoves).toHaveLength(2);
+  });
 });

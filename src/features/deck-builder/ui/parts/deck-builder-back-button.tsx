@@ -4,6 +4,8 @@ import { Pressable } from 'react-native';
 import { deckBuilderAssets } from '@/constants/deck-builder-assets';
 import {
   DECK_BUILDER_BACK_BUTTON_HEIGHT,
+  DECK_BUILDER_BACK_BUTTON_MARGIN_LEFT,
+  DECK_BUILDER_BACK_BUTTON_MARGIN_RIGHT,
   DECK_BUILDER_BACK_BUTTON_WIDTH,
 } from '@/features/deck-builder/ui/deck-builder-layout';
 
@@ -23,6 +25,8 @@ export function DeckBuilderBackButton({ onPress, disabled = false }: DeckBuilder
       style={{
         width: DECK_BUILDER_BACK_BUTTON_WIDTH,
         height: DECK_BUILDER_BACK_BUTTON_HEIGHT,
+        marginRight: DECK_BUILDER_BACK_BUTTON_MARGIN_RIGHT,
+        marginLeft: DECK_BUILDER_BACK_BUTTON_MARGIN_LEFT,
         opacity: disabled ? 0.5 : 1,
       }}
       className="active:scale-95"
