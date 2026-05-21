@@ -22,6 +22,8 @@
     "format:check": "biome format src docs scripts README.md package.json tsconfig.json app.config.js app.json babel.config.js eslint.config.js jest.config.js jest.setup.ts metro.config.js tailwind.config.js",
     "typecheck": "tsc --noEmit",
     "test": "jest",
+    "online:validate-move": "bun ./dist/online-move-validator.js",
+    "build:online-validator": "bun build ./scripts/online-move-validator.ts --outdir=./dist --target=bun",
     "ci": "bun run format:check && bun run lint && bun run typecheck && bun run test",
     "prepare": "lefthook install"
   },

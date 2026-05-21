@@ -1,3 +1,4 @@
+import { toGachaRollCode } from '@/constants/gacha-room-assets';
 import { getJson, postJson } from '@/infra/http/api-client';
 import { supabase } from '@/lib/supabase/supabase-client';
 import { GachaLobbySnapshot } from '@/usecases/gacha-room/load-gacha-lobby-usecase';
@@ -21,6 +22,10 @@ export class GachaApiDataSource {
 
   async roll(gachaId: string): Promise<RollGachaResult> {
     const token = await this.getToken();
-    return postJson<RollGachaResult>('/api/v1/gacha/roll', { gachaId }, { token });
+    return postJson<RollGachaResult>(
+      '/api/v1/gacha/roll',
+      { gachaId: toGachaRollCode(gachaId) },
+      { token },
+    );
   }
 }

@@ -1,88 +1,35 @@
+import {
+  HI_HEN_GACHA_LINEUP,
+  KANKEN1_GACHA_LINEUP,
+  SHINNYO_GACHA_LINEUP,
+  UKANMURI_GACHA_LINEUP,
+} from '@/constants/gacha-lineup-catalog';
+import { isGachaCollectibleChar } from '@/constants/gacha-piece-metadata';
 import { formatPieceRateTextFromLineup } from '@/features/gacha-room/lib/gacha-lineup-rates';
 import {
-  GachaLineupEntry,
-  GachaLobbySnapshot,
-  LoadGachaLobbyUseCase,
-} from '@/usecases/gacha-room/load-gacha-lobby-usecase';
+  addGachaMockCurrency,
+  getGachaMockWallet,
+  grantDuplicateGoldReward,
+  grantGachaCollectible,
+  spendGachaRollCost,
+} from '@/features/gacha-room/lib/gacha-mock-store';
 import {
-  GachaPiece,
-  RollGachaInput,
-  RollGachaResult,
-  RollGachaUseCase,
-} from '@/usecases/gacha-room/roll-gacha-usecase';
+  gachaCurrencyRewardAmount,
+  lineupToGachaRollPieces,
+  type GachaRollPiece,
+} from '@/features/gacha-room/lib/gacha-roll-pieces';
+import { ApiClientError } from '@/infra/http/api-client';
+import { GachaLobbySnapshot, LoadGachaLobbyUseCase } from '@/usecases/gacha-room/load-gacha-lobby-usecase';
+import { RollGachaInput, RollGachaResult, RollGachaUseCase } from '@/usecases/gacha-room/roll-gacha-usecase';
 
-const ukanmuriLineup: GachaLineupEntry[] = [
-  { char: '歩', name: '歩', rarity: 'N', weight: 45, description: '歩通貨が1増える。' },
-  { char: '金', name: '金', rarity: 'N', weight: 25, description: '金通貨が1増える。' },
-  { char: '定', name: '定', rarity: 'R', weight: 10, description: '相手の戦略を固定しろ。' },
-  { char: '安', name: '安', rarity: 'R', weight: 10, description: '敵の駒を安くする。' },
-  {
-    char: '室',
-    name: '室',
-    rarity: 'SR',
-    weight: 7,
-    description: 'セーフルームを用意して「王」を守る。',
-  },
-  { char: '宋', name: '宋', rarity: 'UR', weight: 3, description: '味方に繁栄をもたらす。' },
-];
-
-const hiHenLineup: GachaLineupEntry[] = [
-  { char: '歩', name: '歩', rarity: 'N', weight: 45, description: '歩通貨が1増える。' },
-  { char: '金', name: '金', rarity: 'N', weight: 25, description: '金通貨が1増える。' },
-  {
-    char: '爆',
-    name: '爆',
-    rarity: 'UR',
-    weight: 5,
-    description: '爆発で周囲の敵駒を吹き飛ばす破壊的な駒。',
-  },
-  { char: '煽', name: '煽', rarity: 'SR', weight: 10, description: '相手を煽りたい人の為に。' },
-  { char: '灯', name: '灯', rarity: 'R', weight: 15, description: '闘心に火を付けろ。' },
-];
-
-const shinnyoLineup: GachaLineupEntry[] = [
-  { char: '歩', name: '歩', rarity: 'N', weight: 45, description: '歩通貨が1増える。' },
-  { char: '金', name: '金', rarity: 'N', weight: 25, description: '金通貨が1増える。' },
-  { char: '辺', name: '辺', rarity: 'SR', weight: 7, description: '盤面の辺を利用した戦略。' },
-  { char: '逸', name: '逸', rarity: 'R', weight: 10, description: '敵駒を盤面から逸脱させる。' },
-  { char: '進', name: '進', rarity: 'R', weight: 10, description: '次はどこに進んでいくのか。' },
-  {
-    char: '逃',
-    name: '逃',
-    rarity: 'UR',
-    weight: 3,
-    description: '移動すると味方の王も同じ方向へ逃がす緊急離脱の駒。',
-  },
-];
-
-const kanken1Lineup: GachaLineupEntry[] = [
-  { char: '歩', name: '歩', rarity: 'N', weight: 66, description: '歩通貨が1増える。' },
-  { char: '金', name: '金', rarity: 'N', weight: 25, description: '金通貨が1増える。' },
-  {
-    char: '艸',
-    name: '艸',
-    rarity: 'UR',
-    weight: 3,
-    description: '草の力を操り盤面を支配する自然の駒。',
-  },
-  { char: '閹', name: '閹', rarity: 'UR', weight: 3, description: '敵の動きを封じる封印の駒。' },
-  {
-    char: '膠',
-    name: '膠',
-    rarity: 'SSR',
-    weight: 3,
-    description: '盤面を膠着させ敵の動きを止める粘着の駒。',
-  },
-];
-
-const banners: GachaLobbySnapshot['banners'] = [
+export const banners: GachaLobbySnapshot['banners'] = [
   {
     key: 'ukanmuri',
     name: 'うかんむりガチャ',
-    rareRateText: 'UR 3% / SSR 8%',
-    pieceRateText: formatPieceRateTextFromLineup(ukanmuriLineup),
-    description: '定・室・安・宋・歩・金のいずれかがランダムで排出されます。',
-    lineup: ukanmuriLineup,
+    rareRateText: 'UR 3% / SR 7%',
+    pieceRateText: formatPieceRateTextFromLineup(UKANMURI_GACHA_LINEUP),
+    description: '室・定・安・宋・歩・金のいずれかがランダムで排出されます。',
+    lineup: UKANMURI_GACHA_LINEUP,
     pawnCost: 30,
     goldCost: 0,
   },
@@ -90,9 +37,9 @@ const banners: GachaLobbySnapshot['banners'] = [
     key: 'hiHen',
     name: 'ひへんガチャ',
     rareRateText: 'UR 4% / SSR 10%',
-    pieceRateText: formatPieceRateTextFromLineup(hiHenLineup),
+    pieceRateText: formatPieceRateTextFromLineup(HI_HEN_GACHA_LINEUP),
     description: '歩・金・爆・煽・灯のいずれかがランダムで排出されます。',
-    lineup: hiHenLineup,
+    lineup: HI_HEN_GACHA_LINEUP,
     pawnCost: 30,
     goldCost: 0,
   },
@@ -100,9 +47,9 @@ const banners: GachaLobbySnapshot['banners'] = [
     key: 'shinnyo',
     name: 'しんにょうガチャ',
     rareRateText: 'UR 3% / SSR 9%',
-    pieceRateText: formatPieceRateTextFromLineup(shinnyoLineup),
+    pieceRateText: formatPieceRateTextFromLineup(SHINNYO_GACHA_LINEUP),
     description: '歩・金・辺・逸・進・逃のいずれかがランダムで排出されます。',
-    lineup: shinnyoLineup,
+    lineup: SHINNYO_GACHA_LINEUP,
     pawnCost: 30,
     goldCost: 0,
   },
@@ -110,9 +57,9 @@ const banners: GachaLobbySnapshot['banners'] = [
     key: 'kanken1',
     name: '漢検１級ガチャ',
     rareRateText: 'UR 7% / SSR 15%',
-    pieceRateText: formatPieceRateTextFromLineup(kanken1Lineup),
+    pieceRateText: formatPieceRateTextFromLineup(KANKEN1_GACHA_LINEUP),
     description: '歩・金・艸・閹・膠のいずれかがランダムで排出されます。',
-    lineup: kanken1Lineup,
+    lineup: KANKEN1_GACHA_LINEUP,
     usesGold: true,
     pawnCost: 0,
     goldCost: 1,
@@ -120,183 +67,42 @@ const banners: GachaLobbySnapshot['banners'] = [
 ];
 
 type GachaConfig = {
+  /** HTML 版同様 1 = 毎回排出テーブルから抽選（表示の排出率と一致） */
   hitRate: number;
   goldFailRate: number;
   pawnFailReward: number;
   goldFailReward: number;
-  pieces: (GachaPiece & {
-    weight: number;
-    isCurrency?: boolean;
-    currencyType?: 'pawn' | 'gold';
-  })[];
+  pieces: GachaRollPiece[];
 };
 
 const GACHA_CONFIGS: Record<string, GachaConfig> = {
-  hiHen: {
-    hitRate: 0.3,
-    goldFailRate: 0.25,
-    pawnFailReward: 6,
-    goldFailReward: 1,
-    pieces: [
-      {
-        char: '歩',
-        name: '歩',
-        rarity: 'N',
-        weight: 45,
-        description: '歩通貨が1増える。',
-        isCurrency: true,
-        currencyType: 'pawn',
-      },
-      {
-        char: '金',
-        name: '金',
-        rarity: 'N',
-        weight: 25,
-        description: '金通貨が1増える。',
-        isCurrency: true,
-        currencyType: 'gold',
-      },
-      {
-        char: '爆',
-        name: '爆',
-        rarity: 'UR',
-        weight: 5,
-        description: '爆発で周囲の敵駒を吹き飛ばす破壊的な駒。',
-      },
-      { char: '煽', name: '煽', rarity: 'SR', weight: 10, description: '相手を煽りたい人の為に。' },
-      { char: '灯', name: '灯', rarity: 'R', weight: 15, description: '闘心に火を付けろ。' },
-    ],
-  },
   ukanmuri: {
-    hitRate: 0.3,
+    hitRate: 1,
     goldFailRate: 0.2,
     pawnFailReward: 5,
     goldFailReward: 1,
-    pieces: [
-      {
-        char: '歩',
-        name: '歩',
-        rarity: 'N',
-        weight: 45,
-        description: '歩通貨が1増える。',
-        isCurrency: true,
-        currencyType: 'pawn',
-      },
-      {
-        char: '金',
-        name: '金',
-        rarity: 'N',
-        weight: 25,
-        description: '金通貨が1増える。',
-        isCurrency: true,
-        currencyType: 'gold',
-      },
-      { char: '定', name: '定', rarity: 'R', weight: 10, description: '相手の戦略を固定しろ。' },
-      { char: '安', name: '安', rarity: 'R', weight: 10, description: '敵の駒を安くする。' },
-      {
-        char: '室',
-        name: '室',
-        rarity: 'SR',
-        weight: 7,
-        description: 'セーフルームを用意して「王」を守る。',
-      },
-      { char: '宋', name: '宋', rarity: 'UR', weight: 3, description: '味方に繁栄をもたらす。' },
-    ],
+    pieces: lineupToGachaRollPieces(UKANMURI_GACHA_LINEUP),
+  },
+  hiHen: {
+    hitRate: 1,
+    goldFailRate: 0.25,
+    pawnFailReward: 6,
+    goldFailReward: 1,
+    pieces: lineupToGachaRollPieces(HI_HEN_GACHA_LINEUP),
   },
   shinnyo: {
-    hitRate: 0.3,
+    hitRate: 1,
     goldFailRate: 0.22,
     pawnFailReward: 7,
     goldFailReward: 1,
-    pieces: [
-      {
-        char: '歩',
-        name: '歩',
-        rarity: 'N',
-        weight: 45,
-        description: '歩通貨が1増える。',
-        isCurrency: true,
-        currencyType: 'pawn',
-      },
-      {
-        char: '金',
-        name: '金',
-        rarity: 'N',
-        weight: 25,
-        description: '金通貨が1増える。',
-        isCurrency: true,
-        currencyType: 'gold',
-      },
-      { char: '辺', name: '辺', rarity: 'SR', weight: 7, description: '盤面の辺を利用した戦略。' },
-      {
-        char: '逸',
-        name: '逸',
-        rarity: 'R',
-        weight: 10,
-        description: '敵駒を盤面から逸脱させる。',
-      },
-      {
-        char: '進',
-        name: '進',
-        rarity: 'R',
-        weight: 10,
-        description: '次はどこに進んでいくのか。',
-      },
-      {
-        char: '逃',
-        name: '逃',
-        rarity: 'UR',
-        weight: 3,
-        description: '移動すると味方の王も同じ方向へ逃がす緊急離脱の駒。',
-      },
-    ],
+    pieces: lineupToGachaRollPieces(SHINNYO_GACHA_LINEUP),
   },
   kanken1: {
-    hitRate: 0.3,
+    hitRate: 1,
     goldFailRate: 0.35,
     pawnFailReward: 10,
     goldFailReward: 2,
-    pieces: [
-      {
-        char: '歩',
-        name: '歩',
-        rarity: 'N',
-        weight: 66,
-        description: '歩通貨が1増える。',
-        isCurrency: true,
-        currencyType: 'pawn',
-      },
-      {
-        char: '金',
-        name: '金',
-        rarity: 'N',
-        weight: 25,
-        description: '金通貨が1増える。',
-        isCurrency: true,
-        currencyType: 'gold',
-      },
-      {
-        char: '艸',
-        name: '艸',
-        rarity: 'UR',
-        weight: 3,
-        description: '草の力を操り盤面を支配する自然の駒。',
-      },
-      {
-        char: '閹',
-        name: '閹',
-        rarity: 'UR',
-        weight: 3,
-        description: '敵の動きを封じる封印の駒。',
-      },
-      {
-        char: '膠',
-        name: '膠',
-        rarity: 'SSR',
-        weight: 3,
-        description: '盤面を膠着させ敵の動きを止める粘着の駒。',
-      },
-    ],
+    pieces: lineupToGachaRollPieces(KANKEN1_GACHA_LINEUP),
   },
 };
 
@@ -312,10 +118,11 @@ function pickWeightedRandom<T extends { weight: number }>(items: T[]): T {
 
 export class MockLoadGachaLobbyUseCase implements LoadGachaLobbyUseCase {
   async execute(): Promise<GachaLobbySnapshot> {
+    const { pawnCurrency, goldCurrency } = getGachaMockWallet();
     return {
       banners,
-      pawnCurrency: 3000,
-      goldCurrency: 20,
+      pawnCurrency,
+      goldCurrency,
       history: [],
     };
   }
@@ -324,41 +131,81 @@ export class MockLoadGachaLobbyUseCase implements LoadGachaLobbyUseCase {
 export class MockRollGachaUseCase implements RollGachaUseCase {
   async execute(input: RollGachaInput): Promise<RollGachaResult> {
     const config = GACHA_CONFIGS[input.gachaId];
-    if (!config)
-      return { type: 'miss', currency: 'pawn', amount: 5, pawnCurrency: 3005, goldCurrency: 20 };
+    if (!config) {
+      const wallet = addGachaMockCurrency({ pawn: 5 });
+      return {
+        type: 'miss',
+        currency: 'pawn',
+        amount: 5,
+        pawnCurrency: wallet.pawnCurrency,
+        goldCurrency: wallet.goldCurrency,
+      };
+    }
+
+    const spent = spendGachaRollCost(input.gachaId);
+    if (!spent.ok) {
+      throw new ApiClientError({
+        code: 'INSUFFICIENT_CURRENCY',
+        message: '効果が足りません',
+      });
+    }
 
     if (Math.random() < config.hitRate) {
       const picked = pickWeightedRandom(config.pieces);
       if (picked.isCurrency && picked.currencyType) {
+        const amount = gachaCurrencyRewardAmount(input.gachaId, picked.currencyType);
+        const wallet = addGachaMockCurrency(
+          picked.currencyType === 'pawn' ? { pawn: amount } : { gold: amount },
+        );
         return {
           type: 'miss',
           currency: picked.currencyType,
-          amount: 1,
-          pawnCurrency: picked.currencyType === 'pawn' ? 3001 : 3000,
-          goldCurrency: picked.currencyType === 'gold' ? 21 : 20,
+          amount,
+          pawnCurrency: wallet.pawnCurrency,
+          goldCurrency: wallet.goldCurrency,
         };
       }
-      return {
-        type: 'hit',
-        piece: {
-          char: picked.char,
-          name: picked.name,
-          rarity: picked.rarity,
-          description: picked.description,
-        },
-        alreadyOwned: false,
-        pawnCurrency: 3000,
-        goldCurrency: 20,
+
+      const piece = {
+        char: picked.char,
+        name: picked.name,
+        rarity: picked.rarity,
+        description: picked.description,
       };
+
+      if (isGachaCollectibleChar(picked.char)) {
+        const isNew = grantGachaCollectible(picked.char);
+        if (!isNew) {
+          const wallet = grantDuplicateGoldReward();
+          return {
+            type: 'hit',
+            piece,
+            alreadyOwned: true,
+            duplicateGoldGranted: 1,
+            pawnCurrency: wallet.pawnCurrency,
+            goldCurrency: wallet.goldCurrency,
+          };
+        }
+        const wallet = getGachaMockWallet();
+        return {
+          type: 'hit',
+          piece,
+          alreadyOwned: false,
+          pawnCurrency: wallet.pawnCurrency,
+          goldCurrency: wallet.goldCurrency,
+        };
+      }
     }
 
     const isGold = Math.random() < config.goldFailRate;
+    const amount = isGold ? config.goldFailReward : config.pawnFailReward;
+    const wallet = addGachaMockCurrency(isGold ? { gold: amount } : { pawn: amount });
     return {
       type: 'miss',
       currency: isGold ? 'gold' : 'pawn',
-      amount: isGold ? config.goldFailReward : config.pawnFailReward,
-      pawnCurrency: isGold ? 3000 : 3000 + config.pawnFailReward,
-      goldCurrency: isGold ? 20 + config.goldFailReward : 20,
+      amount,
+      pawnCurrency: wallet.pawnCurrency,
+      goldCurrency: wallet.goldCurrency,
     };
   }
 }

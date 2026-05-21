@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { enrichGachaBanner } from '@/constants/gacha-lineup-catalog';
+import { resolveGachaRollCode } from '@/constants/gacha-room-assets';
 import { ApiClientError } from '@/infra/http/api-client';
 import { GachaBanner } from '@/usecases/gacha-room/load-gacha-lobby-usecase';
 import {
@@ -49,7 +51,7 @@ export function useGachaRoomScreen(): GachaRoomVM {
     loadUseCase
       .execute()
       .then((snapshot) => {
-        setBanners(snapshot.banners);
+        setBanners(snapshot.banners.map(enrichGachaBanner));
         if (snapshot.banners.length > 0) {
           setSelectedKey(snapshot.banners[0].key);
         }
@@ -80,7 +82,13 @@ export function useGachaRoomScreen(): GachaRoomVM {
     setPhase('rolling');
     setLastResult(null);
     try {
-      const result = await rollUseCase.execute({ gachaId: targetKey });
+      const rollCode = resolveGachaRollCode(targetKey, banners);
+      if (rollCode == null) {
+        setNoticeMessage('このガチャは現在利用できません（サーバーに未登録の可能性があります）');
+        setPhase('idle');
+        return;
+      }
+      const result = await rollUseCase.execute({ gachaId: rollCode });
       setLastResult(result);
       setPawnCurrency(result.pawnCurrency);
       setGoldCurrency(result.goldCurrency);
@@ -91,7 +99,13 @@ export function useGachaRoomScreen(): GachaRoomVM {
         setPhase('idle');
         return;
       }
+      if (error instanceof ApiClientError && error.code === 'NOT_FOUND') {
+        setNoticeMessage('このガチャは現在利用できません');
+        setPhase('idle');
+        return;
+      }
       console.error('[gacha-room] failed to roll gacha', error);
+      setNoticeMessage('ガチャの実行に失敗しました。しばらくしてからお試しください');
       setPhase('idle');
     } finally {
       isRollingRef.current = false;

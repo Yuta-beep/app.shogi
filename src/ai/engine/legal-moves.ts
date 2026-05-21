@@ -34,9 +34,31 @@ import {
   MAI_MOVE_VECTORS,
   NAKU_MOVE_VECTORS,
   P_MOVE_VECTORS,
+  AN_MOVE_VECTORS,
+  AORI_MOVE_VECTORS,
+  HEN_MOVE_VECTORS,
+  ITSU_MOVE_VECTORS,
+  TOU_MOVE_VECTORS,
+  NIGE_MOVE_VECTORS,
+  BAKU_MOVE_VECTORS,
+  SO_MOVE_VECTORS,
+  SOU_MOVE_VECTORS,
+  SADAME_MOVE_VECTORS,
+  EN_MOVE_VECTORS,
+  KOU_MOVE_VECTORS,
+  SHITSU_MOVE_VECTORS,
   TANE_SILVER_MOVE_VECTORS,
 } from '@/ai/engine/shop-piece-moves';
-import { createSkillRuntimeView, type SkillRuntimeView } from '@/ai/engine/skill-runtime';
+import {
+  deckBuilderCostForBoardPiece,
+  deckBuilderCostForHandPieceCode,
+} from '@/ai/engine/piece-deck-cost';
+import { arrowSlideDestination } from '@/ai/engine/arrow-tile';
+import {
+  activeOpponentTurnMaxPieceCostCap,
+  createSkillRuntimeView,
+  type SkillRuntimeView,
+} from '@/ai/engine/skill-runtime';
 import {
   isAnyOniVariantPiece,
   isBeastPiece as isBeastPieceForLegal,
@@ -60,6 +82,20 @@ import {
   isMaiPiece,
   isNakuPiece,
   isRunPiece,
+  isAnPiece,
+  isAoriPiece,
+  isBakuPiece,
+  isHenPiece,
+  isItsuPiece,
+  isShinPiece,
+  isTouPiece,
+  isNigePiece,
+  isSoPiece,
+  isSouPiece,
+  isSadamePiece,
+  isEnPiece,
+  isKoPiece,
+  isShitsuPiece,
   isShopPPiece,
   isTanePiece,
   isSenPiece,
@@ -68,6 +104,11 @@ import {
   normKanjiForEngineRules,
 } from '@/ai/engine/piece-identifiers';
 import { readFollowupCellForSide } from '@/ai/engine/skill-state-selectors';
+import {
+  ensureShinTurnMimic,
+  readShinTurnMimic,
+  type ShinTurnMimicEntry,
+} from '@/ai/engine/shin-turn-mimic';
 
 /** カタログ欠損時でも銃・刀の合法手を生成するためのプレースホルダー */
 const MINIMAL_SPECIAL_PIECE_DEF: AiPieceDefinition = {
@@ -405,6 +446,20 @@ function isPigPiece(piece: AiBoardPiece): boolean {
 }
 
 /** 豚: 直近捕獲の敵駒の code/見た目で移動定義を解決（盤上の座標・先後は豚のまま）。「書」は特殊ループのため除外。 */
+function shinMimicMoveOverlay(
+  piece: AiBoardPiece,
+  position: AiBattlePosition,
+): AiBoardPiece | null {
+  if (!isShinPiece(piece)) return null;
+  const mimic = readShinTurnMimic(position, piece.side);
+  if (!mimic) return null;
+  return {
+    ...piece,
+    char: mimic.mimic_char,
+    pieceCode: mimic.mimic_piece_code,
+  };
+}
+
 function pigInheritedMoveOverlay(piece: AiBoardPiece): AiBoardPiece | null {
   if (!isPigPiece(piece)) return null;
   const raw = piece.pigInheritedPieceCode;
@@ -718,6 +773,31 @@ function gunForwardRowDelta(side: 'player' | 'enemy'): number {
   return side === 'player' ? -1 : 1;
 }
 
+/** 味方王の「前」1マス（先手は row-1、後手は row+1）。 */
+function allyKingForwardCell(
+  pieces: AiBoardPiece[],
+  side: 'player' | 'enemy',
+): { row: number; col: number } | null {
+  const king = pieces.find((p) => p.side === side && isKingPiece(p));
+  if (!king) return null;
+  const row = king.row + gunForwardRowDelta(side);
+  const col = king.col;
+  if (row < 0 || row > 8 || col < 0 || col > 8) return null;
+  return { row, col };
+}
+
+/** 閹: 味方王の前1マス（通常の縦横1マスに加えて合法手に含める）。 */
+function enAllyKingFrontTarget(
+  piece: AiBoardPiece,
+  pieces: AiBoardPiece[],
+): { row: number; col: number } | null {
+  if (!isEnPiece(piece)) return null;
+  const cell = allyKingForwardCell(pieces, piece.side);
+  if (!cell) return null;
+  if (cell.row === piece.row && cell.col === piece.col) return null;
+  return cell;
+}
+
 function kbossEffectiveLivesForGunFilter(piece: AiBoardPiece): number {
   const v = piece.kbossLivesRemaining;
   if (v === 1 || v === 2) return v;
@@ -1017,6 +1097,48 @@ function isKingBlockedByPoisonCell(
 
 function isBlockedByRockObstacle(skillView: SkillRuntimeView, row: number, col: number): boolean {
   return skillView.rockObstacleCells.has(`${row}:${col}`);
+}
+
+function arrowSlideTargetForCell(
+  skillView: SkillRuntimeView,
+  row: number,
+  col: number,
+): { row: number; col: number } | null {
+  const direction = skillView.arrowTileByCell.get(`${row}:${col}`);
+  if (!direction) return null;
+  return arrowSlideDestination(row, col, direction);
+}
+
+function occupantForArrowAwareTarget(
+  skillView: SkillRuntimeView,
+  occupancy: OccupancyMap,
+  target: { row: number; col: number },
+  mover: AiBoardPiece,
+): AiBoardPiece | null {
+  const slide = arrowSlideTargetForCell(skillView, target.row, target.col);
+  if (slide) {
+    const slideOcc = findPieceAtFast(occupancy, slide.row, slide.col);
+    if (!slideOcc) return null;
+    if (slideOcc.side !== mover.side) return slideOcc;
+    return null;
+  }
+  return findPieceAtFast(occupancy, target.row, target.col);
+}
+
+function isArrowTileTargetAllowed(
+  skillView: SkillRuntimeView,
+  mover: AiBoardPiece,
+  target: { row: number; col: number },
+  occupancy: OccupancyMap,
+): boolean {
+  const slide = arrowSlideTargetForCell(skillView, target.row, target.col);
+  if (!slide) return true;
+  if (findPieceAtFast(occupancy, target.row, target.col)) return false;
+  const slideOcc = findPieceAtFast(occupancy, slide.row, slide.col);
+  if (!slideOcc) return true;
+  if (slideOcc.side !== mover.side) return true;
+  // スライド先が着手駒の現在位置（例: 左隣→矢印→左隣へ戻る）のときは通過として許可
+  return slideOcc.row === mover.row && slideOcc.col === mover.col;
 }
 
 function isATransformedPawn(skillView: SkillRuntimeView, piece: AiBoardPiece): boolean {
@@ -1578,6 +1700,26 @@ function resolveEffectiveVectorsForPiece(
       return [];
     }
   }
+  if (depth <= 0 && isShinPiece(piece)) {
+    const mimic = readShinTurnMimic(position, piece.side);
+    if (!mimic) return [];
+    const synthetic: AiBoardPiece = {
+      ...piece,
+      char: mimic.mimic_char,
+      pieceCode: mimic.mimic_piece_code,
+    };
+    if (isShinPiece(synthetic)) return [];
+    const mimicDef = resolvePieceDefForBookCopy(synthetic, lookups);
+    if (!mimicDef) return [];
+    return resolveEffectiveVectorsForPiece(
+      synthetic,
+      mimicDef,
+      position,
+      allPieces,
+      lookups,
+      isShinPiece(synthetic) ? 2 : 0,
+    );
+  }
   // 名刀「刀」: 前方ちょうど1マスのみ（テンプレは「上」基準、先手後手は getLegalTargetsFromVectors の orient で反映）
   if (isKatanaPiece(piece)) {
     return [{ dx: 0, dy: -1, maxStep: 1 }];
@@ -1593,6 +1735,45 @@ function resolveEffectiveVectorsForPiece(
   }
   if (isMaiPiece(piece)) {
     return MAI_MOVE_VECTORS;
+  }
+  if (isShitsuPiece(piece)) {
+    return SHITSU_MOVE_VECTORS;
+  }
+  if (isBakuPiece(piece)) {
+    return BAKU_MOVE_VECTORS;
+  }
+  if (isAoriPiece(piece)) {
+    return AORI_MOVE_VECTORS;
+  }
+  if (isTouPiece(piece)) {
+    return TOU_MOVE_VECTORS;
+  }
+  if (isNigePiece(piece)) {
+    return NIGE_MOVE_VECTORS;
+  }
+  if (isHenPiece(piece)) {
+    return HEN_MOVE_VECTORS;
+  }
+  if (isItsuPiece(piece)) {
+    return ITSU_MOVE_VECTORS;
+  }
+  if (isSadamePiece(piece)) {
+    return SADAME_MOVE_VECTORS;
+  }
+  if (isEnPiece(piece)) {
+    return EN_MOVE_VECTORS;
+  }
+  if (isKoPiece(piece)) {
+    return KOU_MOVE_VECTORS;
+  }
+  if (isAnPiece(piece)) {
+    return AN_MOVE_VECTORS;
+  }
+  if (isSoPiece(piece)) {
+    return SO_MOVE_VECTORS;
+  }
+  if (isSouPiece(piece)) {
+    return SOU_MOVE_VECTORS;
   }
   if (isShopPPiece(piece)) {
     return P_MOVE_VECTORS;
@@ -1620,6 +1801,118 @@ function resolveEffectiveVectorsForPiece(
     normalizeVectorsForBeast(piece, deathNormalized),
   );
   return normalizeVectorsForSoul(piece, beastBird);
+}
+
+type ShinMimicPoolEntry = {
+  char: string;
+  pieceCode: string;
+  name: string;
+};
+
+function boardPieceNeedsMinimalCatalogDef(piece: AiBoardPiece): boolean {
+  return (
+    isGunPiece(piece) ||
+    isKatanaPiece(piece) ||
+    isRunPiece(piece) ||
+    isTanePiece(piece) ||
+    isKirinPiece(piece) ||
+    isMaiPiece(piece) ||
+    isShitsuPiece(piece) ||
+    isBakuPiece(piece) ||
+    isAoriPiece(piece) ||
+    isTouPiece(piece) ||
+    isNigePiece(piece) ||
+    isHenPiece(piece) ||
+    isItsuPiece(piece) ||
+    isSadamePiece(piece) ||
+    isEnPiece(piece) ||
+    isKoPiece(piece) ||
+    isAnPiece(piece) ||
+    isSoPiece(piece) ||
+    isSouPiece(piece) ||
+    isShopPPiece(piece) ||
+    isNakuPiece(piece) ||
+    isBookPiece(piece) ||
+    isAnyOniVariantPiece(piece) ||
+    isBeastPieceForLegal(piece) ||
+    isBirdPieceForLegal(piece) ||
+    isConcavePieceForLegal(piece) ||
+    isCowPiece(piece) ||
+    isSenPiece(piece) ||
+    isZaiPiece(piece)
+  );
+}
+
+function buildShinMimicPool(
+  pieceCatalog: AiPieceDefinition[],
+  lookups: AiPieceLookups,
+  position: AiBattlePosition,
+  allPieces: AiBoardPiece[],
+): ShinMimicPoolEntry[] {
+  const seen = new Set<string>();
+  const pool: ShinMimicPoolEntry[] = [];
+  const probeRow = 4;
+  const probeCol = 4;
+  for (const def of pieceCatalog) {
+    const ch = normKanjiForEngineRules(def.char);
+    if (!ch || ch === '進' || seen.has(ch)) continue;
+    seen.add(ch);
+    const synthetic: AiBoardPiece = {
+      side: 'player',
+      row: probeRow,
+      col: probeCol,
+      char: def.char,
+      pieceCode:
+        def.pieceCode ??
+        CHAR_TO_CODE[ch as keyof typeof CHAR_TO_CODE] ??
+        def.char,
+      promoted: false,
+    };
+    let pieceDef = resolvePieceDef(synthetic, lookups);
+    if (!pieceDef && boardPieceNeedsMinimalCatalogDef(synthetic)) {
+      pieceDef = { ...MINIMAL_SPECIAL_PIECE_DEF, char: def.char, name: def.name };
+    }
+    if (!pieceDef) continue;
+    const vectors = resolveEffectiveVectorsForPiece(
+      synthetic,
+      pieceDef,
+      position,
+      allPieces,
+      lookups,
+      0,
+    );
+    if (vectors.length === 0) continue;
+    pool.push({
+      char: def.char,
+      pieceCode: synthetic.pieceCode ?? def.pieceCode ?? '',
+      name: def.name,
+    });
+  }
+  return pool;
+}
+
+/** 手番開始時に「進」の模倣先を1種だけ確定し skill_state に保存する。 */
+export function ensureShinTurnMimicForBattle(
+  position: AiBattlePosition,
+  pieceCatalog: AiPieceDefinition[],
+): ShinTurnMimicEntry | null {
+  const pieces = piecesFromBoardState(position);
+  const side = position.sideToMove;
+  if (!pieces.some((p) => p.side === side && isShinPiece(p))) {
+    return readShinTurnMimic(position, side);
+  }
+  const lookups = buildPieceLookups(pieceCatalog);
+  return ensureShinTurnMimic(position, side, () => {
+    const pool = buildShinMimicPool(pieceCatalog, lookups, position, pieces);
+    if (pool.length === 0) return null;
+    const idx = Math.floor(Math.random() * pool.length);
+    const pick = pool[idx]!;
+    return {
+      mimic_char: pick.char,
+      mimic_piece_code: pick.pieceCode,
+      mimic_name: pick.name,
+    };
+  });
 }
 
 function stableHash(value: string): number {
@@ -1931,7 +2224,10 @@ function generateBoardPieceMoves(input: {
     input.pieces,
     input.lookups,
   );
-  const mover = pigInheritedMoveOverlay(pieceAfterSpring) ?? pieceAfterSpring;
+  const mover =
+    shinMimicMoveOverlay(pieceAfterSpring, input.position) ??
+    pigInheritedMoveOverlay(pieceAfterSpring) ??
+    pieceAfterSpring;
   if (isGiantPieceForEngine(mover)) {
     return generateGiantOrthogonalBoardMoves({
       ...input,
@@ -1956,6 +2252,20 @@ function generateBoardPieceMoves(input: {
       isTanePiece(mover) ||
       isKirinPiece(mover) ||
       isMaiPiece(mover) ||
+      isShitsuPiece(mover) ||
+      isBakuPiece(mover) ||
+      isAoriPiece(mover) ||
+      isTouPiece(mover) ||
+      isNigePiece(mover) ||
+      isHenPiece(mover) ||
+      isItsuPiece(mover) ||
+      isShinPiece(mover) ||
+      isSadamePiece(mover) ||
+      isEnPiece(mover) ||
+      isKoPiece(mover) ||
+      isAnPiece(mover) ||
+      isSoPiece(mover) ||
+      isSouPiece(mover) ||
       isShopPPiece(mover) ||
       isNakuPiece(mover) ||
       isBookPiece(mover) ||
@@ -1989,6 +2299,20 @@ function generateBoardPieceMoves(input: {
     !isTanePiece(mover) &&
     !isKirinPiece(mover) &&
     !isMaiPiece(mover) &&
+    !isShitsuPiece(mover) &&
+    !isBakuPiece(mover) &&
+    !isAoriPiece(mover) &&
+    !isTouPiece(mover) &&
+    !isNigePiece(mover) &&
+    !isHenPiece(mover) &&
+    !isItsuPiece(mover) &&
+    !isShinPiece(mover) &&
+    !isSadamePiece(mover) &&
+    !isEnPiece(mover) &&
+    !isKoPiece(mover) &&
+    !isAnPiece(mover) &&
+    !isSoPiece(mover) &&
+    !isSouPiece(mover) &&
     !isShopPPiece(mover) &&
     !isNakuPiece(mover) &&
     !isAnyOniVariantPiece(mover) &&
@@ -2128,6 +2452,7 @@ function generateBoardPieceMoves(input: {
   const reflectiveTargets = isReflectivePiece(mover)
     ? generateReflectiveTargets(pathOccupancy, input.piece)
     : [];
+  const enKingFrontTarget = enAllyKingFrontTarget(input.piece, input.pieces);
   const targetsRaw = [
     ...normalTargets,
     ...gunLineTargets,
@@ -2135,6 +2460,7 @@ function generateBoardPieceMoves(input: {
     ...runForwardTargets,
     ...leapTargets,
     ...reflectiveTargets,
+    ...(enKingFrontTarget ? [enKingFrontTarget] : []),
   ];
   const seenTargetKeys = new Set<string>();
   const targets = targetsRaw.filter((t) => {
@@ -2205,8 +2531,17 @@ function generateBoardPieceMoves(input: {
     }
   }
 
-  const captureFilteredTargets = filteredTargets.filter((target) => {
-    const captured = findPieceAtFast(input.occupancy, target.row, target.col);
+  const arrowFilteredTargets = filteredTargets.filter((target) =>
+    isArrowTileTargetAllowed(input.skillView, input.piece, target, input.occupancy),
+  );
+
+  const captureFilteredTargets = arrowFilteredTargets.filter((target) => {
+    const captured = occupantForArrowAwareTarget(
+      input.skillView,
+      input.occupancy,
+      target,
+      input.piece,
+    );
     if (!captured) return true;
     if (input.noCaptureOnly === true) return false;
     if (isCloudPiece(mover)) {
@@ -2258,7 +2593,12 @@ function generateBoardPieceMoves(input: {
   }
 
   const moves = boatFilteredTargets.flatMap((target) => {
-    const captured = findPieceAtFast(input.occupancy, target.row, target.col);
+    const captured = occupantForArrowAwareTarget(
+      input.skillView,
+      input.occupancy,
+      target,
+      input.piece,
+    );
     const capturedPieceCode =
       input.noCaptureOnly === true ? null : resolveCapturedPieceCodeForLegalMove(captured);
     const transformedByA = isATransformedPawn(input.skillView, input.piece);
@@ -2282,6 +2622,7 @@ function generateDropMoves(input: {
   pieces: AiBoardPiece[];
   position: AiBattlePosition;
   skillView: SkillRuntimeView;
+  maxPieceCostCap?: number | null;
 }): AiBattleMove[] {
   const bag = input.position.hands[input.position.sideToMove] ?? {};
   const moves: AiBattleMove[] = [];
@@ -2289,6 +2630,12 @@ function generateDropMoves(input: {
   for (const [pieceCodeRaw, count] of Object.entries(bag)) {
     const pieceCode = toBasePieceCode(pieceCodeRaw);
     if (!pieceCode || typeof count !== 'number' || count <= 0) continue;
+    if (
+      input.maxPieceCostCap != null &&
+      deckBuilderCostForHandPieceCode(pieceCode) > input.maxPieceCostCap
+    ) {
+      continue;
+    }
 
     for (let row = 0; row < 9; row += 1) {
       for (let col = 0; col < 9; col += 1) {
@@ -2338,10 +2685,12 @@ export function generateLegalMoves(input: {
     player: sanitizeHandsBag(position.hands.player),
     enemy: sanitizeHandsBag(position.hands.enemy),
   } satisfies AiHandsState;
+  ensureShinTurnMimicForBattle(position, input.pieceCatalog);
   const pieces = piecesFromBoardState(position);
   const occupancy = buildOccupancyMap(pieces);
   const lookups = buildPieceLookups(input.pieceCatalog);
   const skillView = createSkillRuntimeView(position);
+  const sadameCostCap = activeOpponentTurnMaxPieceCostCap(position, position.sideToMove);
   const activePiecesRaw = pieces.filter((piece) => piece.side === position.sideToMove);
   const convexFollowup = activeConvexFollowupForSide(position);
   const otsuFollowup = activeOtsuFollowupForSide(position);
@@ -2353,7 +2702,18 @@ export function generateLegalMoves(input: {
           (piece) => piece.row === lockedFollowup.row && piece.col === lockedFollowup.col,
         );
 
-  const boardMoves = activePieces
+  const sadameEligiblePieces =
+    sadameCostCap == null
+      ? activePieces
+      : activePieces.filter((piece) => {
+          if (isKingPiece(piece)) return true;
+          if (isGiantPieceForEngine(piece)) {
+            return deckBuilderCostForBoardPiece(piece) <= sadameCostCap;
+          }
+          return deckBuilderCostForBoardPiece(piece) <= sadameCostCap;
+        });
+
+  const boardMoves = sadameEligiblePieces
     .filter(
       (piece) =>
         isKingPiece(piece) ||
@@ -2371,7 +2731,7 @@ export function generateLegalMoves(input: {
         noCaptureOnly: otsuFollowup != null,
       }),
     );
-  const timeSkillOnlyMoves = (lockedFollowup == null ? activePieces : [])
+  const timeSkillOnlyMoves = (lockedFollowup == null ? sadameEligiblePieces : [])
     .filter((piece) => {
       const code = toBasePieceCode(piece.pieceCode);
       return code === 'TIME' || piece.char === '時';
@@ -2391,7 +2751,7 @@ export function generateLegalMoves(input: {
     lockedFollowup != null
       ? []
       : peopleCount < 5
-        ? activePieces
+        ? sadameEligiblePieces
             .filter((piece) => isHousePieceForSkill(piece))
             .map((piece) =>
               createMove({
@@ -2404,7 +2764,9 @@ export function generateLegalMoves(input: {
             )
         : [];
   const dropMoves =
-    lockedFollowup != null ? [] : generateDropMoves({ pieces, position, skillView });
+    lockedFollowup != null
+      ? []
+      : generateDropMoves({ pieces, position, skillView, maxPieceCostCap: sadameCostCap });
 
   const combined = [...boardMoves, ...timeSkillOnlyMoves, ...houseSkillOnlyMoves, ...dropMoves];
   const legalMoves = expandHeartProtectSkillMovesForLegalListing(

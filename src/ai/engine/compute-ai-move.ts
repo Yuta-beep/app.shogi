@@ -1,10 +1,10 @@
 import type { AiBattleMove, AiBattlePosition, AiPieceDefinition, Side } from '@/ai/model';
 import type { BattleAiTurn } from '@/usecases/stage-battle/game-move-contract';
-import { toBasePieceCode } from '@/ai/model';
+import { normalizeBattlePosition, toBasePieceCode } from '@/ai/model';
 import { assertMoveAllowedBySessionCatalog } from '@/ai/engine/guardrails';
 import { PIECE_VALUES } from '@/ai/engine/shared';
 import { applyMove } from '@/ai/engine/apply-move';
-import { generateLegalMoves } from '@/ai/engine/legal-moves';
+import { ensureShinTurnMimicForBattle, generateLegalMoves } from '@/ai/engine/legal-moves';
 
 function moveScore(move: AiBattleMove, side: Side): number {
   const captured = toBasePieceCode(move.capturedPieceCode);
@@ -21,6 +21,9 @@ export function computeAiMove(input: {
   pieceCatalog: AiPieceDefinition[];
 }): BattleAiTurn {
   const startedAt = Date.now();
+  const position = normalizeBattlePosition(input.position);
+  ensureShinTurnMimicForBattle(position, input.pieceCatalog);
+  input.position.boardState = position.boardState;
   const legal = generateLegalMoves({
     position: input.position,
     pieceCatalog: input.pieceCatalog,

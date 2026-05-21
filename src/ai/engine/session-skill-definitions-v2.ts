@@ -1,3 +1,4 @@
+import { GACHA_PIECE_SKILL_BINDINGS } from '@/ai/engine/gacha-piece-skill-definitions';
 import type { PieceCatalogItem } from '@/domain/models/piece';
 
 /**
@@ -205,6 +206,12 @@ export function assembleSkillDefinitionsV2ForSession(
         bySkillId.set(id, { ...def });
       }
     }
+  }
+
+  // ガチャ駒: 盤上にいるときはクライアント正典を優先（Supabase 駒マスタ未整備でも動作確認可）
+  for (const binding of GACHA_PIECE_SKILL_BINDINGS) {
+    const id = binding.skillId;
+    bySkillId.set(id, { ...binding.definition });
   }
 
   return { definitions: [...bySkillId.values(), ...extras] };

@@ -1,3 +1,4 @@
+import type { ArrowDirection } from '@/constants/stage-fixed-arrow-cells';
 import type { Side } from '@/features/stage-shogi/domain/game-rules';
 import { capturedToHandPieceCode } from '@/features/stage-shogi/domain/game-rules';
 import { CHAR_TO_CODE } from '@/features/stage-shogi/domain/piece-conversion';
@@ -6,7 +7,9 @@ import { piecesFromBoardState, toBasePieceCode } from '@/ai/model';
 import {
   buildSkillMoverFlags,
   isAPieceInstance,
+  isDeckBuilderStyleSpecialBoardPiece,
   isKingPiece,
+  isKoPiece,
   isMaiPiece,
   isShopPPiece,
   isSpecialTenPlusPiece,
@@ -18,9 +21,17 @@ import {
   giantAnchorFootprint,
   isGiantPieceForEngine,
 } from '@/ai/engine/giant-piece';
+import {
+  HEN_BOARD_EDGES,
+  pieceOnHenBoardEdge,
+  type HenBoardEdge,
+} from '@/ai/engine/hen-board-edge';
+
+import { buildArrowTileByCellMap } from '@/ai/engine/arrow-tile';
 
 type SkillStateRecord = {
   board_hazards: Record<string, unknown>[];
+  board_arrow_tiles: Record<string, unknown>[];
   movement_modifiers: Record<string, unknown>[];
   piece_statuses: Record<string, unknown>[];
   piece_defenses: Record<string, unknown>[];
@@ -38,6 +49,8 @@ export type SkillRuntimeView = {
   captureImmunityCells: Set<string>;
   /** 茨化マス: 指定 side はそのセルに持ち駒を打てない */
   thornDropBlockedCells: Set<string>;
+  /** 矢印マス: `${row}:${col}` → スライド方向 */
+  arrowTileByCell: Map<string, ArrowDirection>;
 };
 
 const TIME_PIECE_CODES = new Set(['TIME', '時']);
@@ -193,6 +206,24 @@ function removeUpToRandomAdjacentEnemyPieces(input: {
 function waterfallSkillDebugLog(payload: Record<string, unknown>): void {
   if (typeof __DEV__ !== 'undefined' && __DEV__) {
     console.info('[waterfall-skill-debug]', payload);
+  }
+}
+
+function anSkillDebugLog(payload: Record<string, unknown>): void {
+  if (typeof __DEV__ !== 'undefined' && __DEV__) {
+    console.info('[an-skill-debug]', payload);
+  }
+}
+
+function touSkillDebugLog(payload: Record<string, unknown>): void {
+  if (typeof __DEV__ !== 'undefined' && __DEV__) {
+    console.info('[tou-skill-debug]', payload);
+  }
+}
+
+function itsuSkillDebugLog(payload: Record<string, unknown>): void {
+  if (typeof __DEV__ !== 'undefined' && __DEV__) {
+    console.info('[itsu-skill-debug]', payload);
   }
 }
 
@@ -480,6 +511,46 @@ function moveAdjacentAllySandWithLeader(input: {
 function isGearPieceForFollow(piece: AiBoardPiece): boolean {
   const code = normalizeSkillPieceCode(toBasePieceCode(piece.pieceCode) ?? piece.char);
   return code === 'GEAR' || piece.char === '歯';
+}
+
+/** 膠: 着手味方の出発マス8近傍にいる膠を、横移動（Δrow=0）と同じベクトルで空きマスへ追従。 */
+function moveAdjacentAllyKoGlueFollowLeader(input: {
+  pieces: AiBoardPiece[];
+  actorSide: Side;
+  fromRow: number;
+  fromCol: number;
+  toRow: number;
+  toCol: number;
+}): number {
+  const deltaRow = input.toRow - input.fromRow;
+  const deltaCol = input.toCol - input.fromCol;
+  if (deltaRow !== 0 || deltaCol === 0) return 0;
+  const candidates = input.pieces
+    .map((piece, idx) => ({ piece, idx }))
+    .filter(({ piece }) => {
+      if (piece.side !== input.actorSide) return false;
+      if (!isKoPiece(piece)) return false;
+      if (piece.row === input.fromRow && piece.col === input.fromCol) return false;
+      return (
+        Math.abs(piece.row - input.fromRow) <= 1 &&
+        Math.abs(piece.col - input.fromCol) <= 1
+      );
+    });
+  let moved = 0;
+  for (const { piece, idx } of candidates) {
+    const destRow = piece.row + deltaRow;
+    const destCol = piece.col + deltaCol;
+    if (destRow < 0 || destRow > 8 || destCol < 0 || destCol > 8) continue;
+    if (destRow === input.toRow && destCol === input.toCol) continue;
+    if (!isCellEmpty(input.pieces, destRow, destCol)) continue;
+    input.pieces[idx] = {
+      ...piece,
+      row: destRow,
+      col: destCol,
+    };
+    moved += 1;
+  }
+  return moved;
 }
 
 /** 歯: 着手した味方駒の出発マスに8近傍していた歯を、同じ移動ベクトルで空きマスへ連動（砂と同様・先頭マスのみ） */
@@ -1162,6 +1233,9 @@ function readSkillState(position: AiBattlePosition): SkillStateRecord {
     board_hazards: asArray(skillState.board_hazards ?? skillState.boardHazards).filter(
       (v): v is Record<string, unknown> => asRecord(v) != null,
     ) as Record<string, unknown>[],
+    board_arrow_tiles: asArray(skillState.board_arrow_tiles ?? skillState.boardArrowTiles).filter(
+      (v): v is Record<string, unknown> => asRecord(v) != null,
+    ) as Record<string, unknown>[],
     movement_modifiers: asArray(
       skillState.movement_modifiers ?? skillState.movementModifiers,
     ).filter((v): v is Record<string, unknown> => asRecord(v) != null) as Record<string, unknown>[],
@@ -1181,6 +1255,7 @@ function writeSkillState(position: AiBattlePosition, state: SkillStateRecord) {
     skill_state: {
       ...(asRecord(boardState.skill_state ?? boardState.skillState) ?? {}),
       board_hazards: state.board_hazards,
+      board_arrow_tiles: state.board_arrow_tiles,
       movement_modifiers: state.movement_modifiers,
       piece_statuses: state.piece_statuses,
       piece_defenses: state.piece_defenses,
@@ -1228,6 +1303,24 @@ export function pieceHasActiveCaptureImmunityFromBoardState(
         : pieces.find((p) => p.side === side && p.row === row && p.col === col);
     if (target && isYangBondProtectedFromCapture(pieces, target)) return true;
     if (target && isYinBondProtectedFromCapture(pieces, target)) return true;
+    for (const entry of state.board_hazards) {
+      const type = asString(entry.hazard_type ?? entry.hazardType) ?? '';
+      if (type !== 'safe_room_cell') continue;
+      const remaining = asNumber(entry.remaining_turns ?? entry.remainingTurns) ?? 0;
+      if (remaining <= 0) continue;
+      const affectsSide =
+        (asString(entry.affects_side ?? entry.affectsSide) ?? 'player') === 'enemy'
+          ? 'enemy'
+          : 'player';
+      if (affectsSide !== side) continue;
+      const r = asNumber(entry.row);
+      const c = asNumber(entry.col);
+      if (r !== row || c !== col) continue;
+      const kingHere = pieces.find(
+        (p) => p.side === side && p.row === row && p.col === col && isKingPiece(p),
+      );
+      if (kingHere) return true;
+    }
   }
   return false;
 }
@@ -1326,7 +1419,7 @@ export function createSkillRuntimeView(position: AiBattlePosition): SkillRuntime
     if (statusType === 'dark_blind') {
       darkBlindCells.add(key);
     }
-    if (statusType === 'a_transform') {
+    if (statusType === 'a_transform' || statusType === 'an_transform') {
       aTransformCells.add(key);
     }
   }
@@ -1384,6 +1477,30 @@ export function createSkillRuntimeView(position: AiBattlePosition): SkillRuntime
     }
   }
 
+  for (const entry of state.board_hazards) {
+    const type = asString(entry.hazard_type ?? entry.hazardType) ?? '';
+    if (type !== 'safe_room_cell') continue;
+    const row = asNumber(entry.row);
+    const col = asNumber(entry.col);
+    const remaining = asNumber(entry.remaining_turns ?? entry.remainingTurns) ?? 0;
+    const affectsSide =
+      (asString(entry.affects_side ?? entry.affectsSide) ?? 'player') === 'enemy'
+        ? 'enemy'
+        : 'player';
+    if (row == null || col == null || remaining <= 0) continue;
+    const kingOnCell = boardPieces.find(
+      (p) =>
+        p.side === affectsSide &&
+        p.row === row &&
+        p.col === col &&
+        isKingPiece(p),
+    );
+    if (!kingOnCell) continue;
+    const key = cellKey(affectsSide, row, col);
+    immobilizedCells.add(key);
+    captureImmunityCells.add(key);
+  }
+
   const thornDropBlockedCells = new Set<string>();
   for (const entry of state.board_hazards) {
     const type = asString(entry.hazard_type ?? entry.hazardType) ?? '';
@@ -1410,6 +1527,7 @@ export function createSkillRuntimeView(position: AiBattlePosition): SkillRuntime
     aTransformCells,
     captureImmunityCells,
     thornDropBlockedCells,
+    arrowTileByCell: buildArrowTileByCellMap(position),
   };
 }
 
@@ -1418,6 +1536,14 @@ export function tickSkillStateDurations(position: AiBattlePosition) {
   function tick(list: Record<string, unknown>[]) {
     const out: Record<string, unknown>[] = [];
     for (const entry of list) {
+      if (
+        entry.permanent === true ||
+        entry.stage_fixed === true ||
+        (asNumber(entry.remaining_turns ?? entry.remainingTurns) ?? 0) >= 999
+      ) {
+        out.push(entry);
+        continue;
+      }
       const remaining = asNumber(entry.remaining_turns ?? entry.remainingTurns) ?? 0;
       if (remaining <= 0) continue;
       const statusType = asString(entry.status_type ?? entry.statusType) ?? '';
@@ -1433,6 +1559,7 @@ export function tickSkillStateDurations(position: AiBattlePosition) {
     return out;
   }
   state.board_hazards = tick(state.board_hazards);
+  state.board_arrow_tiles = tick(state.board_arrow_tiles);
   state.movement_modifiers = tick(state.movement_modifiers);
   state.piece_statuses = tick(state.piece_statuses);
   state.piece_defenses = tick(state.piece_defenses);
@@ -1443,6 +1570,26 @@ export function tickSkillStateDurations(position: AiBattlePosition) {
   );
   stripSkillStateForGiantImmunity(state, boardPieces);
   writeSkillState(position, state);
+}
+
+/** 定スキル等: 次の1回の手番だけ、指定 side の駒はコスト上限以下しか動かせない。 */
+export function activeOpponentTurnMaxPieceCostCap(
+  position: AiBattlePosition,
+  sideToMove: Side,
+): number | null {
+  const state = readSkillState(position);
+  for (const entry of state.piece_statuses) {
+    const statusType = asString(entry.status_type ?? entry.statusType) ?? '';
+    if (statusType !== 'opponent_turn_max_piece_cost') continue;
+    const remaining = asNumber(entry.remaining_turns ?? entry.remainingTurns) ?? 0;
+    if (remaining <= 0) continue;
+    const applierSide = (asString(entry.side) ?? 'player') === 'enemy' ? 'enemy' : 'player';
+    const restrictedSide: Side = applierSide === 'player' ? 'enemy' : 'player';
+    if (restrictedSide !== sideToMove) continue;
+    const cap = asNumber(entry.max_piece_cost ?? entry.maxPieceCost);
+    return cap != null && Number.isFinite(cap) ? cap : 5;
+  }
+  return null;
 }
 
 export function movementRuleAt(
@@ -1630,7 +1777,7 @@ export function applyMoveSkillEffects(input: {
       const side = (asString(entry.side) ?? 'player') === 'enemy' ? 'enemy' : 'player';
       const row = asNumber(entry.row);
       const col = asNumber(entry.col);
-      if (statusType !== 'a_transform') return entry;
+      if (statusType !== 'a_transform' && statusType !== 'an_transform') return entry;
       if (side !== input.actorSide) return entry;
       if (row !== input.move.fromRow || col !== input.move.fromCol) return entry;
       return {
@@ -1899,6 +2046,18 @@ export function applyMoveSkillEffects(input: {
   ) {
     if (
       moveAdjacentAllyGearFollowLeader({
+        pieces: input.pieces,
+        actorSide: input.actorSide,
+        fromRow: input.move.fromRow,
+        fromCol: input.move.fromCol,
+        toRow: input.move.toRow,
+        toCol: input.move.toCol,
+      }) > 0
+    ) {
+      markMoveSkillFx();
+    }
+    if (
+      moveAdjacentAllyKoGlueFollowLeader({
         pieces: input.pieces,
         actorSide: input.actorSide,
         fromRow: input.move.fromRow,
@@ -3957,7 +4116,6 @@ export function applyMoveSkillEffects(input: {
               const idx = input.pieces.findIndex((p) => p.row === row && p.col === col);
               if (idx < 0) continue;
               const target = input.pieces[idx]!;
-              if (target.side === input.actorSide) continue;
               if (isGiantPieceForEngine(target)) continue;
               const pushRow = row + dr;
               const pushCol = col + dc;
@@ -3972,6 +4130,7 @@ export function applyMoveSkillEffects(input: {
         if (
           isGiantPieceForEngine(input.movedPiece) &&
           hook !== 'safe_room_king_relocation' &&
+          hook !== 'safe_room_mark_king_cell' &&
           hook !== 'escape_king_follow'
         ) {
           continue;
@@ -4001,6 +4160,33 @@ export function applyMoveSkillEffects(input: {
           continue;
         }
 
+        if (hook === 'safe_room_mark_king_cell') {
+          const durationTurns =
+            asNumber(params.durationTurns) ?? asNumber(params.duration_turns) ?? 2;
+          const kingIdx = findKingIndex(input.pieces, input.actorSide);
+          if (kingIdx < 0) continue;
+          const king = input.pieces[kingIdx]!;
+          state.board_hazards = state.board_hazards.filter((entry) => {
+            const type = asString(entry.hazard_type ?? entry.hazardType) ?? '';
+            if (type !== 'safe_room_cell') return true;
+            const side =
+              (asString(entry.affects_side ?? entry.affectsSide) ?? 'player') === 'enemy'
+                ? 'enemy'
+                : 'player';
+            const er = asNumber(entry.row);
+            const ec = asNumber(entry.col);
+            return !(side === input.actorSide && er === king.row && ec === king.col);
+          });
+          state.board_hazards.push({
+            row: king.row,
+            col: king.col,
+            hazard_type: 'safe_room_cell',
+            affects_side: input.actorSide,
+            remaining_turns: Math.max(1, durationTurns),
+          });
+          continue;
+        }
+
         if (hook === 'fixed_next_turn_restriction') {
           state.piece_statuses.push({
             row: input.movedPiece.row,
@@ -4012,19 +4198,307 @@ export function applyMoveSkillEffects(input: {
           continue;
         }
 
-        if (hook === 'edge_line_imprison') {
-          const enemyHasEdge = input.pieces.some((p) => {
-            if (p.side === input.actorSide) return false;
-            return p.row === 0 || p.row === 8 || p.col === 0 || p.col === 8;
+        if (hook === 'itsu_random_enemy_to_opponent_hand') {
+          const enemySide: Side = input.actorSide === 'player' ? 'enemy' : 'player';
+          const candidates = input.pieces
+            .map((p, idx) => ({ p, idx }))
+            .filter(({ p }) => {
+              if (p.side !== enemySide) return false;
+              if (isKingPiece(p)) return false;
+              if (isGiantPieceForEngine(p)) return false;
+              return true;
+            });
+          itsuSkillDebugLog({
+            hook,
+            actorSide: input.actorSide,
+            candidateCount: candidates.length,
+            candidates: candidates.map(({ p }) => ({
+              char: p.char,
+              pieceCode: p.pieceCode,
+              row: p.row,
+              col: p.col,
+            })),
           });
-          if (enemyHasEdge) {
-            state.piece_statuses.push({
+          if (candidates.length === 0) continue;
+          const selected = candidates[Math.floor(Math.random() * candidates.length)]!;
+          const target = selected.p;
+          const handCode =
+            toBasePieceCode(capturedToHandPieceCode(target)) ??
+            toBasePieceCode(target.pieceCode);
+          const before = {
+            char: target.char,
+            pieceCode: target.pieceCode,
+            row: target.row,
+            col: target.col,
+          };
+          input.pieces.splice(selected.idx, 1);
+          if (handCode) {
+            incrementHand(input.position, enemySide, handCode, 1);
+          }
+          itsuSkillDebugLog({
+            hook,
+            sentToHand: true,
+            handOwner: enemySide,
+            handCode,
+            before,
+          });
+          continue;
+        }
+
+        if (hook === 'tou_ally_pawn_to_fire') {
+          const toPieceCode =
+            toBasePieceCode(asString(params.toPieceCode)) ??
+            toBasePieceCode(asString(params.pieceCode)) ??
+            'FIR';
+          const toPieceChar = asString(params.toPieceChar) ?? '火';
+          const allyPawns = input.pieces.filter((piece) => {
+            if (piece.side !== input.actorSide) return false;
+            const base = toBasePieceCode(piece.pieceCode);
+            return base === 'FU' || piece.char === '歩';
+          });
+          touSkillDebugLog({
+            hook,
+            actorSide: input.actorSide,
+            mover: {
+              char: input.movedPiece.char,
               row: input.movedPiece.row,
               col: input.movedPiece.col,
-              side: input.actorSide,
-              status_type: 'edge_line_imprison',
-              remaining_turns: duration,
+            },
+            candidateCount: allyPawns.length,
+            candidates: allyPawns.map((p) => ({
+              char: p.char,
+              pieceCode: p.pieceCode,
+              row: p.row,
+              col: p.col,
+            })),
+          });
+          if (allyPawns.length === 0) continue;
+          const target = allyPawns[Math.floor(Math.random() * allyPawns.length)]!;
+          const before = {
+            char: target.char,
+            pieceCode: target.pieceCode,
+            row: target.row,
+            col: target.col,
+          };
+          target.pieceCode = toPieceCode;
+          target.char = toPieceChar;
+          target.promoted = false;
+          touSkillDebugLog({
+            hook,
+            transformed: true,
+            before,
+            after: {
+              char: target.char,
+              pieceCode: target.pieceCode,
+              row: target.row,
+              col: target.col,
+            },
+          });
+          continue;
+        }
+
+        if (hook === 'so_summon_random_adjacent_gold') {
+          const summonCode =
+            toBasePieceCode(asString(params.summonPieceCode)) ??
+            toBasePieceCode(asString(params.pieceCode)) ??
+            'KI';
+          const summonChar = asString(params.summonPieceChar) ?? '金';
+          summonRandomAdjacentEmptyPiece({
+            pieces: input.pieces,
+            center: input.movedPiece,
+            actorSide: input.actorSide,
+            summonCode,
+            summonChar,
+          });
+          continue;
+        }
+
+        if (hook === 'sou_grass_random_pit_cells') {
+          if (!movedPiece || input.move.fromRow == null || input.move.fromCol == null) continue;
+          const maxCells = Math.min(
+            3,
+            Math.max(
+              1,
+              Math.floor(
+                asNumber(params.maxCells) ??
+                  asNumber(params.max_cells) ??
+                  asNumber(params.count) ??
+                  3,
+              ),
+            ),
+          );
+          const candidates: { row: number; col: number }[] = [];
+          for (let dr = -1; dr <= 1; dr += 1) {
+            for (let dc = -1; dc <= 1; dc += 1) {
+              if (dr === 0 && dc === 0) continue;
+              const row = movedPiece.row + dr;
+              const col = movedPiece.col + dc;
+              if (row < 0 || row > 8 || col < 0 || col > 8) continue;
+              if (!isCellEmpty(input.pieces, row, col)) continue;
+              candidates.push({ row, col });
+            }
+          }
+          const pool = [...candidates];
+          let placed = 0;
+          while (placed < maxCells && pool.length > 0) {
+            const idx = Math.floor(Math.random() * pool.length);
+            const cell = pool.splice(idx, 1)[0]!;
+            state.board_hazards = state.board_hazards.filter((entry) => {
+              const type = asString(entry.hazard_type ?? entry.hazardType) ?? '';
+              const hRow = asNumber(entry.row);
+              const hCol = asNumber(entry.col);
+              return !(type === 'pit_cell' && hRow === cell.row && hCol === cell.col);
             });
+            state.board_hazards.push({
+              row: cell.row,
+              col: cell.col,
+              hazard_type: 'pit_cell',
+              affects_side: sideOpposite(input.actorSide),
+              remaining_turns: 1,
+            });
+            placed += 1;
+          }
+          if (placed > 0) {
+            markMoveSkillFx();
+          }
+          continue;
+        }
+
+        if (hook === 'an_opponent_special_to_pawn') {
+          const enemySide: Side = input.actorSide === 'player' ? 'enemy' : 'player';
+          const candidates = input.pieces
+            .map((p, idx) => ({ p, idx }))
+            .filter(({ p }) => {
+              if (p.side !== enemySide) return false;
+              if (isKingPiece(p)) return false;
+              if (isGiantPieceForEngine(p)) return false;
+              return isDeckBuilderStyleSpecialBoardPiece(p);
+            });
+          anSkillDebugLog({
+            hook,
+            actorSide: input.actorSide,
+            mover: { char: input.movedPiece.char, row: input.movedPiece.row, col: input.movedPiece.col },
+            candidateCount: candidates.length,
+            candidates: candidates.map(({ p }) => ({
+              char: p.char,
+              pieceCode: p.pieceCode,
+              row: p.row,
+              col: p.col,
+            })),
+          });
+          if (candidates.length === 0) continue;
+          const selected = candidates[Math.floor(Math.random() * candidates.length)]!;
+          const target = selected.p;
+          const before = {
+            char: target.char,
+            pieceCode: target.pieceCode,
+            row: target.row,
+            col: target.col,
+          };
+          target.pieceCode = 'FU';
+          target.char = '歩';
+          target.promoted = false;
+          const existingIdx = state.piece_statuses.findIndex((entry) => {
+            const statusType = asString(entry.status_type ?? entry.statusType) ?? '';
+            const side = (asString(entry.side) ?? 'player') === 'enemy' ? 'enemy' : 'player';
+            return (
+              (statusType === 'an_transform' || statusType === 'a_transform') &&
+              side === target.side &&
+              asNumber(entry.row) === target.row &&
+              asNumber(entry.col) === target.col
+            );
+          });
+          if (existingIdx >= 0) {
+            state.piece_statuses[existingIdx] = {
+              ...state.piece_statuses[existingIdx],
+              row: target.row,
+              col: target.col,
+              side: target.side,
+              status_type: 'an_transform',
+              remaining_turns: 999,
+            };
+          } else {
+            state.piece_statuses.push({
+              row: target.row,
+              col: target.col,
+              side: target.side,
+              status_type: 'an_transform',
+              remaining_turns: 999,
+            });
+          }
+          anSkillDebugLog({
+            hook,
+            transformed: true,
+            before,
+            after: { char: target.char, pieceCode: target.pieceCode, row: target.row, col: target.col },
+          });
+          continue;
+        }
+
+        if (hook === 'sadame_opponent_next_turn_cost_cap') {
+          const maxPieceCost =
+            asNumber(params.maxPieceCost) ??
+            asNumber(params.max_piece_cost) ??
+            asNumber(params.maxCost) ??
+            5;
+          state.piece_statuses.push({
+            row: input.movedPiece.row,
+            col: input.movedPiece.col,
+            side: input.actorSide,
+            status_type: 'opponent_turn_max_piece_cost',
+            max_piece_cost: maxPieceCost,
+            remaining_turns: 1,
+          });
+          continue;
+        }
+
+        if (hook === 'edge_line_imprison' || hook === 'hen_random_edge_imprison') {
+          const imprisonTurns = Math.max(
+            2,
+            Math.floor(
+              asNumber(params.durationTurns) ??
+                asNumber(params.duration_turns) ??
+                duration,
+            ),
+          );
+          const selectedEdge: HenBoardEdge =
+            HEN_BOARD_EDGES[Math.floor(Math.random() * HEN_BOARD_EDGES.length)]!;
+          state.board_hazards = state.board_hazards.filter((entry) => {
+            const type = asString(entry.hazard_type ?? entry.hazardType) ?? '';
+            return type !== 'hen_edge_highlight';
+          });
+          state.board_hazards.push({
+            hazard_type: 'hen_edge_highlight',
+            edge: selectedEdge,
+            remaining_turns: imprisonTurns,
+          });
+          for (const piece of input.pieces) {
+            if (!pieceOnHenBoardEdge(piece, selectedEdge)) continue;
+            const existingIdx = state.piece_statuses.findIndex((entry) => {
+              const statusType = asString(entry.status_type ?? entry.statusType) ?? '';
+              const side = (asString(entry.side) ?? 'player') === 'enemy' ? 'enemy' : 'player';
+              return (
+                statusType === 'stun' &&
+                side === piece.side &&
+                asNumber(entry.row) === piece.row &&
+                asNumber(entry.col) === piece.col
+              );
+            });
+            const stunEntry = {
+              side: piece.side,
+              row: piece.row,
+              col: piece.col,
+              status_type: 'stun',
+              remaining_turns: imprisonTurns,
+            };
+            if (existingIdx >= 0) {
+              state.piece_statuses[existingIdx] = {
+                ...state.piece_statuses[existingIdx],
+                ...stunEntry,
+              };
+            } else {
+              state.piece_statuses.push(stunEntry);
+            }
           }
           continue;
         }

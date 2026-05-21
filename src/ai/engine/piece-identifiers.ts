@@ -1,3 +1,4 @@
+import { CHAR_TO_CODE } from '@/features/stage-shogi/domain/piece-conversion';
 import { toBasePieceCode } from '@/ai/model';
 
 type PieceLike = {
@@ -114,6 +115,20 @@ const PRISON_FENCE_PIECE_CODES = [
   '95E4E9F3D8E5',
 ] as const;
 const STANDARD_CORE_PIECE_CODES = ['FU', 'KY', 'KE', 'GI', 'KI', 'KA', 'HI', 'OU'] as const;
+
+const STANDARD_DECK_PIECE_CHARS = new Set(['王', '玉', '歩', '香', '桂', '銀', '金', '飛', '角']);
+const STANDARD_DECK_PIECE_CODES = new Set<string>(STANDARD_CORE_PIECE_CODES);
+
+/** デッキビルダーの「特殊駒」判定と同系（標準8種以外）。 */
+export function isDeckBuilderStyleSpecialBoardPiece(piece: PieceLike): boolean {
+  const char = normKanjiForEngineRules(piece.char);
+  if (STANDARD_DECK_PIECE_CHARS.has(char)) return false;
+  const base = toBasePieceCode(piece.pieceCode);
+  if (base && STANDARD_DECK_PIECE_CODES.has(base)) return false;
+  const code = CHAR_TO_CODE[char];
+  if (!code) return true;
+  return !STANDARD_DECK_PIECE_CODES.has(code);
+}
 
 const MOVER_SPECS: readonly SkillMoverSpec[] = [
   { key: 'isFlameMover', aliases: FLAME_PIECE_CODES },
@@ -349,6 +364,146 @@ export function isTanePiece(piece: PieceLike): boolean {
   if (base === 'TANE' || base === 'SHOP_TANE') return true;
   const raw = pieceRawUpper(piece);
   return raw.includes('PIECE_SHOP_TANE') || raw.includes('SHOP_TANE');
+}
+
+/** ガチャ「定」: 前後左右に各1マス。 */
+export function isSadamePiece(piece: PieceLike): boolean {
+  const char = normKanjiForEngineRules(piece.char);
+  if (char === '定') return true;
+  const base = toBasePieceCode(piece.pieceCode);
+  if (base === 'GACHA_SADAME') return true;
+  const raw = pieceRawUpper(piece);
+  return raw.includes('GACHA_SADAME');
+}
+
+/** ガチャ「進」: 毎ターンランダムな駒の移動範囲で動く。 */
+export function isShinPiece(piece: PieceLike): boolean {
+  const char = normKanjiForEngineRules(piece.char);
+  if (char === '進') return true;
+  const base = toBasePieceCode(piece.pieceCode);
+  if (base === 'GACHA_SHIN') return true;
+  const raw = pieceRawUpper(piece);
+  return raw.includes('GACHA_SHIN');
+}
+
+/** ガチャ「逸」: 前斜め・後斜めに各1マス。 */
+export function isItsuPiece(piece: PieceLike): boolean {
+  const char = normKanjiForEngineRules(piece.char);
+  if (char === '逸') return true;
+  const base = toBasePieceCode(piece.pieceCode);
+  if (base === 'GACHA_ITSU') return true;
+  const raw = pieceRawUpper(piece);
+  return raw.includes('GACHA_ITSU');
+}
+
+/** ガチャ「辺」: 前斜め・後斜めに各1マス。 */
+export function isHenPiece(piece: PieceLike): boolean {
+  const char = normKanjiForEngineRules(piece.char);
+  if (char === '辺') return true;
+  const base = toBasePieceCode(piece.pieceCode);
+  if (base === 'GACHA_HEN') return true;
+  const raw = pieceRawUpper(piece);
+  return raw.includes('GACHA_HEN');
+}
+
+/** ガチャ「逃」: 全方向1マス。移動時味方の王を同方向に1マス追従。 */
+export function isNigePiece(piece: PieceLike): boolean {
+  const char = normKanjiForEngineRules(piece.char);
+  if (char === '逃') return true;
+  const base = toBasePieceCode(piece.pieceCode);
+  if (base === 'GACHA_TOU2') return true;
+  const raw = pieceRawUpper(piece);
+  return raw.includes('GACHA_TOU2');
+}
+
+/** ガチャ「灯」: 前後左右・後斜めに各1マス。 */
+export function isTouPiece(piece: PieceLike): boolean {
+  const char = normKanjiForEngineRules(piece.char);
+  if (char === '灯') return true;
+  const base = toBasePieceCode(piece.pieceCode);
+  if (base === 'GACHA_TOU') return true;
+  const raw = pieceRawUpper(piece);
+  return raw.includes('GACHA_TOU') && !raw.includes('GACHA_TOU2');
+}
+
+/** ガチャ「煽」: 前後左右に何マスでも。 */
+export function isAoriPiece(piece: PieceLike): boolean {
+  const char = normKanjiForEngineRules(piece.char);
+  if (char === '煽') return true;
+  const base = toBasePieceCode(piece.pieceCode);
+  if (base === 'GACHA_AORI') return true;
+  const raw = pieceRawUpper(piece);
+  return raw.includes('GACHA_AORI');
+}
+
+/** ガチャ「爆」: 前斜め・前・左右・後に各1マス。 */
+export function isBakuPiece(piece: PieceLike): boolean {
+  const char = normKanjiForEngineRules(piece.char);
+  if (char === '爆') return true;
+  const base = toBasePieceCode(piece.pieceCode);
+  if (base === 'GACHA_BAKU') return true;
+  const raw = pieceRawUpper(piece);
+  return raw.includes('GACHA_BAKU');
+}
+
+/** ガチャ「膠」: 前斜め・後1。隣接味方の横移動に追従。 */
+export function isKoPiece(piece: PieceLike): boolean {
+  const char = normKanjiForEngineRules(piece.char);
+  if (char === '膠') return true;
+  const base = toBasePieceCode(piece.pieceCode);
+  if (base === 'GACHA_KOU' || base === 'GACHA_KO') return true;
+  const raw = pieceRawUpper(piece);
+  return raw.includes('GACHA_KOU') || raw.includes('PIECE_GACHA_KOU');
+}
+
+/** ガチャ「閹」: 縦横1マス + 味方王の前1マスへ移動可。 */
+export function isEnPiece(piece: PieceLike): boolean {
+  const char = normKanjiForEngineRules(piece.char);
+  if (char === '閹') return true;
+  const base = toBasePieceCode(piece.pieceCode);
+  if (base === 'GACHA_EN') return true;
+  const raw = pieceRawUpper(piece);
+  return raw.includes('GACHA_EN');
+}
+
+/** ガチャ「艸」: 前最大2・左右後1。移動時周囲に×マス（pit_cell）。 */
+export function isSouPiece(piece: PieceLike): boolean {
+  const char = normKanjiForEngineRules(piece.char);
+  if (char === '艸') return true;
+  const base = toBasePieceCode(piece.pieceCode);
+  if (base === 'GACHA_SOU') return true;
+  const raw = pieceRawUpper(piece);
+  return raw.includes('GACHA_SOU');
+}
+
+/** ガチャ「宋」: 前後何マスでも + 左右1マス。 */
+export function isSoPiece(piece: PieceLike): boolean {
+  const char = normKanjiForEngineRules(piece.char);
+  if (char === '宋') return true;
+  const base = toBasePieceCode(piece.pieceCode);
+  if (base === 'GACHA_SO') return true;
+  const raw = pieceRawUpper(piece);
+  return raw.includes('GACHA_SO') && !raw.includes('GACHA_SOU');
+}
+
+/** ガチャ「安」: 前後左右1マス + 桂馬跳び。 */
+export function isAnPiece(piece: PieceLike): boolean {
+  const char = normKanjiForEngineRules(piece.char);
+  if (char === '安') return true;
+  const base = toBasePieceCode(piece.pieceCode);
+  if (base === 'GACHA_AN') return true;
+  const raw = pieceRawUpper(piece);
+  return raw.includes('GACHA_AN');
+}
+
+/** ガチャ「室」: 前・前斜め左右・左右・後に各1マス。 */
+export function isShitsuPiece(piece: PieceLike): boolean {
+  const char = normKanjiForEngineRules(piece.char);
+  if (char === '室') return true;
+  const base = toBasePieceCode(piece.pieceCode);
+  if (base === 'GACHA_SHITSU' || base === 'GACHA_MURO') return true;
+  const raw = pieceRawUpper(piece);
+  return raw.includes('GACHA_SHITSU') || raw.includes('GACHA_MURO');
 }
 
 /** 駒ショップ「舞」: 移動時、その時点で周囲8マスの敵の移動を斜め前1マスのみに制限。 */

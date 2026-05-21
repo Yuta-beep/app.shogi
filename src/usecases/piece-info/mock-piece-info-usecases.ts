@@ -1,9 +1,10 @@
+import { buildGachaPieceCatalogItems } from '@/constants/gacha-piece-metadata';
 import {
   LoadPieceCatalogUseCase,
   PieceCatalogItem,
 } from '@/usecases/piece-info/load-piece-catalog-usecase';
 
-const pieceCatalog: PieceCatalogItem[] = [
+const basePieceCatalog: PieceCatalogItem[] = [
   {
     char: '香',
     name: '香車',
@@ -113,6 +114,8 @@ const pieceCatalog: PieceCatalogItem[] = [
     isRepeatable: false,
   },
 ];
+
+const pieceCatalog: PieceCatalogItem[] = [...basePieceCatalog, ...buildGachaPieceCatalogItems()];
 
 export class MockLoadPieceCatalogUseCase implements LoadPieceCatalogUseCase {
   async execute(): Promise<PieceCatalogItem[]> {

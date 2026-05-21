@@ -25,9 +25,15 @@ import {
   BoardPiece,
   KING_PIECE_SIZE_PERCENT,
   NORMAL_PIECE_SIZE_PERCENT,
+  ARROW_DOWN_CELL_IMAGE_SOURCE,
+  ARROW_LEFT_CELL_IMAGE_SOURCE,
+  ARROW_RIGHT_CELL_IMAGE_SOURCE,
+  ARROW_UP_CELL_IMAGE_SOURCE,
   BATSU_CELL_IMAGE_SOURCE,
   CHRYSANTHEMUM_REVIVAL_IMAGE_SOURCE,
   POISON_CELL_IMAGE_SOURCE,
+  type ArrowCellDisplay,
+  SAFE_ROOM_CELL_IMAGE_SOURCE,
   PRISON_CHAIN_IMAGE_SOURCE,
   ROCK_OBSTACLE_IMAGE_SOURCE,
   THORN_CELL_IMAGE_SOURCE,
@@ -624,6 +630,42 @@ const RockObstacleLayer = memo(function RockObstacleLayer({
   );
 });
 
+const ARROW_CELL_IMAGE_BY_DIRECTION = {
+  up: ARROW_UP_CELL_IMAGE_SOURCE,
+  left: ARROW_LEFT_CELL_IMAGE_SOURCE,
+  down: ARROW_DOWN_CELL_IMAGE_SOURCE,
+  right: ARROW_RIGHT_CELL_IMAGE_SOURCE,
+} as const;
+
+const ArrowCellLayer = memo(function ArrowCellLayer({
+  arrowCells,
+}: {
+  arrowCells: ArrowCellDisplay[];
+}) {
+  return (
+    <View pointerEvents="none" style={{ position: 'absolute', inset: 0, zIndex: 21 }}>
+      {arrowCells.map((cell) => (
+        <View
+          key={`arrow-cell-image-${cell.row}-${cell.col}-${cell.direction}`}
+          style={{
+            position: 'absolute',
+            top: `${cell.row * BOARD_CELL_INNER_RATIO * 100}%`,
+            left: `${cell.col * BOARD_CELL_INNER_RATIO * 100}%`,
+            width: `${BOARD_CELL_INNER_RATIO * 100}%`,
+            height: `${BOARD_CELL_INNER_RATIO * 100}%`,
+          }}
+        >
+          <Image
+            source={ARROW_CELL_IMAGE_BY_DIRECTION[cell.direction]}
+            contentFit="contain"
+            style={{ width: '100%', height: '100%' }}
+          />
+        </View>
+      ))}
+    </View>
+  );
+});
+
 const BatsuHazardLayer = memo(function BatsuHazardLayer({
   batsuHazards,
 }: {
@@ -644,6 +686,63 @@ const BatsuHazardLayer = memo(function BatsuHazardLayer({
         >
           <Image
             source={BATSU_CELL_IMAGE_SOURCE}
+            contentFit="cover"
+            style={{ width: '100%', height: '100%' }}
+          />
+        </View>
+      ))}
+    </View>
+  );
+});
+
+const HEN_EDGE_HIGHLIGHT_COLOR = 'rgba(147, 51, 234, 0.42)';
+
+const HenEdgeHighlightLayer = memo(function HenEdgeHighlightLayer({
+  henEdgeHighlightCells,
+}: {
+  henEdgeHighlightCells: BoardCell[];
+}) {
+  return (
+    <View pointerEvents="none" style={{ position: 'absolute', inset: 0, zIndex: 23 }}>
+      {henEdgeHighlightCells.map((cell) => (
+        <View
+          key={`hen-edge-highlight-${cell.row}-${cell.col}`}
+          style={{
+            position: 'absolute',
+            top: `${cell.row * BOARD_CELL_INNER_RATIO * 100}%`,
+            left: `${cell.col * BOARD_CELL_INNER_RATIO * 100}%`,
+            width: `${BOARD_CELL_INNER_RATIO * 100}%`,
+            height: `${BOARD_CELL_INNER_RATIO * 100}%`,
+            backgroundColor: HEN_EDGE_HIGHLIGHT_COLOR,
+            borderWidth: 1,
+            borderColor: 'rgba(192, 132, 252, 0.85)',
+          }}
+        />
+      ))}
+    </View>
+  );
+});
+
+const SafeRoomHazardLayer = memo(function SafeRoomHazardLayer({
+  safeRoomHazards,
+}: {
+  safeRoomHazards: BoardCell[];
+}) {
+  return (
+    <View pointerEvents="none" style={{ position: 'absolute', inset: 0, zIndex: 25 }}>
+      {safeRoomHazards.map((cell) => (
+        <View
+          key={`safe-room-hazard-image-${cell.row}-${cell.col}`}
+          style={{
+            position: 'absolute',
+            top: `${cell.row * BOARD_CELL_INNER_RATIO * 100}%`,
+            left: `${cell.col * BOARD_CELL_INNER_RATIO * 100}%`,
+            width: `${BOARD_CELL_INNER_RATIO * 100}%`,
+            height: `${BOARD_CELL_INNER_RATIO * 100}%`,
+          }}
+        >
+          <Image
+            source={SAFE_ROOM_CELL_IMAGE_SOURCE}
             contentFit="cover"
             style={{ width: '100%', height: '100%' }}
           />
@@ -867,7 +966,10 @@ export function StageShogiBoard(props: {
   poisonHazardCells: BoardCell[];
   rockObstacleCells: BoardCell[];
   batsuHazardCells: BoardCell[];
+  arrowCells: ArrowCellDisplay[];
   thornHazardCells: BoardCell[];
+  safeRoomHazardCells: BoardCell[];
+  henEdgeHighlightCells: BoardCell[];
   onCellPress: (row: number, col: number) => void;
   onCellLongPress: (row: number, col: number) => void;
 }) {
@@ -884,7 +986,10 @@ export function StageShogiBoard(props: {
     poisonHazardCells,
     rockObstacleCells,
     batsuHazardCells,
+    arrowCells,
     thornHazardCells,
+    safeRoomHazardCells,
+    henEdgeHighlightCells,
     onCellPress,
     onCellLongPress,
   } = props;
@@ -916,10 +1021,13 @@ export function StageShogiBoard(props: {
             spriteEpoch={spriteEpoch}
             promotionImageFlash={promotionImageFlash}
           />
+          <HenEdgeHighlightLayer henEdgeHighlightCells={henEdgeHighlightCells} />
           <PoisonHazardLayer poisonHazards={poisonHazardCells} />
+          <ArrowCellLayer arrowCells={arrowCells} />
           <RockObstacleLayer rockObstacles={rockObstacleCells} />
           <BatsuHazardLayer batsuHazards={batsuHazardCells} />
           <ThornHazardLayer thornHazards={thornHazardCells} />
+          <SafeRoomHazardLayer safeRoomHazards={safeRoomHazardCells} />
           <BoardTouchLayer onCellPress={onCellPress} onCellLongPress={onCellLongPress} />
         </View>
       </View>

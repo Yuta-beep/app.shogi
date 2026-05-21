@@ -684,6 +684,12 @@ const pieceImageRecords: PieceImageRecord[] = [
     source: require('../../assets/pieces/0115-piece_gacha_aori.png'),
   },
   {
+    pieceId: 116,
+    pieceCode: 'piece_gacha_shitsu',
+    char: '室',
+    source: require('../../assets/pieces/室.png'),
+  },
+  {
     pieceId: 117,
     pieceCode: 'piece_gacha_sadame',
     char: '定',
@@ -700,6 +706,54 @@ const pieceImageRecords: PieceImageRecord[] = [
     pieceCode: 'piece_gacha_so',
     char: '宋',
     source: require('../../assets/pieces/0119-piece_gacha_so.png'),
+  },
+  {
+    pieceId: 120,
+    pieceCode: 'piece_gacha_tou',
+    char: '灯',
+    source: require('../../assets/pieces/灯.png'),
+  },
+  {
+    pieceId: 121,
+    pieceCode: 'piece_gacha_hen',
+    char: '辺',
+    source: require('../../assets/pieces/辺.png'),
+  },
+  {
+    pieceId: 122,
+    pieceCode: 'piece_gacha_itsu',
+    char: '逸',
+    source: require('../../assets/pieces/逸.png'),
+  },
+  {
+    pieceId: 123,
+    pieceCode: 'piece_gacha_shin',
+    char: '進',
+    source: require('../../assets/pieces/進.png'),
+  },
+  {
+    pieceId: 124,
+    pieceCode: 'piece_gacha_tou2',
+    char: '逃',
+    source: require('../../assets/pieces/逃.png'),
+  },
+  {
+    pieceId: 125,
+    pieceCode: 'piece_gacha_sou',
+    char: '艸',
+    source: require('../../assets/pieces/艸.png'),
+  },
+  {
+    pieceId: 126,
+    pieceCode: 'piece_gacha_en',
+    char: '閹',
+    source: require('../../assets/pieces/閹.png'),
+  },
+  {
+    pieceId: 127,
+    pieceCode: 'piece_gacha_kou',
+    char: '膠',
+    source: require('../../assets/pieces/膠.png'),
   },
   {
     pieceId: 129,

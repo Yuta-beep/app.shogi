@@ -1,4 +1,5 @@
 import type { DeckBuilderSnapshot } from '@/domain/models/deck-builder';
+import { getGachaMockOwnedPiecesForDeckBuilder } from '@/features/gacha-room/lib/gacha-mock-store';
 import { getPieceShopMockOwnedPiecesForDeckBuilder } from '@/features/piece-shop/lib/piece-shop-mock-store';
 import { sortOwnedPiecesForDeckBuilder } from '@/features/piece-shop/lib/sort-owned-pieces-for-deck-builder';
 import type { LoadDeckBuilderUseCase } from '@/usecases/deck-builder/load-deck-builder-usecase';
@@ -99,9 +100,14 @@ export class MockLoadDeckBuilderUseCase implements LoadDeckBuilderUseCase {
         },
     ];
     const shopOwnedPieces = getPieceShopMockOwnedPiecesForDeckBuilder();
+    const gachaOwnedPieces = getGachaMockOwnedPiecesForDeckBuilder();
 
     return {
-      ownedPieces: sortOwnedPiecesForDeckBuilder([...shopOwnedPieces, ...baseOwnedPieces]),
+      ownedPieces: sortOwnedPiecesForDeckBuilder([
+        ...gachaOwnedPieces,
+        ...shopOwnedPieces,
+        ...baseOwnedPieces,
+      ]),
       savedDecks: [
         {
           id: 'deck-1',

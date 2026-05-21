@@ -30,8 +30,9 @@ import {
   isGiantPieceForEngine,
   isValidGiantAnchor,
 } from '@/ai/engine/giant-piece';
+import { arrowDirectionAt, arrowSlideDestination } from '@/ai/engine/arrow-tile';
 import { createPosition, findPieceAt, notationForMove, pieceChar } from '@/ai/engine/shared';
-import { generateLegalMoves } from '@/ai/engine/legal-moves';
+import { ensureShinTurnMimicForBattle, generateLegalMoves } from '@/ai/engine/legal-moves';
 import {
   createSkillRuntimeView,
   applyBoardHazardsOnLanding,
@@ -1199,6 +1200,108 @@ function collectAdjacentEmptyCells(
   return out;
 }
 
+/** 矢印マスに着地した駒を、矢印方向へ1マススライドさせる（HTML 原型と同様）。 */
+function applyArrowTileSlideAfterLanding(input: {
+  position: AiBattlePosition;
+  boardState: Record<string, unknown> | undefined;
+  nextPieces: AiBoardPiece[];
+  hands: ReturnType<typeof normalizeHandsStateKeys>;
+  actorSide: Side;
+  landingRow: number;
+  landingCol: number;
+  movingIndex: number;
+}): {
+  nextPieces: AiBoardPiece[];
+  hands: ReturnType<typeof normalizeHandsStateKeys>;
+  didCapture: boolean;
+  didSlide: boolean;
+  starReturnProcTriggered: boolean;
+  deathCapturedByActor: boolean;
+} {
+  const direction = arrowDirectionAt(input.position, input.landingRow, input.landingCol);
+  if (!direction) {
+    return {
+      nextPieces: input.nextPieces,
+      hands: input.hands,
+      didCapture: false,
+      didSlide: false,
+      starReturnProcTriggered: false,
+      deathCapturedByActor: false,
+    };
+  }
+  const slide = arrowSlideDestination(input.landingRow, input.landingCol, direction);
+  if (!slide) {
+    throw new Error('arrow slide blocked: out of bounds');
+  }
+
+  let nextPieces = input.nextPieces;
+  let hands = input.hands;
+  let didCapture = false;
+  let starReturnProcTriggered = false;
+  let deathCapturedByActor = false;
+  const capturer = nextPieces[input.movingIndex] ?? null;
+
+  const movingBefore = nextPieces[input.movingIndex] ?? null;
+  const captured = findPieceAt(nextPieces, slide.row, slide.col);
+  if (captured) {
+    if (
+      captured.side === input.actorSide &&
+      !(
+        movingBefore &&
+        captured.row === movingBefore.row &&
+        captured.col === movingBefore.col
+      )
+    ) {
+      throw new Error('arrow slide blocked by ally');
+    }
+    if (captured.side !== input.actorSide) {
+      const res = applyHostileCaptureAtCell({
+        boardState: input.boardState,
+        nextPieces,
+        hands,
+        actorSide: input.actorSide,
+        row: slide.row,
+        col: slide.col,
+        fallbackCapturedCode: null,
+        capturer,
+      });
+      if (res.rebuffKboss) {
+        throw new Error('arrow slide blocked: kboss');
+      }
+      nextPieces = res.nextPieces;
+      hands = res.hands;
+      didCapture = res.didCapture;
+      starReturnProcTriggered = res.starReturnProcTriggered;
+      deathCapturedByActor = res.deathCapturedByActor;
+    }
+  }
+
+  const movingIndex = nextPieces.findIndex(
+    (p) =>
+      p.side === input.actorSide &&
+      p.row === input.landingRow &&
+      p.col === input.landingCol &&
+      (capturer == null ||
+        p.pieceCode === capturer.pieceCode ||
+        (p.row === capturer.row && p.col === capturer.col)),
+  );
+  const idx = movingIndex >= 0 ? movingIndex : input.movingIndex;
+  const moving = nextPieces[idx];
+  if (!moving) {
+    throw new Error('arrow slide: moving piece not found');
+  }
+  nextPieces[idx] = { ...moving, row: slide.row, col: slide.col };
+
+  return {
+    nextPieces,
+    hands,
+    didCapture,
+    didSlide: true,
+    starReturnProcTriggered,
+    deathCapturedByActor,
+  };
+}
+
 export function applyMove(input: {
   position: BattleCanonicalPosition;
   pieceCatalog: AiPieceDefinition[];
@@ -1224,6 +1327,7 @@ export function applyMove(input: {
     'convex_followup',
   );
   const preMoveSkillView = createSkillRuntimeView(current);
+  ensureShinTurnMimicForBattle(current, input.pieceCatalog);
   assertMoveAllowedBySessionCatalog({
     position: current,
     pieceCatalog: input.pieceCatalog,
@@ -1263,7 +1367,27 @@ export function applyMove(input: {
       promoted: false,
       imageSignedUrl: null,
     });
-    movedPieceAfterApply = nextPieces[nextPieces.length - 1] ?? null;
+    const dropIndex = nextPieces.length - 1;
+    movedPieceAfterApply = nextPieces[dropIndex] ?? null;
+    const dropArrow = applyArrowTileSlideAfterLanding({
+      position: current,
+      boardState: current.boardState as Record<string, unknown> | undefined,
+      nextPieces,
+      hands,
+      actorSide,
+      landingRow: move.toRow,
+      landingCol: move.toCol,
+      movingIndex: dropIndex,
+    });
+    if (dropArrow.didSlide) {
+      nextPieces = dropArrow.nextPieces;
+      hands = dropArrow.hands;
+      if (dropArrow.didCapture) didCapture = true;
+      if (dropArrow.starReturnProcTriggered) starReturnProcTriggered = true;
+      if (dropArrow.deathCapturedByActor) deathCapturedByActor = true;
+      intrinsicCombatSkillTriggered = intrinsicCombatSkillTriggered || dropArrow.didCapture;
+      movedPieceAfterApply = nextPieces[dropIndex] ?? movedPieceAfterApply;
+    }
   } else {
     const movingIndex = nextPieces.findIndex(
       (piece) =>
@@ -1793,6 +1917,44 @@ export function applyMove(input: {
         movedPieceAfterApply = landedAfterMove;
       } else {
         movedPieceAfterApply = nextPieces[movingIndexAfterCapture] ?? null;
+      }
+
+      if (
+        !rebuffKboss &&
+        !shieldAbortedMove &&
+        movedPieceAfterApply &&
+        move.fromRow != null &&
+        move.fromCol != null
+      ) {
+        const slideMovingIndex = nextPieces.findIndex(
+          (p) =>
+            p.side === actorSide &&
+            p.row === movedPieceAfterApply!.row &&
+            p.col === movedPieceAfterApply!.col,
+        );
+        if (slideMovingIndex >= 0) {
+          const arrowSlide = applyArrowTileSlideAfterLanding({
+            position: current,
+            boardState: current.boardState as Record<string, unknown> | undefined,
+            nextPieces,
+            hands,
+            actorSide,
+            landingRow: move.toRow,
+            landingCol: move.toCol,
+            movingIndex: slideMovingIndex,
+          });
+          if (arrowSlide.didSlide) {
+            nextPieces = arrowSlide.nextPieces;
+            hands = arrowSlide.hands;
+            if (arrowSlide.didCapture) {
+              didCapture = true;
+              intrinsicCombatSkillTriggered = true;
+            }
+            if (arrowSlide.starReturnProcTriggered) starReturnProcTriggered = true;
+            if (arrowSlide.deathCapturedByActor) deathCapturedByActor = true;
+            movedPieceAfterApply = nextPieces[slideMovingIndex] ?? movedPieceAfterApply;
+          }
+        }
       }
 
       // 銃の貫通手で敵を取った（中点のみ／先のみ／両方）ときスキル発動扱いにする。

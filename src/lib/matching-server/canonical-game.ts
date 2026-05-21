@@ -1,0 +1,141 @@
+import { buildBoardState } from '@/ai/engine/shared';
+import { assembleSkillDefinitionsV2ForSession } from '@/ai/engine/session-skill-definitions-v2';
+import { normalizePieceCatalog, type AiBattlePosition } from '@/ai/model';
+import type { MatchingGameState, PlayerSide } from '@/domain/matching-server/protocol';
+import {
+  CODE_TO_CHAR,
+  PROMOTED_CODE_TO_CHAR,
+} from '@/features/stage-shogi/domain/piece-conversion';
+import { createEmptyHandsState, type BoardPiece, type Side } from '@/features/stage-shogi/domain/game-rules';
+import { decodeEncodedBoardPiece } from '@/lib/matching-server/game-bridge';
+import { formatMatchingSquare, parseMatchingSquare } from '@/lib/matching-server/square';
+import type { PieceCatalogItem } from '@/usecases/piece-info/load-piece-catalog-usecase';
+
+/** 正典局面では常に先手(black)=player, 後手(white)=enemy */
+export function serverSideToCanonicalSide(serverSide: PlayerSide): Side {
+  return serverSide === 'black' ? 'player' : 'enemy';
+}
+
+export function canonicalSideToServerSide(side: Side): PlayerSide {
+  return side === 'player' ? 'black' : 'white';
+}
+
+function pieceCharFromCode(pieceCode: string, side: Side, promoted: boolean): string {
+  if (promoted && PROMOTED_CODE_TO_CHAR[pieceCode]) {
+    return PROMOTED_CODE_TO_CHAR[pieceCode];
+  }
+  if (pieceCode === 'OU') {
+    return side === 'enemy' ? '玉' : '王';
+  }
+  return CODE_TO_CHAR[pieceCode] ?? '?';
+}
+
+export function matchingWireToCanonicalPosition(
+  wire: MatchingGameState,
+  pieceCatalog: PieceCatalogItem[],
+): AiBattlePosition {
+  const catalog = normalizePieceCatalog(pieceCatalog);
+  const defsByCode: Record<string, (typeof catalog)[number]> = {};
+  for (const item of catalog) {
+    defsByCode[item.pieceCode] = item;
+  }
+
+  const pieces: BoardPiece[] = [];
+  for (const [square, encoded] of Object.entries(wire.board)) {
+    const { serverSide, code, promoted } = decodeEncodedBoardPiece(encoded);
+    const { row, col } = parseMatchingSquare(square);
+    const side = serverSideToCanonicalSide(serverSide);
+    pieces.push({
+      row,
+      col,
+      side,
+      pieceCode: code,
+      char: pieceCharFromCode(code, side, promoted),
+      promoted,
+    });
+  }
+
+  const hands = createEmptyHandsState();
+  for (const [code, count] of Object.entries(wire.hands.black ?? {})) {
+    if (count > 0) hands.player[code.toUpperCase()] = count;
+  }
+  for (const [code, count] of Object.entries(wire.hands.white ?? {})) {
+    if (count > 0) hands.enemy[code.toUpperCase()] = count;
+  }
+
+  const position: AiBattlePosition = {
+    sideToMove: serverSideToCanonicalSide(wire.turn),
+    turnNumber: Math.max(1, wire.version),
+    moveCount: Math.max(0, wire.version - 1),
+    sfen: 'online-match',
+    stateHash: `v${wire.version}`,
+    boardState: buildBoardState(pieces, defsByCode),
+    hands,
+  };
+
+  return injectSkillDefinitionsIntoPosition(position, pieceCatalog);
+}
+
+export function injectSkillDefinitionsIntoPosition(
+  position: AiBattlePosition,
+  pieceCatalog: PieceCatalogItem[],
+): AiBattlePosition {
+  const defsByCode: Record<string, PieceCatalogItem> = {};
+  for (const item of pieceCatalog) {
+    const code = (item.pieceCode ?? '').toUpperCase();
+    if (!code) continue;
+    defsByCode[code] = item;
+  }
+  const assembled = assembleSkillDefinitionsV2ForSession(defsByCode);
+  const boardState = { ...(position.boardState as Record<string, unknown>) };
+  boardState.skill_definitions_v2 = assembled;
+  return { ...position, boardState };
+}
+
+export function canonicalToMatchingWire(position: AiBattlePosition): MatchingGameState {
+  const boardState = position.boardState as { pieces?: BoardPiece[] };
+  const pieces = boardState.pieces ?? [];
+  const board: Record<string, string> = {};
+  for (const piece of pieces) {
+    const square = formatMatchingSquare(piece.row, piece.col);
+    const serverSide = canonicalSideToServerSide(piece.side);
+    const code = piece.pieceCode ?? 'FU';
+    board[square] = `${serverSide}:${code}${piece.promoted ? '+' : ''}`;
+  }
+
+  const hands: MatchingGameState['hands'] = {
+    black: { ...position.hands.player },
+    white: { ...position.hands.enemy },
+  };
+
+  return {
+    version: Math.max(1, position.moveCount + 1),
+    turn: canonicalSideToServerSide(position.sideToMove),
+    board,
+    hands,
+  };
+}
+
+export function isMyTurnInCanonical(myRole: PlayerSide, position: AiBattlePosition): boolean {
+  return canonicalSideToServerSide(position.sideToMove) === myRole;
+}
+
+/** UI 表示用: 自分の駒を player 側として見せる */
+export function piecesForDisplay(
+  pieces: BoardPiece[],
+  myRole: PlayerSide,
+): BoardPiece[] {
+  if (myRole === 'black') return pieces;
+  return pieces.map((piece) => ({
+    ...piece,
+    side: piece.side === 'player' ? 'enemy' : 'player',
+  }));
+}
+
+export function handsForDisplay(
+  hands: { player: Record<string, number>; enemy: Record<string, number> },
+  myRole: PlayerSide,
+) {
+  if (myRole === 'black') return hands;
+  return { player: hands.enemy, enemy: hands.player };
+}

@@ -15,6 +15,8 @@ export type RollGachaResult =
       type: 'hit';
       piece: GachaPiece;
       alreadyOwned: boolean;
+      /** 既所持の当たり駒が出たときに付与された金通貨（mock / API） */
+      duplicateGoldGranted?: number;
       duplicateLabel?: string;
       pawnCurrency: number;
       goldCurrency: number;

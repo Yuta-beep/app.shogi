@@ -16,6 +16,8 @@ import {
   normalizePieceCatalog,
   normalizeStageBattleSession,
 } from '@/ai/model';
+import { mergeStageFixedArrowTilesIntoPosition } from '@/ai/engine/stage-fixed-arrow-tiles';
+import { mergeStageFixedPitHazardsIntoPosition } from '@/ai/engine/stage-fixed-hazards';
 
 export type LocalBattleGameRecord = {
   gameId: string;
@@ -57,6 +59,18 @@ export function clearActiveStageSession() {
   activeStageSession = null;
 }
 
+function withStageFixedBoardTiles(
+  position: BattleCanonicalPosition,
+  stageNo?: number,
+): AiBattlePosition {
+  const normalized = normalizeBattlePosition(position);
+  if (!stageNo || !Number.isInteger(stageNo) || stageNo <= 0) return normalized;
+  return mergeStageFixedArrowTilesIntoPosition(
+    mergeStageFixedPitHazardsIntoPosition(normalized, stageNo),
+    stageNo,
+  );
+}
+
 export function createLocalBattleGame(input: {
   playerId: string;
   stageNo?: number;
@@ -69,7 +83,7 @@ export function createLocalBattleGame(input: {
     playerId: input.playerId,
     stageNo: input.stageNo,
     pieceCatalog: getLocalBattlePieceCatalog(),
-    position: normalizeBattlePosition(input.position),
+    position: withStageFixedBoardTiles(input.position, input.stageNo),
     game: normalizeBattleGameStatus(input.game),
     startedAt: new Date().toISOString(),
   };
@@ -83,7 +97,7 @@ export function getLocalBattleGame(gameId: string): LocalBattleGameRecord | null
   return {
     ...record,
     pieceCatalog: getLocalBattlePieceCatalog(),
-    position: normalizeBattlePosition(record.position),
+    position: withStageFixedBoardTiles(record.position, record.stageNo),
     game: normalizeBattleGameStatus(record.game),
   };
 }
@@ -99,11 +113,15 @@ export function updateLocalBattleGame(
   const next = updater({
     ...current,
     pieceCatalog: getLocalBattlePieceCatalog(),
-    position: normalizeBattlePosition(current.position),
+    position: withStageFixedBoardTiles(current.position, current.stageNo),
     game: normalizeBattleGameStatus(current.game),
   });
-  localGames.set(gameId, next);
-  return next;
+  const merged: LocalBattleGameRecord = {
+    ...next,
+    position: withStageFixedBoardTiles(next.position, next.stageNo),
+  };
+  localGames.set(gameId, merged);
+  return merged;
 }
 
 export function clearLocalBattleGames() {

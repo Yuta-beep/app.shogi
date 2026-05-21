@@ -5,6 +5,7 @@ import {
   giantAnchorFootprint,
   isGiantPieceForEngine,
 } from '@/ai/engine/giant-piece';
+import { henBoardEdgeCells, parseHenBoardEdge } from '@/ai/engine/hen-board-edge';
 import { immobilizedCellKeysForPosition } from '@/ai/engine/skill-runtime';
 import {
   isKirinImmuneCapturerPiece,
@@ -57,10 +58,16 @@ export const PRISON_CHAIN_IMAGE_SOURCE = require('../../../../assets/cells/鎖.p
 export const BATSU_CELL_IMAGE_SOURCE = require('../../../../assets/cells/バツマス.png');
 /** 薔スキルの茨化セル表示 */
 export const THORN_CELL_IMAGE_SOURCE = require('../../../../assets/cells/茨マス.png');
+
+export const SAFE_ROOM_CELL_IMAGE_SOURCE = require('../../../../assets/cells/セーフルーム.png');
 /** 菊スキル: 復活効果付与中の駒のバッジ */
 export const CHRYSANTHEMUM_REVIVAL_IMAGE_SOURCE = require('../../../../assets/cells/復活.png');
 /** 岩スキルの障害物セル表示 */
 export const ROCK_OBSTACLE_IMAGE_SOURCE = require('../../../../assets/pieces/岩の障害物.png');
+export const ARROW_UP_CELL_IMAGE_SOURCE = require('../../../../assets/cells/上.png');
+export const ARROW_LEFT_CELL_IMAGE_SOURCE = require('../../../../assets/cells/左.png');
+export const ARROW_DOWN_CELL_IMAGE_SOURCE = require('../../../../assets/cells/下.png');
+export const ARROW_RIGHT_CELL_IMAGE_SOURCE = require('../../../../assets/cells/右.png');
 
 const STANDARD_PIECE_CODES = new Set(['FU', 'KY', 'KE', 'GI', 'KI', 'KA', 'HI', 'OU']);
 
@@ -1278,6 +1285,94 @@ export function batsuHazardCellsForDisplay(position: BattleCanonicalPosition): B
   return out;
 }
 
+export type ArrowCellDisplay = BoardCell & {
+  direction: 'up' | 'down' | 'left' | 'right';
+};
+
+export function arrowCellsForDisplay(position: BattleCanonicalPosition): ArrowCellDisplay[] {
+  const boardState = asRecord(position.boardState);
+  if (!boardState) return [];
+  const skillState = asRecord(boardState.skill_state ?? boardState.skillState);
+  const rawList = (skillState?.board_arrow_tiles ?? skillState?.boardArrowTiles) as unknown;
+  if (!Array.isArray(rawList)) return [];
+
+  const out: ArrowCellDisplay[] = [];
+  const seen = new Set<string>();
+  for (const raw of rawList) {
+    const tile = asRecord(raw);
+    if (!tile) continue;
+    const remaining = Number(tile.remaining_turns ?? tile.remainingTurns ?? 1);
+    const row = normalizeCellIndex(Number(tile.row));
+    const col = normalizeCellIndex(Number(tile.col));
+    const dirRaw = asString(tile.direction)?.toLowerCase();
+    if (!Number.isFinite(remaining) || remaining <= 0) continue;
+    if (row === null || col === null) continue;
+    if (dirRaw !== 'up' && dirRaw !== 'down' && dirRaw !== 'left' && dirRaw !== 'right') continue;
+    const key = `${row}:${col}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ row, col, direction: dirRaw });
+  }
+  return out;
+}
+
+export function henEdgeHighlightCellsForDisplay(position: BattleCanonicalPosition): BoardCell[] {
+  const boardState = asRecord(position.boardState);
+  if (!boardState) return [];
+  const skillState = asRecord(boardState.skill_state ?? boardState.skillState);
+  const rawList = (skillState?.board_hazards ??
+    skillState?.boardHazards ??
+    boardState.board_hazards ??
+    boardState.boardHazards) as unknown;
+  if (!Array.isArray(rawList)) return [];
+
+  for (const raw of rawList) {
+    const hazard = asRecord(raw);
+    if (!hazard) continue;
+    const hazardType = asString(hazard.hazard_type ?? hazard.hazardType) ?? '';
+    if (hazardType !== 'hen_edge_highlight') continue;
+    const remaining = Number(hazard.remaining_turns ?? hazard.remainingTurns ?? 1);
+    if (!Number.isFinite(remaining) || remaining <= 0) continue;
+    const edge = parseHenBoardEdge(asString(hazard.edge));
+    if (!edge) continue;
+    return henBoardEdgeCells(edge).map((cell) => ({
+      row: normalizeCellIndex(cell.row) ?? cell.row,
+      col: normalizeCellIndex(cell.col) ?? cell.col,
+    }));
+  }
+  return [];
+}
+
+export function safeRoomHazardCellsForDisplay(position: BattleCanonicalPosition): BoardCell[] {
+  const boardState = asRecord(position.boardState);
+  if (!boardState) return [];
+  const skillState = asRecord(boardState.skill_state ?? boardState.skillState);
+  const rawList = (skillState?.board_hazards ??
+    skillState?.boardHazards ??
+    boardState.board_hazards ??
+    boardState.boardHazards) as unknown;
+  if (!Array.isArray(rawList)) return [];
+
+  const out: BoardCell[] = [];
+  const seen = new Set<string>();
+  for (const raw of rawList) {
+    const hazard = asRecord(raw);
+    if (!hazard) continue;
+    const hazardType = asString(hazard.hazard_type ?? hazard.hazardType) ?? '';
+    const remaining = Number(hazard.remaining_turns ?? hazard.remainingTurns ?? 1);
+    const row = normalizeCellIndex(Number(hazard.row));
+    const col = normalizeCellIndex(Number(hazard.col));
+    if (hazardType !== 'safe_room_cell') continue;
+    if (!Number.isFinite(remaining) || remaining <= 0) continue;
+    if (row === null || col === null) continue;
+    const key = `${row}:${col}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ row, col });
+  }
+  return out;
+}
+
 export function thornHazardCellsForDisplay(position: BattleCanonicalPosition): BoardCell[] {
   const boardState = asRecord(position.boardState);
   if (!boardState) return [];
@@ -2402,7 +2497,10 @@ export function syncCanonicalState(params: {
   const poisonHazardCells = poisonHazardCellsForDisplay(position);
   const rockObstacleCells = rockObstacleCellsForDisplay(position);
   const batsuHazardCells = batsuHazardCellsForDisplay(position);
+  const arrowCells = arrowCellsForDisplay(position);
   const thornHazardCells = thornHazardCellsForDisplay(position);
+  const safeRoomHazardCells = safeRoomHazardCellsForDisplay(position);
+  const henEdgeHighlightCells = henEdgeHighlightCellsForDisplay(position);
   const rawMovementRuleByCell = movementRuleByCellFromCanonical(position);
   const immobilizedKeys = immobilizedKeysFromCanonical(position);
   const nextHands = remapHandsStateToDisplayPieceCodes(
@@ -2438,7 +2536,10 @@ export function syncCanonicalState(params: {
     poisonHazardCells,
     rockObstacleCells,
     batsuHazardCells,
+    arrowCells,
     thornHazardCells,
+    safeRoomHazardCells,
+    henEdgeHighlightCells,
     hands: reconciledHands,
     sideToMove: position.sideToMove,
     moveNo: position.turnNumber,

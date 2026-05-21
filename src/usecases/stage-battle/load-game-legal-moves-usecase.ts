@@ -1,5 +1,7 @@
+import { ensureShinTurnMimicForBattle } from '@/ai/engine/legal-moves';
 import { generateLocalLegalMoves } from '@/ai/local-engine';
-import { getLocalBattleGame } from '@/ai/local-battle-registry';
+import { getLocalBattleGame, updateLocalBattleGame } from '@/ai/local-battle-registry';
+import { normalizeBattlePosition } from '@/ai/model';
 import { BattleLegalMoves } from '@/usecases/stage-battle/game-move-contract';
 
 export type LoadGameLegalMovesInput = {
@@ -12,8 +14,14 @@ export class LoadGameLegalMovesUseCase {
     if (!record) {
       throw new Error(`local battle game not found: ${input.gameId}`);
     }
+    const position = normalizeBattlePosition(record.position);
+    ensureShinTurnMimicForBattle(position, record.pieceCatalog);
+    updateLocalBattleGame(input.gameId, (current) => ({
+      ...current,
+      position,
+    }));
     return generateLocalLegalMoves({
-      position: record.position,
+      position,
       pieceCatalog: record.pieceCatalog,
     });
   }

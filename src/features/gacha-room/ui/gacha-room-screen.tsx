@@ -58,6 +58,11 @@ function ResultBlock({ vm, selected }: { vm: GachaRoomVM; selected: GachaBanner 
               ? `${result.piece.name}（${result.piece.rarity}）は既に所持！`
               : `${result.piece.name}（${result.piece.rarity}）を獲得！`}
           </Text>
+          {result.alreadyOwned && (result.duplicateGoldGranted ?? 0) > 0 ? (
+            <Text className="text-sm font-bold text-yellow-300">
+              {`代わりに金通貨 x${result.duplicateGoldGranted} を獲得しました`}
+            </Text>
+          ) : null}
           {pieceSource ? (
             <View className="items-center py-2">
               <Image

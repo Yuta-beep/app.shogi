@@ -1,3 +1,4 @@
+import { enrichGachaBanner } from '@/constants/gacha-lineup-catalog';
 import { resolveGachaBannerKey } from '@/constants/gacha-room-assets';
 import type { GachaBanner } from '@/usecases/gacha-room/load-gacha-lobby-usecase';
 
@@ -54,7 +55,7 @@ const INTRO_FALLBACK: Record<(typeof GACHA_INTRO_KEYS)[number], GachaBanner> = {
 export function mergeIntroBanners(apiBanners: GachaBanner[]): GachaBanner[] {
   return GACHA_INTRO_KEYS.map((introKey) => {
     const fromApi = apiBanners.find((b) => resolveGachaBannerKey(b.key) === introKey);
-    if (fromApi) return fromApi;
-    return INTRO_FALLBACK[introKey];
+    if (fromApi) return enrichGachaBanner(fromApi);
+    return enrichGachaBanner(INTRO_FALLBACK[introKey]);
   });
 }

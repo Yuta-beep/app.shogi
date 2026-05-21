@@ -23,8 +23,13 @@ export function usePieceCatalogScreen() {
       const catalog = await loadUseCase.execute();
 
       if (!isApiMode) {
+        const deckSnapshot = await createLoadDeckBuilderUseCase().execute();
+        const ownedByChar = new Set(deckSnapshot.ownedPieces.map((piece) => piece.char));
+        const ownedCatalog = catalog
+          .filter((piece) => ownedByChar.has(piece.char))
+          .map((piece) => normalizePieceCatalogItemForDisplay(piece));
         if (active) {
-          setItems(catalog.map((piece) => normalizePieceCatalogItemForDisplay(piece)));
+          setItems(ownedCatalog);
         }
         return;
       }

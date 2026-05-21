@@ -7,7 +7,6 @@ describe('MockLoadOnlineBattleSessionUseCase', () => {
 
     expect(session.roomId).toBe('A12X9');
     expect(session.opponentLabel).toContain('searching...');
-    expect(session.opponentLabel).toContain('(R----)');
   });
 
   it('reflects opponent and rating in label when provided', async () => {

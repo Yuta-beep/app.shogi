@@ -24,13 +24,39 @@ export const gachaRoomAssets = {
   } as Record<string, ImageSourcePropType>,
 } as const;
 
-/** API と過去モックの表記ゆれを正規化 */
+/** API と過去モックの表記ゆれを正規化（UI・モック用） */
 const BANNER_KEY_ALIASES: Record<string, string> = {
   hihen: 'hiHen',
 };
 
+/** BFF / master.m_gacha.gacha_code（roll API 用） */
+const ROLL_CODE_ALIASES: Record<string, string> = {
+  hiHen: 'hihen',
+};
+
 export function resolveGachaBannerKey(key: string): string {
   return BANNER_KEY_ALIASES[key] ?? key;
+}
+
+/** ガチャ抽選 API に送る gacha_code */
+export function toGachaRollCode(key: string): string {
+  const intro = resolveGachaBannerKey(key);
+  return ROLL_CODE_ALIASES[intro] ?? ROLL_CODE_ALIASES[key] ?? key;
+}
+
+/**
+ * ロビー API が返したバナーの key を優先し、無い場合は API 一覧が空のときだけフォールバック変換。
+ * API 一覧があるのに該当ガチャが無いときは null（DB 未登録・非公開）。
+ */
+export function resolveGachaRollCode(
+  displayKey: string,
+  apiBanners: ReadonlyArray<{ key: string }>,
+): string | null {
+  const intro = resolveGachaBannerKey(displayKey);
+  const fromApi = apiBanners.find((b) => resolveGachaBannerKey(b.key) === intro);
+  if (fromApi) return fromApi.key;
+  if (apiBanners.length > 0) return null;
+  return toGachaRollCode(displayKey);
 }
 
 /** バンドル済みバナーがあるか（このキーならリモートURLよりローカルを優先する） */

@@ -1,17 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
-import {
-  ImageBackground,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  useWindowDimensions,
-  View,
-} from 'react-native';
+import { useCallback } from 'react';
+import { ImageBackground, Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppLoadingScreen } from '@/components/organism/app-loading-screen';
@@ -22,8 +12,14 @@ import {
 import { stageShogiBattleAssetPreloadTargets } from '@/constants/stage-shogi-battle-assets';
 import { BattleEndResultOverlay } from '@/features/stage-shogi/ui/components/battle-end-result-overlay';
 import { homeAssets } from '@/constants/home-assets';
+import { OnlineBattleBoard } from '@/features/online-battle/ui/components/online-battle-board';
+import {
+  StageShogiHouseSkillModal,
+  StageShogiTimeActionModal,
+} from '@/features/stage-shogi/ui/components/stage-shogi-modals';
 import { parseOnlineBattleDisplay } from '@/features/online-battle/lib/parse-session-labels';
 import { useOnlineBattleScreen } from '@/features/online-battle/ui/use-online-battle-screen';
+import { StageShogiHandsRow } from '@/features/stage-shogi/ui/components/stage-shogi-hands-row';
 import { useAssetPreload } from '@/hooks/common/use-asset-preload';
 import { useScreenBgm } from '@/hooks/common/use-screen-bgm';
 import { playSe } from '@/lib/audio/audio-manager';
@@ -34,17 +30,44 @@ const HTML_APP_MAX_WIDTH = 540;
 export function OnlineBattleScreen() {
   const router = useRouter();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
-  const params = useLocalSearchParams<{ opponent?: string; rating?: string }>();
-  const { session, isLoading } = useOnlineBattleScreen(params.opponent, params.rating);
+  const params = useLocalSearchParams<{ matchId?: string; opponent?: string; rating?: string }>();
+  const vm = useOnlineBattleScreen(params.matchId);
+  const {
+    session,
+    isLoading,
+    resign,
+    disconnect,
+    pieces,
+    hands,
+    role,
+    pieceCatalog,
+    pieceDefsByCode,
+    pieceSfenMapping,
+    selectedCell,
+    selectedDropPieceCode,
+    legalTargets,
+    enemyPreviewTargets,
+    pendingPromotion,
+    pendingTimeActionCell,
+    pendingHouseSkillCell,
+    pendingSatoriEnemyPick,
+    pendingHeartAllyPick,
+    moveError,
+    canInteract,
+    handleCellPress,
+    handleHandPiecePress,
+    commitMove,
+    setPendingPromotion,
+    confirmTimeAction,
+    cancelTimeAction,
+    confirmHouseSkill,
+    cancelHouseSkill,
+  } = vm;
   const { isReady: areAssetsReady } = useAssetPreload([
     ...onlineBattleHtmlPreloadTargets,
     ...stageShogiBattleAssetPreloadTargets,
   ]);
   useScreenBgm('onlineBattle');
-
-  const [lanServerUrl, setLanServerUrl] = useState('ws://localhost:8080');
-  const [lanRoomId, setLanRoomId] = useState('room1');
-  const [lanStatusLine, setLanStatusLine] = useState('');
 
   const contentWidth = Math.min(windowWidth - 24, HTML_APP_MAX_WIDTH);
   const boardSize = Math.min(contentWidth - 8, HTML_APP_MAX_WIDTH);
@@ -53,19 +76,14 @@ export function OnlineBattleScreen() {
 
   const goHome = useCallback(() => {
     void playSe('tap');
+    disconnect();
     router.replace('/home');
-  }, [router]);
+  }, [disconnect, router]);
 
-  const onLanConnect = useCallback(
-    (role: 'first' | 'second') => {
-      void playSe('tap');
-      const label = role === 'first' ? '先手' : '後手';
-      setLanStatusLine(
-        `${label}で入室リクエスト（モック: 実際の WebSocket 接続は未実装） — ${lanServerUrl} / ${lanRoomId}`,
-      );
-    },
-    [lanRoomId, lanServerUrl],
-  );
+  const onResign = useCallback(() => {
+    void playSe('cancel');
+    resign();
+  }, [resign]);
 
   if (isLoading || !areAssetsReady) {
     return <AppLoadingScreen imageSource={homeAssets.loadingImage} />;
@@ -139,71 +157,60 @@ export function OnlineBattleScreen() {
               </View>
             </View>
 
-            {/* LAN パネル */}
-            <View style={styles.lanPanel}>
-              <Text style={styles.lanTitle}>LAN対戦（同じWi-Fi内）</Text>
-              <View style={styles.lanRow}>
-                <Text style={styles.lanLabel}>サーバーURL:</Text>
-                <TextInput
-                  value={lanServerUrl}
-                  onChangeText={setLanServerUrl}
-                  placeholder="ws://192.168.x.x:8080"
-                  placeholderTextColor="#aaa"
-                  style={styles.lanInput}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                />
-              </View>
-              <View style={[styles.lanRow, { marginTop: 8 }]}>
-                <Text style={styles.lanLabel}>部屋ID:</Text>
-                <TextInput
-                  value={lanRoomId}
-                  onChangeText={setLanRoomId}
-                  placeholder="例: room1"
-                  placeholderTextColor="#aaa"
-                  style={[styles.lanInput, { maxWidth: 120 }]}
-                />
-              </View>
-              <View style={styles.lanButtons}>
-                <Pressable
-                  onPress={() => onLanConnect('first')}
-                  style={({ pressed }) => [
-                    styles.lanBtn,
-                    styles.lanBtnGreen,
-                    pressed && { opacity: 0.85 },
-                  ]}
-                >
-                  <Text style={styles.lanBtnText}>先手で入室</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => onLanConnect('second')}
-                  style={({ pressed }) => [
-                    styles.lanBtn,
-                    styles.lanBtnBlue,
-                    pressed && { opacity: 0.85 },
-                  ]}
-                >
-                  <Text style={styles.lanBtnText}>後手で入室</Text>
-                </Pressable>
-              </View>
-              {lanStatusLine ? <Text style={styles.lanStatus}>{lanStatusLine}</Text> : null}
-              <Text style={styles.lanFootnote}>
-                ※スマホから接続する場合: サーバーURLに{' '}
-                <Text style={{ fontWeight: '800' }}>ws://（PCのIPアドレス）:8080</Text> を入力（例:
-                ws://192.168.1.5:8080）。同じWi-Fiにし、接続できない場合はPCのWindowsファイアウォールでポート8080を許可してください。
+            <View style={styles.serverPanel}>
+              <Text style={styles.serverPanelTitle}>マッチングサーバー対戦</Text>
+              <Text style={styles.serverPanelMeta}>
+                版数 v{session.version}
+                {session.matchId ? ` / 対局 ${session.matchId.slice(0, 8)}` : ''}
+              </Text>
+              <Pressable
+                onPress={onResign}
+                disabled={Boolean(session.winnerSide)}
+                style={({ pressed }) => [
+                  styles.resignBtn,
+                  session.winnerSide && styles.resignBtnDisabled,
+                  pressed && !session.winnerSide && { opacity: 0.85 },
+                ]}
+              >
+                <Text style={styles.resignBtnText}>投了</Text>
+              </Pressable>
+              {moveError ? <Text style={styles.moveErrorText}>{moveError}</Text> : null}
+              <Text style={styles.serverPanelFootnote}>
+                ステージ戦と同じ駒図鑑エンジンで特殊駒・スキル手を含む合法手を表示します。
               </Text>
             </View>
 
             {/* HTML .row: 盤 → サイド */}
             <View style={styles.rowColumn}>
               <View style={styles.boardWrap}>
-                <View style={[styles.boardFrame, { width: boardSize, height: boardSize }]}>
-                  <Image
-                    source={onlineBattleHtmlAssets.board}
-                    contentFit="cover"
-                    style={StyleSheet.absoluteFillObject}
+                {role ? (
+                  <OnlineBattleBoard
+                    boardSize={boardSize}
+                    boardImage={onlineBattleHtmlAssets.board}
+                    pieces={pieces}
+                    myRole={role}
+                    selectedCell={selectedCell}
+                    legalTargets={legalTargets}
+                    enemyPreviewTargets={enemyPreviewTargets}
+                    pieceDefsByCode={pieceDefsByCode}
+                    canInteract={
+                      canInteract ||
+                      Boolean(pendingSatoriEnemyPick?.length) ||
+                      Boolean(pendingHeartAllyPick?.length)
+                    }
+                    onCellPress={handleCellPress}
                   />
-                </View>
+                ) : null}
+                {pendingSatoriEnemyPick && pendingSatoriEnemyPick.length > 1 ? (
+                  <Text style={styles.skillHintSatori}>
+                    「悟」のスキル：味方が移動したあと、行動を止める敵駒のマスをタップしてください（王・玉は選べません）
+                  </Text>
+                ) : null}
+                {pendingHeartAllyPick && pendingHeartAllyPick.length > 1 ? (
+                  <Text style={styles.skillHintHeart}>
+                    「心」のスキル：味方が移動したあと、2ターン捕獲されないように守る味方駒のマスをタップしてください（王・玉は選べません）
+                  </Text>
+                ) : null}
                 <View style={styles.statusBar}>
                   <Text style={styles.statusText}>{session.connectionStatus}</Text>
                 </View>
@@ -214,7 +221,7 @@ export function OnlineBattleScreen() {
                 <View style={styles.infoList}>
                   <View style={styles.infoItem}>
                     <Text style={styles.infoItemLabel}>ターン</Text>
-                    <Text style={styles.infoItemValue}>待機中</Text>
+                    <Text style={styles.infoItemValue}>{session.turnLabel}</Text>
                   </View>
                   <View style={styles.infoItem}>
                     <Text style={styles.infoItemLabel}>ルーム</Text>
@@ -223,22 +230,108 @@ export function OnlineBattleScreen() {
                 </View>
 
                 <Text style={[styles.sideHeading, { marginTop: 12 }]}>あなたの持ち駒</Text>
-                <View style={styles.handPlaceholder} />
+                {pieceSfenMapping ? (
+                  <StageShogiHandsRow
+                    side="player"
+                    hands={hands}
+                    pieceSfenMapping={pieceSfenMapping}
+                    pieceDefsByCode={pieceDefsByCode}
+                    selectedDropPieceCode={selectedDropPieceCode}
+                    sideToMove="player"
+                    isAiThinking={false}
+                    isCreatingGame={false}
+                    isFinished={Boolean(session.winnerSide)}
+                    hasPendingPromotion={Boolean(pendingPromotion)}
+                    pieceCatalog={pieceCatalog}
+                    compact
+                    onPressPiece={handleHandPiecePress}
+                  />
+                ) : (
+                  <Text style={styles.handSummaryText}>{session.playerHandSummary}</Text>
+                )}
 
                 <Text style={[styles.sideHeading, { marginTop: 12 }]}>敵の持ち駒</Text>
-                <View style={styles.handPlaceholder} />
+                {pieceSfenMapping ? (
+                  <StageShogiHandsRow
+                    side="enemy"
+                    hands={hands}
+                    pieceSfenMapping={pieceSfenMapping}
+                    pieceDefsByCode={pieceDefsByCode}
+                    selectedDropPieceCode={null}
+                    sideToMove="player"
+                    isAiThinking={false}
+                    isCreatingGame={false}
+                    isFinished={Boolean(session.winnerSide)}
+                    hasPendingPromotion={false}
+                    pieceCatalog={pieceCatalog}
+                    compact
+                    onPressPiece={() => undefined}
+                  />
+                ) : (
+                  <Text style={styles.handSummaryText}>{session.opponentHandSummary}</Text>
+                )}
 
                 <Text style={[styles.sideHeading, { marginTop: 12 }]}>対戦ログ</Text>
                 <View style={styles.logPanel}>
-                  <Text style={styles.logLine}>
-                    <Text style={styles.logStrong}>システム</Text>{' '}
-                    対戦準備中（盤面・駒操作は今後接続されます）
-                  </Text>
+                  {session.logLines.length === 0 ? (
+                    <Text style={styles.logLine}>
+                      <Text style={styles.logStrong}>システム</Text> ログ待機中
+                    </Text>
+                  ) : (
+                    session.logLines.map((line, index) => (
+                      <Text key={`${index}-${line}`} style={styles.logLine}>
+                        <Text style={styles.logStrong}>・</Text> {line}
+                      </Text>
+                    ))
+                  )}
                 </View>
               </View>
             </View>
 
             {session.winnerSide ? <BattleEndResultOverlay winner={session.winnerSide} /> : null}
+
+            <StageShogiTimeActionModal
+              pending={pendingTimeActionCell}
+              onConfirm={confirmTimeAction}
+              onCancel={cancelTimeAction}
+            />
+            <StageShogiHouseSkillModal
+              pending={pendingHouseSkillCell}
+              onUseSkill={confirmHouseSkill}
+              onCancel={cancelHouseSkill}
+            />
+
+            <Modal visible={Boolean(pendingPromotion)} transparent animationType="fade">
+              <View style={styles.promoOverlay}>
+                <View style={styles.promoCard}>
+                  <Text style={styles.promoTitle}>成りますか？</Text>
+                  <View style={styles.promoButtons}>
+                    <Pressable
+                      style={[styles.promoBtn, styles.promoBtnPrimary]}
+                      onPress={() => {
+                        if (pendingPromotion) {
+                          commitMove(pendingPromotion.promoteMove);
+                          setPendingPromotion(null);
+                        }
+                      }}
+                    >
+                      <Text style={styles.promoBtnText}>成る</Text>
+                    </Pressable>
+                    <Pressable
+                      style={[styles.promoBtn, styles.promoBtnSecondary]}
+                      onPress={() => {
+                        if (pendingPromotion) {
+                          commitMove(pendingPromotion.nonPromoteMove);
+                          setPendingPromotion(null);
+                        }
+                      }}
+                    >
+                      <Text style={styles.promoBtnText}>成らない</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              </View>
+            </Modal>
           </View>
         </ScrollView>
       </SafeAreaView>
@@ -329,71 +422,94 @@ const styles = StyleSheet.create({
   ratingMetaStrong: {
     fontWeight: '700',
   },
-  lanPanel: {
+  serverPanel: {
     marginVertical: 12,
     padding: 12,
     borderRadius: 8,
     backgroundColor: 'rgba(0,0,0,0.5)',
   },
-  lanTitle: {
+  serverPanelTitle: {
     color: '#fff',
     fontWeight: '700',
-    marginBottom: 8,
+    marginBottom: 4,
     fontSize: 15,
   },
-  lanRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    gap: 8,
+  serverPanelMeta: {
+    color: '#e5e7eb',
+    fontSize: 13,
+    marginBottom: 10,
   },
-  lanLabel: {
-    color: '#fff',
-    fontSize: 14,
-  },
-  lanInput: {
-    flex: 1,
-    minWidth: 160,
-    backgroundColor: '#fff',
-    borderRadius: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    fontSize: 14,
-    color: '#111',
-  },
-  lanButtons: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 10,
-    alignItems: 'center',
-  },
-  lanBtn: {
+  resignBtn: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#dc2626',
+    borderRadius: 6,
+    paddingHorizontal: 16,
     paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 4,
   },
-  lanBtnGreen: {
-    backgroundColor: '#4caf50',
+  resignBtnDisabled: {
+    opacity: 0.45,
   },
-  lanBtnBlue: {
-    backgroundColor: '#2196f3',
-  },
-  lanBtnText: {
+  resignBtnText: {
     color: '#fff',
-    fontWeight: '700',
+    fontWeight: '800',
     fontSize: 14,
   },
-  lanStatus: {
-    marginTop: 8,
-    fontSize: 14,
-    color: '#e0e0e0',
-  },
-  lanFootnote: {
-    marginTop: 8,
+  serverPanelFootnote: {
+    marginTop: 10,
     fontSize: 12,
     color: '#ccc',
     lineHeight: 18,
+  },
+  moveErrorText: {
+    marginTop: 8,
+    color: '#fecaca',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  promoOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  promoCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 20,
+    minWidth: 260,
+  },
+  promoTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#111',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  promoButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'center',
+  },
+  promoBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 8,
+  },
+  promoBtnPrimary: {
+    backgroundColor: '#2563eb',
+  },
+  promoBtnSecondary: {
+    backgroundColor: '#64748b',
+  },
+  promoBtnText: {
+    color: '#fff',
+    fontWeight: '800',
+  },
+  handSummaryText: {
+    fontSize: 13,
+    color: '#334155',
+    lineHeight: 20,
   },
   rowColumn: {
     flexDirection: 'column',
@@ -404,11 +520,6 @@ const styles = StyleSheet.create({
   boardWrap: {
     position: 'relative',
     alignItems: 'center',
-  },
-  boardFrame: {
-    borderRadius: 8,
-    overflow: 'hidden',
-    backgroundColor: '#2a1810',
   },
   statusBar: {
     marginTop: 12,
@@ -484,5 +595,21 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '800',
     marginRight: 6,
+  },
+  skillHintSatori: {
+    marginTop: 8,
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#1d4ed8',
+    textAlign: 'center',
+    paddingHorizontal: 8,
+  },
+  skillHintHeart: {
+    marginTop: 8,
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#92400e',
+    textAlign: 'center',
+    paddingHorizontal: 8,
   },
 });

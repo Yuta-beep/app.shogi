@@ -1,9 +1,14 @@
+import { resetGachaMockStore } from '@/features/gacha-room/lib/gacha-mock-store';
 import {
   MockLoadGachaLobbyUseCase,
   MockRollGachaUseCase,
 } from '@/usecases/gacha-room/mock-gacha-room-usecases';
 
 describe('gacha room usecases', () => {
+  beforeEach(() => {
+    resetGachaMockStore();
+  });
+
   it('loads gacha banners, wallet, and history', async () => {
     const usecase = new MockLoadGachaLobbyUseCase();
     const snapshot = await usecase.execute();
@@ -14,18 +19,42 @@ describe('gacha room usecases', () => {
     expect(snapshot.history).toEqual([]);
   });
 
-  it('returns a deterministic roll result for miss path', async () => {
-    const randomSpy = jest.spyOn(Math, 'random').mockReturnValue(0.9);
+  it('rolls ukanmuri currency pawn from weighted table', async () => {
+    const randomSpy = jest.spyOn(Math, 'random').mockReturnValue(0.5);
     const usecase = new MockRollGachaUseCase();
     const result = await usecase.execute({ gachaId: 'ukanmuri' });
 
-    expect(result).toEqual({
-      type: 'miss',
-      currency: 'pawn',
-      amount: 5,
-      pawnCurrency: 3005,
-      goldCurrency: 20,
-    });
+    expect(result.type).toBe('miss');
+    if (result.type === 'miss') {
+      expect(result.currency).toBe('pawn');
+      expect(result.amount).toBe(2);
+      expect(result.pawnCurrency).toBe(3000 - 30 + 2);
+    }
+    randomSpy.mockRestore();
+  });
+
+  it('grants duplicate gold when collectible piece is already owned', async () => {
+    const randomSpy = jest
+      .spyOn(Math, 'random')
+      .mockReturnValueOnce(0.01)
+      .mockReturnValueOnce(0.01)
+      .mockReturnValueOnce(0.01)
+      .mockReturnValueOnce(0.01);
+    const usecase = new MockRollGachaUseCase();
+
+    const first = await usecase.execute({ gachaId: 'ukanmuri' });
+    expect(first.type).toBe('hit');
+    if (first.type === 'hit') {
+      expect(first.alreadyOwned).toBe(false);
+    }
+
+    const second = await usecase.execute({ gachaId: 'ukanmuri' });
+    expect(second.type).toBe('hit');
+    if (second.type === 'hit') {
+      expect(second.alreadyOwned).toBe(true);
+      expect(second.duplicateGoldGranted).toBe(1);
+      expect(second.goldCurrency).toBe(21);
+    }
     randomSpy.mockRestore();
   });
 });
