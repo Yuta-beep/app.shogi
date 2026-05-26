@@ -238,12 +238,11 @@ export function HomeScreen() {
           }}
           onPressMatching={() => {
             void playSe('tap');
-            router.push('/online-match-setup' as never);
+            router.push('/online-match-mode' as never);
           }}
           onPressGachaBallIcon={openGachaBallViewer}
           playerName={snapshot.playerName}
-          playerRank={snapshot.playerRank}
-          playerExp={snapshot.playerExp}
+          playerRating={snapshot.rating}
           pawnCurrency={snapshot.pawnCurrency}
           goldCurrency={snapshot.goldCurrency}
           stamina={snapshot.stamina}
@@ -350,8 +349,7 @@ export function HomeScreen() {
                   >
                     <Text className="mb-3 text-lg font-black text-[#4b2e1f]">ガチャ玉の色</Text>
                     <Text className="mb-4 text-sm font-semibold leading-6 text-[#4b2e1f]">
-                      ガチャにおける当たり駒の出やすさは、ガチャ玉の色で確認できます。当たる確率が低い色から、白
-                      → 青 → 赤 → 金 → 黒 の順です。
+                      ガチャにおける当たり駒の出やすさは、ガチャ玉の色で確認できます。白は通常、青1.05倍、赤1.1倍、金1.2倍、黒1.5倍（当たり駒のみ。歩・金の通貨枠は変わりません）。4時間ごとに色が切り替わります。
                     </Text>
                     <ScrollView className="mb-2" showsVerticalScrollIndicator={false}>
                       <View className="flex-row flex-wrap justify-center gap-x-3 gap-y-4">

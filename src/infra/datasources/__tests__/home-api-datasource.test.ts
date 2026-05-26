@@ -24,7 +24,7 @@ describe('HomeApiDataSource', () => {
     });
     mockGetJson.mockResolvedValueOnce({
       playerName: '将棋太郎',
-      rating: 1500,
+      rating: 0,
       pawnCurrency: 0,
       goldCurrency: 0,
       playerRank: 1,

@@ -3,8 +3,10 @@ import { useEffect, useRef, useState } from 'react';
 import type { MatchingSnapshot } from '@/domain/models/online-match';
 import type { WebSocketServerMessage } from '@/domain/matching-server/protocol';
 import { useAuthSession } from '@/hooks/common/auth-session-context';
+import { getHomeSnapshotState, loadHomeSnapshot } from '@/hooks/common/home-snapshot-store';
 import { getMatchingServerClient } from '@/infra/matching-server/matching-server-client';
 import { loadCurrentBattleSetupId } from '@/lib/online-match/current-battle-setup';
+import { normalizePvpRating } from '@/lib/online-match/pvp-rating-constants';
 
 const emptySnapshot: MatchingSnapshot = {
   title: 'オンライン対戦',
@@ -58,16 +60,33 @@ export function useMatchingScreen() {
         return;
       }
 
+      await loadHomeSnapshot(true).catch(() => undefined);
+      const home = getHomeSnapshotState().snapshot;
+      const selfName = home.playerName.trim() || 'プレイヤー';
+      const selfRating = normalizePvpRating(home.rating);
+
+      if (!active) return;
+
+      setSnapshot({
+        title: 'オンライン対戦',
+        status: '対戦相手を探しています',
+        progress: 20,
+        self: { displayName: selfName, rating: selfRating },
+      });
+      setIsLoading(false);
+
       const handleMessage = (payload: WebSocketServerMessage) => {
         if (!active) return;
 
         switch (payload.type) {
           case 'queue_entered':
-            setSnapshot({
+            setSnapshot((current) => ({
+              ...current,
               title: 'オンライン対戦',
               status: '対戦相手を探しています',
               progress: 35,
-            });
+              self: current.self ?? { displayName: selfName, rating: selfRating },
+            }));
             setIsLoading(false);
             return;
           case 'match_found':
@@ -75,15 +94,24 @@ export function useMatchingScreen() {
               title: 'オンライン対戦',
               status: `対戦相手が見つかりました（${payload.role === 'black' ? '先手' : '後手'}）`,
               progress: 85,
+              self: {
+                displayName: payload.self.displayName,
+                rating: normalizePvpRating(payload.self.rating),
+              },
+              opponent: {
+                displayName: payload.opponent.displayName,
+                rating: normalizePvpRating(payload.opponent.rating),
+              },
             });
             return;
           case 'game_started':
             startedMatchIdRef.current = payload.matchId;
-            setSnapshot({
+            setSnapshot((current) => ({
+              ...current,
               title: 'オンライン対戦',
               status: '対局を開始します',
               progress: 100,
-            });
+            }));
             setIsLoading(false);
             setStartedMatchId(payload.matchId);
             return;
@@ -110,7 +138,8 @@ export function useMatchingScreen() {
         if (!active) return;
         client.enterQueue({
           userId,
-          rating: 1500,
+          rating: selfRating,
+          displayName: selfName,
           battleSetupId,
         });
       } catch {
@@ -119,6 +148,7 @@ export function useMatchingScreen() {
           title: 'オンライン対戦',
           status: client.getLastError() ?? '接続先が未設定です',
           progress: 0,
+          self: { displayName: selfName, rating: selfRating },
         });
         setIsLoading(false);
       }

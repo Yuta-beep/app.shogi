@@ -8,11 +8,15 @@
  * フロントハードコードへ逆流させない。
  */
 
-import { createEmptyHandsState, type HandsState } from '@/features/stage-shogi/domain/game-rules';
 import { CHAR_TO_CODE } from '@/features/stage-shogi/domain/char-to-piece-code-map';
+import type { HandsState } from '@/features/stage-shogi/domain/game-rules';
 import type { PieceCatalogItem } from '@/domain/models/piece';
 
 export { CHAR_TO_CODE };
+
+function createEmptyHandsState(): HandsState {
+  return { player: {}, enemy: {} };
+}
 
 export type PieceSfenMapping = {
   sfenToCode: {

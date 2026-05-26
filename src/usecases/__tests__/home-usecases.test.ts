@@ -7,7 +7,7 @@ describe('MockLoadHomeSnapshotUseCase', () => {
 
     await expect(usecase.execute()).resolves.toEqual({
       playerName: homeMock.playerName,
-      rating: homeMock.rating,
+      rating: 0,
       pawnCurrency: homeMock.pawnCurrency,
       goldCurrency: homeMock.goldCurrency,
       playerRank: homeMock.playerRank,

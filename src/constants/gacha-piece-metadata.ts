@@ -14,8 +14,10 @@ import {
   SADAME_MOVE_VECTORS,
   EN_MOVE_DESCRIPTION_JA,
   EN_MOVE_VECTORS,
+  EN_SKILL_DESCRIPTION_JA,
   KOU_MOVE_DESCRIPTION_JA,
   KOU_MOVE_VECTORS,
+  KOU_SKILL_DESCRIPTION_JA,
   SHITSU_MOVE_DESCRIPTION_JA,
   SHITSU_MOVE_VECTORS,
   HEN_MOVE_DESCRIPTION_JA,
@@ -23,6 +25,7 @@ import {
   ITSU_MOVE_DESCRIPTION_JA,
   ITSU_MOVE_VECTORS,
   SHIN_MOVE_DESCRIPTION_JA,
+  SHIN_SKILL_DESCRIPTION_JA,
   NIGE_MOVE_DESCRIPTION_JA,
   NIGE_MOVE_VECTORS,
   TOU_MOVE_DESCRIPTION_JA,
@@ -183,8 +186,8 @@ const GACHA_PIECE_META: Record<GachaCollectibleChar, GachaPieceMeta> = {
     name: '進',
     rarity: 'R',
     unlock: 'しんにょうガチャ',
-    desc: SHIN_MOVE_DESCRIPTION_JA,
-    skill: SHIN_MOVE_DESCRIPTION_JA,
+    desc: '次はどこに進んでいくのか。',
+    skill: SHIN_SKILL_DESCRIPTION_JA,
     move: SHIN_MOVE_DESCRIPTION_JA,
   },
   逃: {
@@ -219,8 +222,8 @@ const GACHA_PIECE_META: Record<GachaCollectibleChar, GachaPieceMeta> = {
     name: '閹',
     rarity: 'UR',
     unlock: '漢検１級ガチャ',
-    desc: '前後左右1マス。味方の「王」の前1マスへも移動できる。',
-    skill: '前後左右1マス。味方の「王」の前1マスへも移動できる。',
+    desc: '緊急時に王を守り抜く。',
+    skill: EN_SKILL_DESCRIPTION_JA,
     move: EN_MOVE_DESCRIPTION_JA,
   },
   膠: {
@@ -231,8 +234,8 @@ const GACHA_PIECE_META: Record<GachaCollectibleChar, GachaPieceMeta> = {
     name: '膠',
     rarity: 'SSR',
     unlock: '漢検１級ガチャ',
-    desc: '隣接する味方が横移動したとき、同じ向きに追従する（空マスのみ）。',
-    skill: '隣接する味方が横移動したとき、同じ向きに追従する（空マスのみ）。',
+    desc: '位置関係を膠着させる。',
+    skill: KOU_SKILL_DESCRIPTION_JA,
     move: KOU_MOVE_DESCRIPTION_JA,
   },
 };
@@ -263,28 +266,31 @@ function moveVectorsForGachaChar(char: GachaCollectibleChar): PieceCatalogItem['
   return [];
 }
 
+export function buildCatalogItemFromGachaChar(char: string): PieceCatalogItem | null {
+  if (!isGachaCollectibleChar(char)) return null;
+  const meta = GACHA_PIECE_META[char];
+  const skillDefinitionsV2 = skillDefinitionsV2ForGachaChar(char);
+  return {
+    pieceId: meta.pieceId,
+    pieceCode: meta.pieceCode,
+    char: meta.char,
+    name: meta.name,
+    unlock: meta.unlock,
+    desc: meta.desc,
+    skill: meta.skill,
+    move: meta.move,
+    moveVectors: moveVectorsForGachaChar(char),
+    isRepeatable: false,
+    canJump: false,
+    moveConstraints: null,
+    moveRules: [],
+    imageSignedUrl: null,
+    ...(skillDefinitionsV2 ? { skillDefinitionsV2 } : {}),
+  };
+}
+
 export function buildGachaPieceCatalogItems(): PieceCatalogItem[] {
-  return GACHA_COLLECTIBLE_CHARS.map((char) => {
-    const meta = GACHA_PIECE_META[char];
-    const skillDefinitionsV2 = skillDefinitionsV2ForGachaChar(char);
-    return {
-      pieceId: meta.pieceId,
-      pieceCode: meta.pieceCode,
-      char: meta.char,
-      name: meta.name,
-      unlock: meta.unlock,
-      desc: meta.desc,
-      skill: meta.skill,
-      move: meta.move,
-      moveVectors: moveVectorsForGachaChar(char),
-      isRepeatable: false,
-      canJump: false,
-      moveConstraints: null,
-      moveRules: [],
-      imageSignedUrl: null,
-      ...(skillDefinitionsV2 ? { skillDefinitionsV2 } : {}),
-    };
-  });
+  return GACHA_COLLECTIBLE_CHARS.map((char) => buildCatalogItemFromGachaChar(char)!);
 }
 
 export function buildGachaOwnedPiecesForDeckBuilder(ownedChars: Iterable<string>): OwnedPiece[] {

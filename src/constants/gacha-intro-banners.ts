@@ -13,7 +13,7 @@ const INTRO_FALLBACK: Record<(typeof GACHA_INTRO_KEYS)[number], GachaBanner> = {
     pieceRateText: '',
     description: null,
     lineup: [],
-    pawnCost: 30,
+    pawnCost: 10,
     goldCost: 0,
   },
   hiHen: {
@@ -23,7 +23,7 @@ const INTRO_FALLBACK: Record<(typeof GACHA_INTRO_KEYS)[number], GachaBanner> = {
     pieceRateText: '',
     description: null,
     lineup: [],
-    pawnCost: 30,
+    pawnCost: 10,
     goldCost: 0,
   },
   shinnyo: {
@@ -33,7 +33,7 @@ const INTRO_FALLBACK: Record<(typeof GACHA_INTRO_KEYS)[number], GachaBanner> = {
     pieceRateText: '',
     description: null,
     lineup: [],
-    pawnCost: 30,
+    pawnCost: 10,
     goldCost: 0,
   },
   kanken1: {
@@ -45,7 +45,7 @@ const INTRO_FALLBACK: Record<(typeof GACHA_INTRO_KEYS)[number], GachaBanner> = {
     lineup: [],
     usesGold: true,
     pawnCost: 0,
-    goldCost: 1,
+    goldCost: 2,
   },
 };
 

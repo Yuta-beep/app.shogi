@@ -1,7 +1,13 @@
-import type { AiBattleMove, AiBattlePosition, AiPieceDefinition } from '@/ai/model';
-import { normalizeBattleMove } from '@/ai/model';
+import { findPieceCoveringCell } from '@/ai/engine/giant-piece';
 import { generateLegalMoves } from '@/ai/engine/legal-moves';
+import {
+  isHenPiece,
+  isItsuPiece,
+  isShinPiece,
+} from '@/ai/engine/piece-identifiers';
 import { moveEquals } from '@/ai/engine/shared';
+import type { AiBattleMove, AiBattlePosition, AiPieceDefinition } from '@/ai/model';
+import { normalizeBattleMove, piecesFromBoardState } from '@/ai/model';
 
 export function assertMoveAllowedBySessionCatalog(input: {
   position: AiBattlePosition;
@@ -28,7 +34,9 @@ export function assertMoveAllowedBySessionCatalog(input: {
     );
   }
 
-  const matched = legal.legalMoves.find((candidate) => moveEquals(candidate, moveForMatch));
+  const matched =
+    legal.legalMoves.find((candidate) => moveEquals(candidate, moveForMatch)) ??
+    findCoordinateLegalMoveFallback(legal.legalMoves, moveForMatch, input.position);
   if (!matched) {
     throw new Error('guardrail rejected move: move is outside session catalog legal range');
   }
@@ -59,4 +67,65 @@ export function assertMoveAllowedBySessionCatalog(input: {
   }
 
   return matched;
+}
+
+function boardCellMatchesForGuardrail(
+  candidateRow: number | null,
+  candidateCol: number | null,
+  moveRow: number | null,
+  moveCol: number | null,
+): boolean {
+  if (candidateRow == null || candidateCol == null || moveRow == null || moveCol == null) {
+    return false;
+  }
+  if (candidateRow === moveRow && candidateCol === moveCol) return true;
+  return (
+    (candidateRow === moveRow + 1 && candidateCol === moveCol + 1) ||
+    (candidateRow + 1 === moveRow && candidateCol + 1 === moveCol)
+  );
+}
+
+function moveCoordinatesMatchForGuardrail(candidate: AiBattleMove, move: AiBattleMove): boolean {
+  return (
+    boardCellMatchesForGuardrail(candidate.fromRow, candidate.fromCol, move.fromRow, move.fromCol) &&
+    boardCellMatchesForGuardrail(candidate.toRow, candidate.toCol, move.toRow, move.toCol)
+  );
+}
+
+function moveMetaMatchesForGuardrail(candidate: AiBattleMove, move: AiBattleMove): boolean {
+  return (
+    candidate.promote === move.promote &&
+    (candidate.dropPieceCode ?? null) === (move.dropPieceCode ?? null) &&
+    (candidate.notation ?? null) === (move.notation ?? null)
+  );
+}
+
+function isGachaPieceForCoordinateGuardrail(
+  piece: NonNullable<ReturnType<typeof findPieceCoveringCell>>,
+): boolean {
+  return isShinPiece(piece) || isItsuPiece(piece) || isHenPiece(piece);
+}
+
+/**
+ * opaque 駒 ID や 1/0 始まり座標のずれで pieceCode・座標が食い違うとき、
+ * 着手元の駒種と座標・成り・スキル表記で合法手と突き合わせる。
+ */
+function findCoordinateLegalMoveFallback(
+  legalMoves: AiBattleMove[],
+  move: AiBattleMove,
+  position: AiBattlePosition,
+): AiBattleMove | undefined {
+  if (move.fromRow == null || move.fromCol == null) return undefined;
+  const pieces = piecesFromBoardState(position);
+  const fromPiece =
+    findPieceCoveringCell(pieces, move.fromRow, move.fromCol) ??
+    pieces.find(
+      (piece) =>
+        boardCellMatchesForGuardrail(piece.row, piece.col, move.fromRow, move.fromCol),
+    );
+  if (!fromPiece || !isGachaPieceForCoordinateGuardrail(fromPiece)) return undefined;
+  return legalMoves.find(
+    (candidate) =>
+      moveCoordinatesMatchForGuardrail(candidate, move) && moveMetaMatchesForGuardrail(candidate, move),
+  );
 }

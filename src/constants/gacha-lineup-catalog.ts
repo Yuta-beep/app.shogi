@@ -121,7 +121,7 @@ const GACHA_LINEUP_CATALOG: Record<string, GachaLineupCatalogEntry> = {
   },
   kanken1: {
     description: '歩・金・艸・閹・膠のいずれかがランダムで排出されます。',
-    rareRateText: 'UR 7% / SSR 3%',
+    rareRateText: '艸3% / 閹3% / 膠3%',
     lineup: KANKEN1_GACHA_LINEUP,
   },
 };

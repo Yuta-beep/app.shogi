@@ -42,6 +42,8 @@ import {
   PreservedMovedPiece,
   TrustedBoardEndpoints,
   applyMovementRuleToTargets,
+  alignLegalMovesToBoardPieces,
+  buildBoardPiecesFromSnapshotPlacements,
   buildBoardState,
   buildPreservedMovedPieceForPlayer,
   buildSfen,
@@ -68,6 +70,14 @@ import {
   syncCanonicalState,
   uniqueTargetsFromMoves,
   applyKirinImmunityShieldMarkToPieces,
+  arrowCellsForDisplay,
+  batsuHazardCellsForDisplay,
+  henEdgeHighlightCellsForDisplay,
+  poisonHazardCellsForDisplay,
+  positionWithStageFixedBoardTiles,
+  rockObstacleCellsForDisplay,
+  safeRoomHazardCellsForDisplay,
+  thornHazardCellsForDisplay,
 } from '@/features/stage-shogi/ui/stage-shogi-screen.helpers';
 import { createLoadPieceCatalogUseCase } from '@/usecases/piece-info/create-piece-info-usecases';
 import type { PieceCatalogItem } from '@/usecases/piece-info/load-piece-catalog-usecase';
@@ -335,6 +345,11 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
   const loadGameLegalMovesUseCase = useMemo(() => new LoadGameLegalMovesUseCase(), []);
   const requestAiMoveUseCase = useMemo(() => new RequestAiMoveUseCase(), []);
 
+  const resolvedStageNo = useMemo(() => {
+    const n = Number(stageParam);
+    return Number.isInteger(n) && n > 0 ? n : undefined;
+  }, [stageParam]);
+
   const isMountedRef = useRef(true);
   const piecesRef = useRef<BoardPiece[]>([]);
   const persistentHazardsRef = useRef<BoardPiece[]>([]);
@@ -547,6 +562,7 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
   ): Side | null {
     const synced = syncCanonicalState({
       position,
+      stageNo: resolvedStageNo,
       existingPieces: piecesRef.current,
       persistentHazards: persistentHazardsRef.current,
       pieceCatalog,
@@ -601,40 +617,12 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
   const isFinished = winner !== null;
 
   useEffect(() => {
-    const next: BoardPiece[] = [];
-    const snapshotLooksZeroBased = snapshot.placements.some(
-      (placement) => placement.row === 0 || placement.col === 0,
-    );
-    const snapshotLooksOneBased =
-      !snapshotLooksZeroBased &&
-      snapshot.placements.length > 0 &&
-      snapshot.placements.every(
-        (placement) =>
-          Number.isInteger(placement.row) &&
-          Number.isInteger(placement.col) &&
-          placement.row >= 1 &&
-          placement.row <= BOARD_SIZE &&
-          placement.col >= 1 &&
-          placement.col <= BOARD_SIZE,
-      );
-    for (const placement of snapshot.placements) {
-      const row = snapshotLooksOneBased ? placement.row - 1 : placement.row;
-      const col = snapshotLooksOneBased ? placement.col - 1 : placement.col;
-      if (row < 0 || row >= BOARD_SIZE || col < 0 || col >= BOARD_SIZE) continue;
-      next.push({
-        side: placement.side === 'enemy' ? 'enemy' : 'player',
-        row,
-        col,
-        pieceCode: pieceCodeFromPlacement(placement.pieceCode, placement.char, pieceDefsByChar),
-        char: placement.char,
-        promoted: false,
-        imageSignedUrl: placement.imageSignedUrl,
-      });
-    }
+    const next = buildBoardPiecesFromSnapshotPlacements(snapshot.placements, pieceDefsByChar);
     const snapshotPersistentHazards = next.filter((p) => PERSISTENT_SYNC_GUARD_CHARS.has(p.char));
     const stageChanged = prevStageRef.current !== stageParam;
     prevStageRef.current = stageParam;
-    if (!stageChanged && gameId) {
+    const shouldRefreshFromSnapshot = stageChanged || (!gameId && snapshot.placements.length > 0);
+    if (!shouldRefreshFromSnapshot) {
       return;
     }
 
@@ -652,7 +640,11 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
     setPendingHeartAllyPick(null);
     setPoisonHazardCells([]);
     setRockObstacleCells([]);
+    setBatsuHazardCells([]);
+    setArrowCells([]);
     setThornHazardCells([]);
+    setSafeRoomHazardCells([]);
+    setHenEdgeHighlightCells([]);
     setAiPreviewTarget(null);
     setPlayerLegalMoves([]);
     setHands(createEmptyHandsState());
@@ -696,6 +688,26 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
     };
   }, [loadPieceCatalogUseCase]);
 
+  /** 1手目: syncFromCanonical 前にステージ固定の×・矢印マスを表示 */
+  useEffect(() => {
+    if (!gameId) return;
+    let active = true;
+    void loadGameStateUseCase.execute({ gameId }).then((latest) => {
+      if (!active || !isMountedRef.current) return;
+      const displayPosition = positionWithStageFixedBoardTiles(latest.position, resolvedStageNo);
+      setBatsuHazardCells(batsuHazardCellsForDisplay(displayPosition));
+      setArrowCells(arrowCellsForDisplay(displayPosition));
+      setPoisonHazardCells(poisonHazardCellsForDisplay(displayPosition));
+      setRockObstacleCells(rockObstacleCellsForDisplay(displayPosition));
+      setThornHazardCells(thornHazardCellsForDisplay(displayPosition));
+      setSafeRoomHazardCells(safeRoomHazardCellsForDisplay(displayPosition));
+      setHenEdgeHighlightCells(henEdgeHighlightCellsForDisplay(displayPosition));
+    });
+    return () => {
+      active = false;
+    };
+  }, [gameId, loadGameStateUseCase, resolvedStageNo]);
+
   useEffect(() => {
     if (!loadError) return;
     setAiError(toUserFacingBattleError(loadError));
@@ -708,6 +720,7 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
 
   useEffect(() => {
     if (isLoading || loadError || isCreatingGame || gameId || !userId) return;
+    if (pieceCatalog.length === 0) return;
     if (Object.keys(pieceSfenMapping.codeToSfen).length === 0) return;
     if (snapshot.placements.length > 0 && pieces.length === 0) return;
 
@@ -722,7 +735,7 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
           turnNumber: moveNo,
           moveCount: moveNo - 1,
           sfen: buildSfen(pieces, hands, sideToMove, moveNo, pieceSfenMapping, pieceDefsByChar),
-          boardState: buildBoardState(pieces, pieceDefsByCode),
+          boardState: buildBoardState(pieces, pieceDefsByCode, pieceDefsByChar),
           hands,
         },
       })
@@ -751,6 +764,7 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
     moveNo,
     pieceDefsByChar,
     pieceDefsByCode,
+    pieceCatalog.length,
     pieceSfenMapping,
     pieces,
     sideToMove,
@@ -781,8 +795,9 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
           setWinner('enemy');
           return;
         }
-        setPlayerLegalMoves(result.legalMoves);
-        debugLogPieceMoveRanges('loadGameLegalMoves', result.sideToMove, moveNo, result.legalMoves);
+        const aligned = alignLegalMovesToBoardPieces(piecesRef.current, result.legalMoves);
+        setPlayerLegalMoves(aligned);
+        debugLogPieceMoveRanges('loadGameLegalMoves', result.sideToMove, moveNo, aligned);
       })
       .catch((error: unknown) => {
         if (active) {
@@ -856,7 +871,10 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
       selectedCell.col,
     );
     setLegalTargets(
-      uniqueTargetsFromMoves(legalForCell.filter((m) => m.notation !== 'house_skill_only')),
+      uniqueTargetsFromMoves(
+        legalForCell.filter((m) => m.notation !== 'house_skill_only'),
+        selectedCell,
+      ),
     );
     setEnemyPreviewTargets([]);
   }, [
@@ -1228,12 +1246,13 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
         try {
           const legal = await loadGameLegalMovesUseCase.execute({ gameId });
           setStateHash(legal.stateHash ?? latest.position.stateHash ?? null);
-          setPlayerLegalMoves(legal.legalMoves);
+          const aligned = alignLegalMovesToBoardPieces(piecesRef.current, legal.legalMoves);
+          setPlayerLegalMoves(aligned);
           debugLogPieceMoveRanges(
             'recover-loadGameLegalMoves',
             latest.position.sideToMove,
             latest.position.turnNumber,
-            legal.legalMoves,
+            aligned,
           );
           illegalRecoverSignatureRef.current = null;
           illegalRecoverAttemptsRef.current = 0;
@@ -1771,6 +1790,7 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
       const targetMoves = legalMovesToTarget(
         legalMovesForBoardPiece(playerLegalMoves, selectedCell.row, selectedCell.col),
         tapped,
+        selectedCell,
       );
       const actionableMoves = targetMoves.filter((m) => m.notation !== 'house_skill_only');
       const sameCellHouseSkillOnly =
@@ -1864,7 +1884,10 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
       if (gameId && pieceCatalog.length > 0) {
         try {
           const record = getLocalBattleGame(gameId);
-          const built = buildBoardState(pieces, pieceDefsByCode) as Record<string, unknown>;
+          const built = buildBoardState(pieces, pieceDefsByCode, pieceDefsByChar) as Record<
+            string,
+            unknown
+          >;
           const regBoard = record?.position?.boardState as Record<string, unknown> | undefined;
           const latestBoard = aiPositionRef.current?.boardState as
             | Record<string, unknown>
@@ -2006,6 +2029,7 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
 
     const targets = uniqueTargetsFromMoves(
       legalForCell.filter((m) => m.notation !== 'house_skill_only'),
+      { row, col },
     );
     const pieceKey = `${piece.side}:${piece.row}:${piece.col}`;
     const movementRule = isGiantPieceForEngine(piece)
@@ -2072,6 +2096,7 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
     }
     const targets = uniqueTargetsFromMoves(
       legalMovesForBoardPiece(playerLegalMoves, cell.row, cell.col),
+      cell,
     );
     if (targets.length === 0) {
       setPendingTimeActionCell(null);

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { enrichGachaBanner } from '@/constants/gacha-lineup-catalog';
 import { resolveGachaRollCode } from '@/constants/gacha-room-assets';
+import { gachaBallColorIndexForCurrentPeriod } from '@/features/home/lib/gacha-ball-schedule';
 import { ApiClientError } from '@/infra/http/api-client';
 import { GachaBanner } from '@/usecases/gacha-room/load-gacha-lobby-usecase';
 import {
@@ -41,6 +42,8 @@ export function useGachaRoomScreen(): GachaRoomVM {
   const [phase, setPhase] = useState<GachaPhase>('idle');
   const [lastResult, setLastResult] = useState<RollGachaResult | null>(null);
   const isRollingRef = useRef(false);
+  /** 演出動画終了時に参照する抽選結果（動画と同一ロールを保証） */
+  const pendingResultRef = useRef<RollGachaResult | null>(null);
 
   const loadUseCase = useMemo(() => createLoadGachaLobbyUseCase(), []);
   const rollUseCase = useMemo(() => createRollGachaUseCase(), []);
@@ -81,21 +84,30 @@ export function useGachaRoomScreen(): GachaRoomVM {
     setNoticeMessage(null);
     setPhase('rolling');
     setLastResult(null);
+    pendingResultRef.current = null;
     try {
       const rollCode = resolveGachaRollCode(targetKey, banners);
       if (rollCode == null) {
-        setNoticeMessage('このガチャは現在利用できません（サーバーに未登録の可能性があります）');
+        setNoticeMessage(
+          banners.length === 0
+            ? 'ガチャは現在公開されていません。しばらくしてからお試しください'
+            : 'このガチャは現在利用できません（サーバーに未登録の可能性があります）',
+        );
         setPhase('idle');
         return;
       }
-      const result = await rollUseCase.execute({ gachaId: rollCode });
+      const result = await rollUseCase.execute({
+        gachaId: rollCode,
+        gachaBallColorIndex: gachaBallColorIndexForCurrentPeriod(),
+      });
+      pendingResultRef.current = result;
       setLastResult(result);
       setPawnCurrency(result.pawnCurrency);
       setGoldCurrency(result.goldCurrency);
       setPhase('video');
     } catch (error: unknown) {
       if (error instanceof ApiClientError && error.code === 'INSUFFICIENT_CURRENCY') {
-        setNoticeMessage('効果が足りません');
+        setNoticeMessage('通貨が足りません');
         setPhase('idle');
         return;
       }
@@ -112,18 +124,19 @@ export function useGachaRoomScreen(): GachaRoomVM {
     }
   }
 
-  function onVideoEnd() {
-    if (!lastResult) {
+  const onVideoEnd = useCallback(() => {
+    const result = pendingResultRef.current;
+    if (!result) {
       setPhase('idle');
       return;
     }
 
-    if (lastResult?.type === 'hit') {
+    if (result.type === 'hit') {
       setPhase('pieceOverlay');
     } else {
       setPhase('done');
     }
-  }
+  }, []);
 
   function onPieceOverlayDismiss() {
     setPhase('done');

@@ -1,8 +1,48 @@
 import { resetLocalBattleRegistry } from '@/ai/local-battle-registry';
+
+const mockSnapshot = {
+  playerName: 'Test',
+  rating: 0,
+  pawnCurrency: 0,
+  goldCurrency: 0,
+  playerRank: 1,
+  playerExp: 0,
+  stamina: 50,
+  maxStamina: 50,
+  nextRecoveryAt: null as string | null,
+};
+
+jest.mock('@/lib/config/data-source', () => ({
+  isApiDataSource: jest.fn(() => true),
+}));
+
+jest.mock('@/hooks/common/home-snapshot-store', () => ({
+  getHomeSnapshotState: () => ({ snapshot: mockSnapshot, isLoading: false, error: null }),
+  loadHomeSnapshot: jest.fn(async () => mockSnapshot),
+  patchHomeSnapshotStamina: (next: { stamina: number; nextRecoveryAt: string | null }) => {
+    mockSnapshot.stamina = next.stamina;
+    mockSnapshot.nextRecoveryAt = next.nextRecoveryAt;
+  },
+}));
+
+jest.mock('@/lib/stamina/spend-stage-stamina', () => {
+  const actual = jest.requireActual<typeof import('@/lib/stamina/spend-stage-stamina')>(
+    '@/lib/stamina/spend-stage-stamina',
+  );
+  return {
+    ...actual,
+    ensureNormalStageStaminaCharged: jest.fn(actual.ensureNormalStageStaminaCharged),
+  };
+});
+
 import {
   LocalClaimStageClearRewardUseCase,
   LocalPrepareStageBattleUseCase,
 } from '@/usecases/stage-battle/local-stage-battle-usecases';
+import {
+  ensureNormalStageStaminaCharged,
+  resetMockStaminaState,
+} from '@/lib/stamina/spend-stage-stamina';
 
 jest.mock('@/lib/supabase/supabase-client', () => ({
   supabase: {
@@ -15,6 +55,9 @@ jest.mock('@/lib/supabase/supabase-client', () => ({
 describe('local stage battle usecases', () => {
   beforeEach(() => {
     resetLocalBattleRegistry();
+    resetMockStaminaState(50);
+    mockSnapshot.stamina = 50;
+    jest.mocked(ensureNormalStageStaminaCharged).mockClear();
   });
 
   it('returns fallback snapshot when stage id is missing', async () => {
@@ -61,6 +104,32 @@ describe('local stage battle usecases', () => {
 
     expect(snapshot.stageLabel).toBe('Stage 1');
     expect(snapshot.placements[0]?.pieceCode).toBe('OU');
+    expect(ensureNormalStageStaminaCharged).toHaveBeenCalledWith(50);
+  });
+
+  it('reuses an active session for the same stage without starting again', async () => {
+    const start = jest.fn().mockResolvedValue({
+      battleSessionId: 'session-reuse',
+      expiresAt: '2026-04-24T00:00:00Z',
+      stage: {
+        stageNo: 5,
+        stageName: 'Stage 5',
+        clearConditionType: 'defeat_boss',
+        clearConditionParams: {},
+        stageCategory: 'normal',
+      },
+      labels: { stageLabel: 'S5', turnLabel: 'TURN 1', handLabel: '持ち駒' },
+      board: { size: 9, placements: [] },
+      enemyRoster: [],
+      rewards: [],
+    });
+    const usecase = new LocalPrepareStageBattleUseCase({ execute: start } as never);
+
+    await usecase.execute({ stageId: '5' });
+    await usecase.execute({ stageId: '5' });
+
+    expect(start).toHaveBeenCalledTimes(1);
+    expect(ensureNormalStageStaminaCharged).toHaveBeenCalledTimes(1);
   });
 
   it('finishes a cleared session and returns rewards', async () => {

@@ -28,7 +28,7 @@ describe('gacha-lineup-catalog ukanmuri', () => {
       pieceRateText: '',
       description: null,
       lineup: [],
-      pawnCost: 30,
+      pawnCost: 10,
       goldCost: 0,
     };
     const enriched = enrichGachaBanner(apiBanner);

@@ -18,6 +18,7 @@ import {
   lineupToGachaRollPieces,
   type GachaRollPiece,
 } from '@/features/gacha-room/lib/gacha-roll-pieces';
+import { effectiveGachaPieceWeight } from '@/lib/gacha/gacha-ball-piece-rate';
 import { ApiClientError } from '@/infra/http/api-client';
 import { GachaLobbySnapshot, LoadGachaLobbyUseCase } from '@/usecases/gacha-room/load-gacha-lobby-usecase';
 import { RollGachaInput, RollGachaResult, RollGachaUseCase } from '@/usecases/gacha-room/roll-gacha-usecase';
@@ -30,7 +31,7 @@ export const banners: GachaLobbySnapshot['banners'] = [
     pieceRateText: formatPieceRateTextFromLineup(UKANMURI_GACHA_LINEUP),
     description: '室・定・安・宋・歩・金のいずれかがランダムで排出されます。',
     lineup: UKANMURI_GACHA_LINEUP,
-    pawnCost: 30,
+    pawnCost: 10,
     goldCost: 0,
   },
   {
@@ -40,7 +41,7 @@ export const banners: GachaLobbySnapshot['banners'] = [
     pieceRateText: formatPieceRateTextFromLineup(HI_HEN_GACHA_LINEUP),
     description: '歩・金・爆・煽・灯のいずれかがランダムで排出されます。',
     lineup: HI_HEN_GACHA_LINEUP,
-    pawnCost: 30,
+    pawnCost: 10,
     goldCost: 0,
   },
   {
@@ -50,19 +51,19 @@ export const banners: GachaLobbySnapshot['banners'] = [
     pieceRateText: formatPieceRateTextFromLineup(SHINNYO_GACHA_LINEUP),
     description: '歩・金・辺・逸・進・逃のいずれかがランダムで排出されます。',
     lineup: SHINNYO_GACHA_LINEUP,
-    pawnCost: 30,
+    pawnCost: 10,
     goldCost: 0,
   },
   {
     key: 'kanken1',
     name: '漢検１級ガチャ',
-    rareRateText: 'UR 7% / SSR 15%',
+    rareRateText: '艸3% / 閹3% / 膠3%',
     pieceRateText: formatPieceRateTextFromLineup(KANKEN1_GACHA_LINEUP),
     description: '歩・金・艸・閹・膠のいずれかがランダムで排出されます。',
     lineup: KANKEN1_GACHA_LINEUP,
     usesGold: true,
     pawnCost: 0,
-    goldCost: 1,
+    goldCost: 2,
   },
 ];
 
@@ -75,20 +76,23 @@ type GachaConfig = {
   pieces: GachaRollPiece[];
 };
 
+const HI_HEN_GACHA_CONFIG: GachaConfig = {
+  hitRate: 1,
+  goldFailRate: 0.25,
+  pawnFailReward: 6,
+  goldFailReward: 1,
+  pieces: lineupToGachaRollPieces(HI_HEN_GACHA_LINEUP),
+};
+
 const GACHA_CONFIGS: Record<string, GachaConfig> = {
+  hihen: HI_HEN_GACHA_CONFIG,
+  hiHen: HI_HEN_GACHA_CONFIG,
   ukanmuri: {
     hitRate: 1,
     goldFailRate: 0.2,
     pawnFailReward: 5,
     goldFailReward: 1,
     pieces: lineupToGachaRollPieces(UKANMURI_GACHA_LINEUP),
-  },
-  hiHen: {
-    hitRate: 1,
-    goldFailRate: 0.25,
-    pawnFailReward: 6,
-    goldFailReward: 1,
-    pieces: lineupToGachaRollPieces(HI_HEN_GACHA_LINEUP),
   },
   shinnyo: {
     hitRate: 1,
@@ -106,11 +110,17 @@ const GACHA_CONFIGS: Record<string, GachaConfig> = {
   },
 };
 
-function pickWeightedRandom<T extends { weight: number }>(items: T[]): T {
-  const total = items.reduce((sum, item) => sum + item.weight, 0);
+function pickWeightedRandom<T extends { weight: number; char: string }>(
+  items: T[],
+  colorIndex: number,
+): T {
+  const total = items.reduce(
+    (sum, item) => sum + effectiveGachaPieceWeight(item.char, item.weight, colorIndex),
+    0,
+  );
   let r = Math.random() * total;
   for (const item of items) {
-    r -= item.weight;
+    r -= effectiveGachaPieceWeight(item.char, item.weight, colorIndex);
     if (r <= 0) return item;
   }
   return items[items.length - 1];
@@ -146,12 +156,14 @@ export class MockRollGachaUseCase implements RollGachaUseCase {
     if (!spent.ok) {
       throw new ApiClientError({
         code: 'INSUFFICIENT_CURRENCY',
-        message: '効果が足りません',
+        message: '通貨が足りません',
       });
     }
 
+    const colorIndex = input.gachaBallColorIndex ?? 0;
+
     if (Math.random() < config.hitRate) {
-      const picked = pickWeightedRandom(config.pieces);
+      const picked = pickWeightedRandom(config.pieces, colorIndex);
       if (picked.isCurrency && picked.currencyType) {
         const amount = gachaCurrencyRewardAmount(input.gachaId, picked.currencyType);
         const wallet = addGachaMockCurrency(

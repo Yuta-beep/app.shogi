@@ -16,8 +16,7 @@ export function GlobalHomeHud({ pawnCurrency, goldCurrency }: GlobalHomeHudProps
       <SafeAreaView edges={['top']} />
       <EditableHomeCommonHeader
         userName={snapshot.playerName}
-        rank={snapshot.playerRank}
-        exp={snapshot.playerExp}
+        rating={snapshot.rating}
         pawnCurrency={pawnCurrency ?? snapshot.pawnCurrency}
         goldCurrency={goldCurrency ?? snapshot.goldCurrency}
         stamina={snapshot.stamina}

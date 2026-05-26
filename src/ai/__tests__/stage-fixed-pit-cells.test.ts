@@ -1,5 +1,9 @@
 import { generateLegalMoves } from '@/ai/engine/legal-moves';
 import { mergeStageFixedPitHazardsIntoPosition } from '@/ai/engine/stage-fixed-hazards';
+import {
+  batsuHazardCellsForDisplay,
+  positionWithStageFixedBoardTiles,
+} from '@/features/stage-shogi/ui/stage-shogi-screen.helpers';
 import { tickSkillStateDurations } from '@/ai/engine/skill-runtime';
 import {
   createLocalBattleGame,
@@ -33,6 +37,24 @@ describe('ステージ10 常設×マス', () => {
     };
     const merged = mergeStageFixedPitHazardsIntoPosition(base, 10);
     expect(pitCells(merged)).toEqual(['4:3', '4:4', '4:5']);
+  });
+
+  it('1手目の表示用局面でも×マスが抽出できる', () => {
+    const base: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: 'seed',
+      stateHash: 'seed',
+      boardState: { pieces: [] },
+      hands: { player: {}, enemy: {} },
+    };
+    const display = positionWithStageFixedBoardTiles(base, 10);
+    expect(batsuHazardCellsForDisplay(display).map((c) => `${c.row}:${c.col}`).sort()).toEqual([
+      '4:3',
+      '4:4',
+      '4:5',
+    ]);
   });
 
   it('tick 後も stage_fixed × は残る', () => {

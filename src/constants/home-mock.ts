@@ -1,6 +1,6 @@
 export const homeMock = {
   playerName: 'プレイヤー名',
-  rating: 1200,
+  rating: 0,
   pawnCurrency: 0,
   goldCurrency: 0,
   playerRank: 1,

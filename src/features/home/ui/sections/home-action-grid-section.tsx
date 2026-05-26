@@ -3,6 +3,7 @@ import { View } from 'react-native';
 
 import { homeAssets } from '@/constants/home-assets';
 import { HOME_PIECE_GACHA_IMAGE_HEIGHT } from '@/features/home/ui/home-layout';
+import { HomeComingSoonHintButton } from '@/features/home/ui/parts/home-coming-soon-hint';
 import { HomeImageButton } from '@/features/home/ui/parts/home-image-button';
 import { playSe } from '@/lib/audio/audio-manager';
 
@@ -18,19 +19,18 @@ export function HomeActionGridSection() {
 
   return (
     <View className="mt-auto px-4 pb-8">
-      <View className="rounded-xl bg-[#2f1b14]/70 p-3">
-        <View className="flex-row gap-2">
+      <View className="overflow-visible rounded-xl bg-[#2f1b14]/70 p-3">
+        <View className="flex-row gap-2 overflow-visible">
           <HomeImageButton
             source={homeAssets.buttons.normalDungeon}
             frameClassName={buttonFrameClassName}
             imageHeight={buttonImageHeight}
             onPress={() => onPressRoute('/stage-select')}
           />
-          <HomeImageButton
+          <HomeComingSoonHintButton
             source={homeAssets.buttons.specialDungeon}
             frameClassName={buttonFrameClassName}
             imageHeight={buttonImageHeight}
-            onPress={() => onPressRoute('/special-dungeon')}
           />
           <HomeImageButton
             source={homeAssets.buttons.deckBuilder}

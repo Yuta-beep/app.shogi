@@ -125,8 +125,6 @@ const PIECE_COST_OVERRIDES: Partial<Record<string, number>> = {
   驍: 8,
   艸: 7,
   閹: 4,
-  賚: 6,
-  殲: 9,
   膠: 4,
 };
 

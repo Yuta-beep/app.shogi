@@ -1,5 +1,13 @@
 import type { PieceCatalogItem } from '@/domain/models/piece';
 import {
+  AN_MOVE_DESCRIPTION_JA,
+  AN_MOVE_VECTORS,
+  AORI_MOVE_DESCRIPTION_JA,
+  AORI_MOVE_VECTORS,
+  BAKU_MOVE_DESCRIPTION_JA,
+  BAKU_MOVE_VECTORS,
+  SHITSU_MOVE_DESCRIPTION_JA,
+  SHITSU_MOVE_VECTORS,
   KIRIN_MOVE_DESCRIPTION_JA,
   KIRIN_MOVE_VECTORS,
   KIRIN_SKILL_DESCRIPTION_JA,
@@ -12,6 +20,23 @@ import {
   P_MOVE_DESCRIPTION_JA,
   P_MOVE_VECTORS,
   P_SKILL_DESCRIPTION_JA,
+  SADAME_MOVE_DESCRIPTION_JA,
+  SADAME_MOVE_VECTORS,
+  EN_MOVE_DESCRIPTION_JA,
+  EN_MOVE_VECTORS,
+  KOU_MOVE_DESCRIPTION_JA,
+  KOU_MOVE_VECTORS,
+  SO_MOVE_DESCRIPTION_JA,
+  SO_MOVE_VECTORS,
+  HEN_MOVE_DESCRIPTION_JA,
+  HEN_MOVE_VECTORS,
+  ITSU_MOVE_DESCRIPTION_JA,
+  ITSU_MOVE_VECTORS,
+  SHIN_MOVE_DESCRIPTION_JA,
+  NIGE_MOVE_DESCRIPTION_JA,
+  NIGE_MOVE_VECTORS,
+  SOU_MOVE_DESCRIPTION_JA,
+  SOU_MOVE_VECTORS,
   TANE_MOVE_DESCRIPTION_JA,
   TANE_SILVER_MOVE_VECTORS,
 } from '@/ai/engine/shop-piece-moves';
@@ -98,6 +123,118 @@ function isMaiCatalogPiece(piece: PieceCatalogItem): boolean {
     code === 'MAI' ||
     code.includes('PIECE_SHOP_MAI') ||
     code.includes('SHOP_MAI')
+  );
+}
+
+function isBakuCatalogPiece(piece: PieceCatalogItem): boolean {
+  const code = (piece.pieceCode ?? '').toUpperCase();
+  return (
+    piece.char === '爆' ||
+    code.includes('GACHA_BAKU') ||
+    code.includes('PIECE_GACHA_BAKU')
+  );
+}
+
+function isAoriCatalogPiece(piece: PieceCatalogItem): boolean {
+  const code = (piece.pieceCode ?? '').toUpperCase();
+  return (
+    piece.char === '煽' ||
+    code.includes('GACHA_AORI') ||
+    code.includes('PIECE_GACHA_AORI')
+  );
+}
+
+function isShitsuCatalogPiece(piece: PieceCatalogItem): boolean {
+  const code = (piece.pieceCode ?? '').toUpperCase();
+  return (
+    piece.char === '室' ||
+    code.includes('GACHA_SHITSU') ||
+    code.includes('GACHA_MURO') ||
+    code.includes('PIECE_GACHA_MURO')
+  );
+}
+
+function isSadameCatalogPiece(piece: PieceCatalogItem): boolean {
+  const code = (piece.pieceCode ?? '').toUpperCase();
+  return (
+    piece.char === '定' ||
+    code.includes('GACHA_SADAME') ||
+    code.includes('PIECE_GACHA_SADAME')
+  );
+}
+
+function isAnCatalogPiece(piece: PieceCatalogItem): boolean {
+  const code = (piece.pieceCode ?? '').toUpperCase();
+  return (
+    piece.char === '安' ||
+    code.includes('GACHA_AN') ||
+    code.includes('PIECE_GACHA_AN')
+  );
+}
+
+function isSoCatalogPiece(piece: PieceCatalogItem): boolean {
+  const code = (piece.pieceCode ?? '').toUpperCase();
+  if (code.includes('GACHA_SOU')) return false;
+  return piece.char === '宋' || code === 'PIECE_GACHA_SO' || code.endsWith('_GACHA_SO');
+}
+
+function isHenCatalogPiece(piece: PieceCatalogItem): boolean {
+  const code = (piece.pieceCode ?? '').toUpperCase();
+  const moveCode = (piece.moveCode ?? '').toLowerCase();
+  return (
+    piece.char === '辺' ||
+    moveCode === 'move_gacha_hen' ||
+    code.includes('GACHA_HEN') ||
+    code.includes('PIECE_GACHA_HEN')
+  );
+}
+
+function isItsuCatalogPiece(piece: PieceCatalogItem): boolean {
+  const code = (piece.pieceCode ?? '').toUpperCase();
+  const moveCode = (piece.moveCode ?? '').toLowerCase();
+  return (
+    piece.char === '逸' ||
+    moveCode === 'move_gacha_itsu' ||
+    code.includes('GACHA_ITSU') ||
+    code.includes('PIECE_GACHA_ITSU')
+  );
+}
+
+function isGachaForwardDiagBackCatalogPiece(piece: PieceCatalogItem): boolean {
+  return isHenCatalogPiece(piece) || isItsuCatalogPiece(piece) || isKouCatalogPiece(piece);
+}
+
+function isShinCatalogPiece(piece: PieceCatalogItem): boolean {
+  const code = (piece.pieceCode ?? '').toUpperCase();
+  return piece.char === '進' || code.includes('GACHA_SHIN') || code.includes('PIECE_GACHA_SHIN');
+}
+
+function isNigeCatalogPiece(piece: PieceCatalogItem): boolean {
+  const code = (piece.pieceCode ?? '').toUpperCase();
+  return (
+    piece.char === '逃' ||
+    code.includes('GACHA_TO') ||
+    code.includes('GACHA_NIGE') ||
+    code.includes('PIECE_GACHA_TO')
+  );
+}
+
+function isSouCatalogPiece(piece: PieceCatalogItem): boolean {
+  const code = (piece.pieceCode ?? '').toUpperCase();
+  return piece.char === '艸' || code.includes('GACHA_SOU') || code.includes('PIECE_GACHA_SOU');
+}
+
+function isEnCatalogPiece(piece: PieceCatalogItem): boolean {
+  const code = (piece.pieceCode ?? '').toUpperCase();
+  return piece.char === '閹' || code.includes('GACHA_EN') || code.includes('PIECE_GACHA_EN');
+}
+
+function isKouCatalogPiece(piece: PieceCatalogItem): boolean {
+  const code = (piece.pieceCode ?? '').toUpperCase();
+  return (
+    piece.char === '膠' ||
+    code.includes('GACHA_KOU') ||
+    code.includes('PIECE_GACHA_KOU')
   );
 }
 
@@ -189,6 +326,45 @@ export function normalizeCatalogMoveText(piece: PieceCatalogItem): string {
   if (isMaiCatalogPiece(piece)) {
     return MAI_MOVE_DESCRIPTION_JA;
   }
+  if (isBakuCatalogPiece(piece)) {
+    return BAKU_MOVE_DESCRIPTION_JA;
+  }
+  if (isAoriCatalogPiece(piece)) {
+    return AORI_MOVE_DESCRIPTION_JA;
+  }
+  if (isShitsuCatalogPiece(piece)) {
+    return SHITSU_MOVE_DESCRIPTION_JA;
+  }
+  if (isSadameCatalogPiece(piece)) {
+    return SADAME_MOVE_DESCRIPTION_JA;
+  }
+  if (isAnCatalogPiece(piece)) {
+    return AN_MOVE_DESCRIPTION_JA;
+  }
+  if (isSouCatalogPiece(piece)) {
+    return SOU_MOVE_DESCRIPTION_JA;
+  }
+  if (isEnCatalogPiece(piece)) {
+    return EN_MOVE_DESCRIPTION_JA;
+  }
+  if (isKouCatalogPiece(piece)) {
+    return KOU_MOVE_DESCRIPTION_JA;
+  }
+  if (isSoCatalogPiece(piece)) {
+    return SO_MOVE_DESCRIPTION_JA;
+  }
+  if (isHenCatalogPiece(piece)) {
+    return HEN_MOVE_DESCRIPTION_JA;
+  }
+  if (isItsuCatalogPiece(piece)) {
+    return ITSU_MOVE_DESCRIPTION_JA;
+  }
+  if (isShinCatalogPiece(piece)) {
+    return SHIN_MOVE_DESCRIPTION_JA;
+  }
+  if (isNigeCatalogPiece(piece)) {
+    return NIGE_MOVE_DESCRIPTION_JA;
+  }
   if (isShopPCatalogPiece(piece)) {
     return P_MOVE_DESCRIPTION_JA;
   }
@@ -235,6 +411,45 @@ export function normalizeCatalogMoveVectors(
   if (isMaiCatalogPiece(piece)) {
     return MAI_MOVE_VECTORS;
   }
+  if (isBakuCatalogPiece(piece)) {
+    return BAKU_MOVE_VECTORS;
+  }
+  if (isAoriCatalogPiece(piece)) {
+    return AORI_MOVE_VECTORS;
+  }
+  if (isShitsuCatalogPiece(piece)) {
+    return SHITSU_MOVE_VECTORS;
+  }
+  if (isSadameCatalogPiece(piece)) {
+    return SADAME_MOVE_VECTORS;
+  }
+  if (isAnCatalogPiece(piece)) {
+    return AN_MOVE_VECTORS;
+  }
+  if (isSouCatalogPiece(piece)) {
+    return SOU_MOVE_VECTORS;
+  }
+  if (isEnCatalogPiece(piece)) {
+    return EN_MOVE_VECTORS;
+  }
+  if (isKouCatalogPiece(piece)) {
+    return KOU_MOVE_VECTORS;
+  }
+  if (isSoCatalogPiece(piece)) {
+    return SO_MOVE_VECTORS;
+  }
+  if (isHenCatalogPiece(piece)) {
+    return HEN_MOVE_VECTORS;
+  }
+  if (isItsuCatalogPiece(piece)) {
+    return ITSU_MOVE_VECTORS;
+  }
+  if (isShinCatalogPiece(piece)) {
+    return [];
+  }
+  if (isNigeCatalogPiece(piece)) {
+    return NIGE_MOVE_VECTORS;
+  }
   if (isShopPCatalogPiece(piece)) {
     return P_MOVE_VECTORS;
   }
@@ -251,6 +466,7 @@ export function normalizePieceCatalogItemForDisplay<T extends PieceCatalogItem>(
     skill: normalizeCatalogSkillText(piece),
     move: normalizeCatalogMoveText(piece),
     moveVectors: normalizeCatalogMoveVectors(piece),
+    isRepeatable: isGachaForwardDiagBackCatalogPiece(piece) ? false : piece.isRepeatable,
   };
 }
 

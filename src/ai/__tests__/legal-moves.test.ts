@@ -850,6 +850,29 @@ describe('ai engine legal moves', () => {
     expect(goldMoves).toHaveLength(6);
   });
 
+  it('does not throw when book is on board with no last enemy move (turn 1)', () => {
+    const position: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: '9/9/9/9/9/9/9/9/9 b - 1',
+      stateHash: 'seed',
+      boardState: {
+        pieces: [
+          { side: 'player', row: 6, col: 4, pieceCode: 'FU', char: '歩', promoted: false },
+          { side: 'player', row: 7, col: 3, pieceCode: 'BOOK', char: '書', promoted: false },
+          { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
+          { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '玉', promoted: false },
+        ],
+      },
+      hands: { player: {}, enemy: {} },
+    };
+    expect(() => generateLegalMoves({ position, pieceCatalog })).not.toThrow();
+    const legal = generateLegalMoves({ position, pieceCatalog });
+    const pawnMoves = legal.legalMoves.filter((m) => m.fromRow === 6 && m.fromCol === 4);
+    expect(pawnMoves.length).toBeGreaterThan(0);
+  });
+
   it('book copies last enemy moved piece movement range', () => {
     const position: AiBattlePosition = {
       sideToMove: 'player',

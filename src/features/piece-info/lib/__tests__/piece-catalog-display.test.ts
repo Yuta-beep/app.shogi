@@ -112,6 +112,175 @@ describe('piece-catalog-display', () => {
     ]);
   });
 
+  it('艸は移動説明を「前最大2マス左右後ろ1マス」に差し替える', () => {
+    const piece = catalogItem({
+      char: '艸',
+      pieceCode: 'piece_gacha_sou',
+      move: '草原の主の移動ルール',
+    });
+    const display = normalizePieceCatalogItemForDisplay(piece);
+    expect(display.move).toBe('前最大2マス左右後ろ1マス');
+    expect(display.moveVectors).toHaveLength(4);
+  });
+
+  it('逃は移動説明を「全方向1マス」に差し替える', () => {
+    const piece = catalogItem({
+      char: '逃',
+      pieceCode: 'piece_gacha_tou2',
+      move: '逃亡者の移動ルール',
+    });
+    const display = normalizePieceCatalogItemForDisplay(piece);
+    expect(display.move).toBe('全方向1マス');
+    expect(display.moveVectors).toHaveLength(8);
+  });
+
+  it('進は移動説明を「移動範囲不明」に差し替える', () => {
+    const piece = catalogItem({
+      char: '進',
+      pieceCode: 'piece_gacha_shin',
+      move: '毎ターン変化する',
+      skill: '1ターンごとに移動範囲が変わる。',
+    });
+    const display = normalizePieceCatalogItemForDisplay(piece);
+    expect(display.move).toBe('移動範囲不明');
+    expect(display.moveVectors).toEqual([]);
+  });
+
+  it('逸は移動説明を「前と斜め4方向1マス」に差し替える', () => {
+    const piece = catalogItem({
+      char: '逸',
+      pieceCode: 'piece_gacha_itsu',
+      move: '逸脱の移動ルール',
+    });
+    const display = normalizePieceCatalogItemForDisplay(piece);
+    expect(display.move).toBe('前と斜め4方向1マス');
+    expect(display.moveVectors).toHaveLength(5);
+  });
+
+  it('辺は移動説明を「前と斜め4方向1マス」に差し替える', () => {
+    const piece = catalogItem({
+      char: '辺',
+      pieceCode: 'piece_gacha_hen',
+      move: '辺の神の移動ルール',
+    });
+    const display = normalizePieceCatalogItemForDisplay(piece);
+    expect(display.move).toBe('前と斜め4方向1マス');
+    expect(display.moveVectors).toHaveLength(5);
+  });
+
+  it('辺はDBの銀将ベクトル・isRepeatable=trueでも図鑑は前1+斜め4の5マス', () => {
+    const piece = catalogItem({
+      char: '辺',
+      pieceCode: 'piece_gacha_hen',
+      moveCode: 'move_gacha_hen',
+      isRepeatable: true,
+      moveVectors: [
+        { dx: -1, dy: -1, maxStep: 1 },
+        { dx: 0, dy: -1, maxStep: 1 },
+        { dx: 1, dy: -1, maxStep: 1 },
+        { dx: -1, dy: 1, maxStep: 1 },
+        { dx: 1, dy: 1, maxStep: 1 },
+      ],
+    });
+    const display = normalizePieceCatalogItemForDisplay(piece);
+    expect(display.moveVectors).toEqual([
+      { dx: 0, dy: -1, maxStep: 1 },
+      { dx: -1, dy: -1, maxStep: 1 },
+      { dx: 1, dy: -1, maxStep: 1 },
+      { dx: -1, dy: 1, maxStep: 1 },
+      { dx: 1, dy: 1, maxStep: 1 },
+    ]);
+    expect(display.isRepeatable).toBe(false);
+  });
+
+  it('宋は移動説明を「前後何マスでも+左右1マス」に差し替える', () => {
+    const piece = catalogItem({
+      char: '宋',
+      pieceCode: 'piece_gacha_so',
+      move: '宋えるの移動ルール',
+    });
+    const display = normalizePieceCatalogItemForDisplay(piece);
+    expect(display.move).toBe('前後何マスでも+左右1マス');
+    expect(display.moveVectors).toHaveLength(4);
+  });
+
+  it('安は移動説明を「前後左右1マス+桂馬飛び」に差し替える', () => {
+    const piece = catalogItem({
+      char: '安',
+      pieceCode: 'piece_gacha_an',
+      move: '安いの移動ルール',
+    });
+    const display = normalizePieceCatalogItemForDisplay(piece);
+    expect(display.move).toBe('前後左右1マス+桂馬飛び');
+    expect(display.moveVectors).toHaveLength(6);
+  });
+
+  it('定は移動説明を「前後左右1マス」に差し替える', () => {
+    const piece = catalogItem({
+      char: '定',
+      pieceCode: 'piece_gacha_sadame',
+      move: '固定人の移動ルール',
+    });
+    const display = normalizePieceCatalogItemForDisplay(piece);
+    expect(display.move).toBe('前後左右1マス');
+    expect(display.moveVectors).toHaveLength(4);
+  });
+
+  it('閹は移動説明を「前後左右1マス」に差し替える', () => {
+    const piece = catalogItem({
+      char: '閹',
+      pieceCode: 'piece_gacha_en',
+      move: '前後左右に各1マス進める。味方の「王」の前1マスへも移動できる。',
+    });
+    const display = normalizePieceCatalogItemForDisplay(piece);
+    expect(display.move).toBe('前後左右1マス');
+    expect(display.moveVectors).toHaveLength(4);
+  });
+
+  it('膠は移動説明を「前斜め前斜め後ろ1マス」に差し替える', () => {
+    const piece = catalogItem({
+      char: '膠',
+      pieceCode: 'piece_gacha_kou',
+      move: '前斜め左右・後ろに各1マス進める。',
+    });
+    const display = normalizePieceCatalogItemForDisplay(piece);
+    expect(display.move).toBe('前斜め前斜め後ろ1マス');
+    expect(display.moveVectors).toHaveLength(3);
+  });
+
+  it('室は移動説明を「前後左右斜め前1マス」に差し替える', () => {
+    const piece = catalogItem({
+      char: '室',
+      pieceCode: 'piece_gacha_shitsu',
+      move: '室主の移動ルール',
+    });
+    const display = normalizePieceCatalogItemForDisplay(piece);
+    expect(display.move).toBe('前後左右斜め前1マス');
+    expect(display.moveVectors).toHaveLength(6);
+  });
+
+  it('煽は移動説明を「前後左右何マスでも」に差し替える', () => {
+    const piece = catalogItem({
+      char: '煽',
+      pieceCode: 'piece_gacha_aori',
+      move: '煽り厨の移動ルール',
+    });
+    const display = normalizePieceCatalogItemForDisplay(piece);
+    expect(display.move).toBe('前後左右何マスでも');
+    expect(display.moveVectors).toHaveLength(4);
+  });
+
+  it('爆は移動説明を「前斜め前左右後ろ1マス」に差し替える', () => {
+    const piece = catalogItem({
+      char: '爆',
+      pieceCode: 'piece_gacha_baku',
+      move: '爆破魔の移動ルール',
+    });
+    const display = normalizePieceCatalogItemForDisplay(piece);
+    expect(display.move).toBe('前斜め前左右後ろ1マス');
+    expect(display.moveVectors).toHaveLength(6);
+  });
+
   it('舞は移動制限スキルをスキル欄に、金相当の移動のみを移動欄に差し替える', () => {
     const piece = catalogItem({
       char: '舞',

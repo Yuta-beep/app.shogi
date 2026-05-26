@@ -235,6 +235,21 @@ const CAPTURE_CHAR_TO_HAND_CODE: Readonly<Record<string, string>> = {
   銭: 'SEN',
   財: 'ZAI',
   巨: 'GIANT',
+  /** ガチャ駒（しんにょう・うかんむり等） */
+  進: 'GACHA_SHIN',
+  逸: 'GACHA_ITSU',
+  辺: 'GACHA_HEN',
+  定: 'GACHA_SADAME',
+  安: 'GACHA_AN',
+  宋: 'GACHA_SO',
+  爆: 'GACHA_BAKU',
+  煽: 'GACHA_AORI',
+  灯: 'GACHA_TOU',
+  逃: 'GACHA_TOU2',
+  艸: 'GACHA_SOU',
+  閹: 'GACHA_EN',
+  膠: 'GACHA_KOU',
+  室: 'GACHA_SHITSU',
 };
 
 const OPAQUE_CAPTURE_CODE_TO_HAND_CODE: Readonly<Record<string, string>> = {
@@ -353,6 +368,10 @@ function opaqueCapturedCodeToHandCode(rawCode: string | null): string | null {
   if (upper.includes('CONCAVE')) return 'CONCAVE';
   if (upper.includes('CONVEX')) return 'CONVEX';
   if (upper.includes('0F14ABCC6E5E')) return 'HOLY_SWORD';
+  for (const [char, code] of Object.entries(CAPTURE_CHAR_TO_HAND_CODE)) {
+    if (char.length !== 1) continue;
+    if (upper.includes(code)) return code;
+  }
   return null;
 }
 

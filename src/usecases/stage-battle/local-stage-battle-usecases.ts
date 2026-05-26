@@ -4,6 +4,9 @@ import {
   getActiveStageSession,
   registerActiveStageSession,
 } from '@/ai/local-battle-registry';
+import { resolveStagePlacementIdentity } from '@/features/stage-shogi/domain/board-piece-identity';
+import { getHomeSnapshotState, loadHomeSnapshot } from '@/hooks/common/home-snapshot-store';
+import { ensureNormalStageStaminaCharged } from '@/lib/stamina/spend-stage-stamina';
 import { FinishStageBattleSessionUseCase } from '@/usecases/stage-battle/finish-stage-battle-session-usecase';
 import {
   PrepareStageBattleUseCase,
@@ -14,6 +17,46 @@ import {
   ClaimStageClearRewardUseCase,
   StageClearRewardResult,
 } from '@/usecases/stage-battle/claim-stage-clear-reward-usecase';
+import type { StageBattleSessionStart } from '@/usecases/stage-battle/stage-battle-session-contract';
+
+function mapSessionToSnapshot(session: StageBattleSessionStart): StageBattleSnapshot {
+  return {
+    stageLabel: session.stage.stageName || session.labels.stageLabel,
+    turnLabel: session.labels.turnLabel,
+    handLabel: session.labels.handLabel,
+    boardSize: session.board.size,
+    placements: session.board.placements.map((raw) => {
+      const placement = raw as {
+        side: string;
+        row: number;
+        col: number;
+        piece: {
+          id: number | null;
+          code: string | null;
+          char: string | null;
+          imageBucket: string | null;
+          imageKey: string | null;
+          imageSignedUrl?: string | null;
+        };
+      };
+      const identity = resolveStagePlacementIdentity({
+        char: placement.piece.char,
+        code: placement.piece.code,
+      });
+      return {
+        side: placement.side,
+        row: placement.row,
+        col: placement.col,
+        pieceId: placement.piece.id ?? null,
+        pieceCode: identity.pieceCode,
+        char: identity.char,
+        imageBucket: placement.piece.imageBucket ?? null,
+        imageKey: placement.piece.imageKey ?? null,
+        imageSignedUrl: placement.piece.imageSignedUrl ?? null,
+      };
+    }),
+  };
+}
 
 export class LocalPrepareStageBattleUseCase implements PrepareStageBattleUseCase {
   constructor(
@@ -42,43 +85,21 @@ export class LocalPrepareStageBattleUseCase implements PrepareStageBattleUseCase
       };
     }
 
+    const existing = getActiveStageSession();
+    if (existing?.stage.stageNo === stageNo) {
+      return mapSessionToSnapshot(existing);
+    }
+
+    const staminaBeforeStart = getHomeSnapshotState().snapshot.stamina;
+
     clearLocalBattleGames();
     clearActiveStageSession();
     const session = await this.startUseCase.execute({ stageNo });
     registerActiveStageSession(session);
+    await loadHomeSnapshot(true);
+    ensureNormalStageStaminaCharged(staminaBeforeStart);
 
-    return {
-      stageLabel: session.stage.stageName || session.labels.stageLabel,
-      turnLabel: session.labels.turnLabel,
-      handLabel: session.labels.handLabel,
-      boardSize: session.board.size,
-      placements: session.board.placements.map((raw) => {
-        const placement = raw as {
-          side: string;
-          row: number;
-          col: number;
-          piece: {
-            id: number | null;
-            code: string | null;
-            char: string | null;
-            imageBucket: string | null;
-            imageKey: string | null;
-            imageSignedUrl?: string | null;
-          };
-        };
-        return {
-          side: placement.side,
-          row: placement.row,
-          col: placement.col,
-          pieceId: placement.piece.id ?? null,
-          pieceCode: placement.piece.code ?? null,
-          char: placement.piece.char ?? placement.piece.code ?? '?',
-          imageBucket: placement.piece.imageBucket ?? null,
-          imageKey: placement.piece.imageKey ?? null,
-          imageSignedUrl: placement.piece.imageSignedUrl ?? null,
-        };
-      }),
-    };
+    return mapSessionToSnapshot(session);
   }
 }
 

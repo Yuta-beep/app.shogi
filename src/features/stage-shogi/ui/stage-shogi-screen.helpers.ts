@@ -12,7 +12,11 @@ import {
   isKirinPiece,
   isMaiPiece,
 } from '@/ai/engine/piece-identifiers';
+import { mergeStageFixedArrowTilesIntoPosition } from '@/ai/engine/stage-fixed-arrow-tiles';
+import { mergeStageFixedPitHazardsIntoPosition } from '@/ai/engine/stage-fixed-hazards';
 import type { AiBattlePosition } from '@/ai/model';
+import { normalizeBattlePosition } from '@/ai/model';
+import { toBasePieceCode as engineToBasePieceCode } from '@/ai/model/move';
 import { mapPiecesForSpringDragonAwakeningDisplay } from '@/ai/engine/spring-ryu-awakening';
 import { assembleSkillDefinitionsV2ForSession } from '@/ai/engine/session-skill-definitions-v2';
 import { ApiClientError } from '@/infra/http/api-client';
@@ -29,6 +33,13 @@ import {
   Side,
   normalizeHandsStateKeys,
 } from '@/features/stage-shogi/domain/game-rules';
+import {
+  canonicalizeBoardPieceIdentity,
+  isDisplayKanjiChar,
+  isOpaquePieceInstanceId,
+  resolveStagePlacementIdentity,
+} from '@/features/stage-shogi/domain/board-piece-identity';
+import { getDisplayCharFromPieceCode } from '@/lib/piece-image-registry';
 import {
   CHAR_TO_CODE,
   CODE_TO_CHAR,
@@ -340,7 +351,34 @@ export function getPieceImageSource(piece: {
   char?: string | null;
   imageSignedUrl?: string | null;
 }): ImageSourcePropType | null {
-  return resolvePieceImageSource(piece);
+  const displayChar =
+    piece.char && !isOpaquePieceInstanceId(piece.char) && piece.char.length <= 2
+      ? piece.char
+      : null;
+  const local =
+    (displayChar
+      ? resolvePieceImageSource({ char: displayChar, pieceCode: CHAR_TO_CODE[displayChar] })
+      : null) ??
+    resolvePieceImageSource(piece) ??
+    (displayChar
+      ? resolvePieceImageSource({
+          char: displayChar,
+          pieceCode: CHAR_TO_CODE[displayChar] ?? piece.pieceCode,
+        })
+      : null);
+  if (local != null) return local;
+  const baseCode = toBasePieceCode(piece.pieceCode);
+  if (baseCode && baseCode !== piece.pieceCode) {
+    const fromBase = resolvePieceImageSource({
+      pieceCode: baseCode,
+      char: displayChar ?? CODE_TO_CHAR[baseCode] ?? piece.char,
+    });
+    if (fromBase != null) return fromBase;
+  }
+  if (typeof piece.imageSignedUrl === 'string' && piece.imageSignedUrl.length > 0) {
+    return { uri: piece.imageSignedUrl };
+  }
+  return null;
 }
 
 export function normalizeCellIndex(value: number) {
@@ -351,6 +389,221 @@ export function normalizeCellIndex(value: number) {
     return value - 1;
   }
   return null;
+}
+
+export type PlacementCoordinateMode = 'zero' | 'one';
+
+/**
+ * ステージ開始時の配置座標が 0 始まりか 1 始まりかを推定する。
+ * 0 または 9 が含まれるときは一意。1–8 のみのときはデッキ builder / エンジン同様 0 始まりとする。
+ */
+export function inferSnapshotPlacementCoordinateMode(
+  placements: readonly { row: number; col: number }[],
+): PlacementCoordinateMode {
+  if (placements.length === 0) return 'zero';
+  let hasZero = false;
+  let hasNine = false;
+  for (const placement of placements) {
+    if (placement.row === 0 || placement.col === 0) hasZero = true;
+    if (placement.row === BOARD_SIZE || placement.col === BOARD_SIZE) hasNine = true;
+  }
+  if (hasZero) return 'zero';
+  if (hasNine) return 'one';
+  return 'zero';
+}
+
+export function snapshotPlacementToBoardCell(
+  row: number,
+  col: number,
+  mode: PlacementCoordinateMode,
+): { row: number; col: number } {
+  if (mode === 'one') {
+    return { row: row - 1, col: col - 1 };
+  }
+  return { row, col };
+}
+
+function boardCellCoordVariants(row: number, col: number): BoardCell[] {
+  const variants: BoardCell[] = [{ row, col }];
+  if (row + 1 < BOARD_SIZE && col + 1 < BOARD_SIZE) {
+    variants.push({ row: row + 1, col: col + 1 });
+  }
+  if (row > 0 && col > 0) {
+    variants.push({ row: row - 1, col: col - 1 });
+  }
+  const nRow = normalizeCellIndex(row);
+  const nCol = normalizeCellIndex(col);
+  if (nRow !== null && nCol !== null) {
+    const normalized = { row: nRow, col: nCol };
+    if (!variants.some((v) => v.row === normalized.row && v.col === normalized.col)) {
+      variants.push(normalized);
+    }
+  }
+  return variants;
+}
+
+function moveOriginMatchesCoord(move: BattleMove, row: number, col: number): boolean {
+  if (move.dropPieceCode !== null || move.fromRow === null || move.fromCol === null) {
+    return false;
+  }
+  return boardCellCoordVariants(row, col).some(
+    (cell) => move.fromRow === cell.row && move.fromCol === cell.col,
+  );
+}
+
+type LegalMoveOriginMatchKind = 'exact' | 'one-based' | 'normalized';
+
+function legalMoveOriginMatchKind(
+  move: BattleMove,
+  row: number,
+  col: number,
+): LegalMoveOriginMatchKind | null {
+  if (move.dropPieceCode !== null || move.fromRow === null || move.fromCol === null) {
+    return null;
+  }
+  if (move.fromRow === row && move.fromCol === col) return 'exact';
+  if (move.fromRow === row + 1 && move.fromCol === col + 1) return 'one-based';
+  const nFr = normalizeCellIndex(move.fromRow);
+  const nFc = normalizeCellIndex(move.fromCol);
+  if (nFr === row && nFc === col) return 'normalized';
+  return null;
+}
+
+function legalMovePieceCodeMatchesBoardPiece(move: BattleMove, piece: BoardPiece): boolean {
+  if (!move.pieceCode || !piece.pieceCode) return false;
+  const want = engineToBasePieceCode(move.pieceCode) ?? move.pieceCode.trim().toUpperCase();
+  const have = engineToBasePieceCode(piece.pieceCode) ?? piece.pieceCode.trim().toUpperCase();
+  return want === have;
+}
+
+const LEGAL_MOVE_ORIGIN_MATCH_PRIORITY: Record<LegalMoveOriginMatchKind, number> = {
+  exact: 3,
+  normalized: 2,
+  'one-based': 1,
+};
+
+/** 1-based 補正で複数駒にマッチするとき（例: 灯と斜め隣の逃）は pieceCode を優先する。 */
+function pickBoardPieceForLegalMoveOrigin(
+  playerPieces: readonly BoardPiece[],
+  move: BattleMove,
+): BoardPiece | null {
+  const ranked = playerPieces
+    .map((piece) => {
+      const kind = legalMoveOriginMatchKind(move, piece.row, piece.col);
+      if (!kind) return null;
+      return {
+        piece,
+        kind,
+        codeMatch: legalMovePieceCodeMatchesBoardPiece(move, piece),
+        priority: LEGAL_MOVE_ORIGIN_MATCH_PRIORITY[kind],
+      };
+    })
+    .filter((entry): entry is NonNullable<typeof entry> => entry != null)
+    .sort((a, b) => {
+      if (a.codeMatch !== b.codeMatch) return a.codeMatch ? -1 : 1;
+      if (a.priority !== b.priority) return b.priority - a.priority;
+      return 0;
+    });
+  return ranked[0]?.piece ?? null;
+}
+
+/** 合法手の from/to を、盤面上の実際のマス（0 始まり）に合わせて書き換える */
+export function rewriteMoveCoordsToBoardCell(
+  move: BattleMove,
+  boardRow: number,
+  boardCol: number,
+): BattleMove {
+  if (move.fromRow === null || move.fromCol === null) return move;
+  const fr = move.fromRow;
+  const fc = move.fromCol;
+  if (fr === boardRow && fc === boardCol) return move;
+  if (!moveOriginMatchesCoord(move, boardRow, boardCol)) return move;
+  const dRow = fr - boardRow;
+  const dCol = fc - boardCol;
+  return {
+    ...move,
+    fromRow: boardRow,
+    fromCol: boardCol,
+    toRow: move.toRow !== null ? move.toRow - dRow : null,
+    toCol: move.toCol !== null ? move.toCol - dCol : null,
+  };
+}
+
+/** 表示中の駒位置と合法手の着手元座標のずれ（0/1 始まり混在など）を補正する */
+export function alignLegalMovesToBoardPieces(
+  pieces: readonly BoardPiece[],
+  legalMoves: BattleMove[],
+): BattleMove[] {
+  const playerPieces = pieces.filter((piece) => piece.side === 'player');
+  return legalMoves.map((move) => {
+    if (move.fromRow === null || move.fromCol === null) return move;
+
+    const atOrigin = pickBoardPieceForLegalMoveOrigin(playerPieces, move);
+    if (atOrigin) {
+      return rewriteMoveCoordsToBoardCell(move, atOrigin.row, atOrigin.col);
+    }
+
+    const wantCode = move.pieceCode?.trim().toUpperCase();
+    const wantBase = move.pieceCode ? engineToBasePieceCode(move.pieceCode) : null;
+    if (wantCode) {
+      const byCode = playerPieces.find((piece) => {
+        const base = piece.pieceCode ? engineToBasePieceCode(piece.pieceCode) : null;
+        if (wantBase && base) {
+          if (base !== wantBase) return false;
+        } else {
+          const code = piece.pieceCode?.trim().toUpperCase();
+          if (!code || code !== wantCode) return false;
+        }
+        return moveOriginMatchesCoord(move, piece.row, piece.col);
+      });
+      if (byCode) {
+        return rewriteMoveCoordsToBoardCell(move, byCode.row, byCode.col);
+      }
+    }
+
+    const fallback = playerPieces.find((piece) => moveOriginMatchesCoord(move, piece.row, piece.col));
+    if (fallback) {
+      return rewriteMoveCoordsToBoardCell(move, fallback.row, fallback.col);
+    }
+
+    return move;
+  });
+}
+
+export type SnapshotPlacementInput = {
+  side: string;
+  row: number;
+  col: number;
+  pieceCode: string | null;
+  char: string;
+  imageSignedUrl?: string | null;
+};
+
+export function buildBoardPiecesFromSnapshotPlacements(
+  placements: readonly SnapshotPlacementInput[],
+  pieceDefsByChar: Partial<Record<string, PieceCatalogItem>>,
+): BoardPiece[] {
+  const mode = inferSnapshotPlacementCoordinateMode(placements);
+  const next: BoardPiece[] = [];
+  for (const placement of placements) {
+    const { row, col } = snapshotPlacementToBoardCell(placement.row, placement.col, mode);
+    if (row < 0 || row >= BOARD_SIZE || col < 0 || col >= BOARD_SIZE) continue;
+    next.push(
+      normalizeBoardPieceForDisplay(
+        {
+          side: placement.side === 'enemy' ? 'enemy' : 'player',
+          row,
+          col,
+          pieceCode: placement.pieceCode,
+          char: placement.char,
+          promoted: false,
+          imageSignedUrl: placement.imageSignedUrl ?? null,
+        },
+        pieceDefsByChar,
+      ),
+    );
+  }
+  return next;
 }
 
 export function normalizeSide(side: string): Side {
@@ -374,9 +627,41 @@ export function fallbackPiecePalette(side: string) {
   };
 }
 
-function isOpaquePieceInstanceId(code: string | null | undefined): boolean {
-  if (!code) return false;
-  return /^piece_[a-z0-9]+$/i.test(code.trim());
+/** 盤面表示・合法手・画像解決で opaque id / 略称コードを正規化する */
+export function normalizeBoardPieceForDisplay(
+  piece: BoardPiece,
+  pieceDefsByChar: Partial<Record<string, PieceCatalogItem>>,
+): BoardPiece {
+  const resolvedCode = pieceCodeFromPlacement(piece.pieceCode ?? null, piece.char, pieceDefsByChar);
+  const promoted = piece.promoted ?? false;
+  const resolvedChar =
+    piece.char &&
+    piece.char !== '?' &&
+    !isOpaquePieceInstanceId(piece.char) &&
+    piece.char.length <= 2
+      ? piece.char
+      : resolvedCode
+        ? pieceCharFromCode(resolvedCode, piece.side, promoted)
+        : piece.char;
+  const canonical = canonicalizeBoardPieceIdentity(
+    resolvedCode ?? piece.pieceCode,
+    resolvedChar,
+  );
+  return {
+    ...piece,
+    pieceCode: canonical.pieceCode ?? resolvedCode ?? piece.pieceCode,
+    char: canonical.char,
+  };
+}
+
+function pieceDefsByCharFromCodeMap(
+  pieceDefsByCode: Partial<Record<string, PieceCatalogItem>>,
+): Partial<Record<string, PieceCatalogItem>> {
+  return Object.fromEntries(
+    Object.values(pieceDefsByCode)
+      .filter((def): def is PieceCatalogItem => Boolean(def?.char))
+      .map((def) => [def.char, def]),
+  );
 }
 
 export function pieceCodeFromPlacement(
@@ -457,16 +742,20 @@ export function buildSfen(
 export function buildBoardState(
   placements: BoardPiece[],
   pieceDefsByCode: Partial<Record<string, PieceCatalogItem>>,
+  pieceDefsByChar: Partial<Record<string, PieceCatalogItem>> = {},
 ): Record<string, unknown> {
-  const pieces = placements.map((placement) => ({
-    side: placement.side,
-    row: placement.row,
-    col: placement.col,
-    pieceCode: placement.pieceCode,
-    char: placement.char,
-    promoted: Boolean(placement.promoted),
-    imageSignedUrl: placement.imageSignedUrl,
-  }));
+  const pieces = placements.map((placement) => {
+    const normalized = normalizeBoardPieceForDisplay(placement, pieceDefsByChar);
+    return {
+      side: normalized.side,
+      row: normalized.row,
+      col: normalized.col,
+      pieceCode: normalized.pieceCode,
+      char: normalized.char,
+      promoted: Boolean(normalized.promoted),
+      imageSignedUrl: normalized.imageSignedUrl,
+    };
+  });
 
   return {
     pieces,
@@ -499,14 +788,18 @@ export function buildBoardState(
   };
 }
 
-export function uniqueTargetsFromMoves(moves: BattleMove[]): BoardCell[] {
+export function uniqueTargetsFromMoves(
+  moves: BattleMove[],
+  boardOrigin?: BoardCell | null,
+): BoardCell[] {
   const seen = new Set<string>();
   const out: BoardCell[] = [];
   for (const move of moves) {
-    const key = `${move.toRow}:${move.toCol}`;
+    const target = moveTargetCell(move, boardOrigin);
+    const key = `${target.row}:${target.col}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    out.push({ row: move.toRow, col: move.toCol });
+    out.push(target);
   }
   return out;
 }
@@ -587,9 +880,18 @@ export function remapHandsStateToDisplayPieceCodes(
 }
 
 export function legalMovesForBoardPiece(legalMoves: BattleMove[], row: number, col: number) {
-  return legalMoves.filter(
-    (move) => move.dropPieceCode === null && move.fromRow === row && move.fromCol === col,
+  const exact = legalMoves.filter(
+    (move) =>
+      move.dropPieceCode === null &&
+      move.fromRow !== null &&
+      move.fromCol !== null &&
+      move.fromRow === row &&
+      move.fromCol === col,
   );
+  if (exact.length > 0) {
+    return exact;
+  }
+  return legalMoves.filter((move) => moveOriginMatchesBoardCell(move, row, col));
 }
 
 export function legalMovesForDropPiece(
@@ -606,8 +908,15 @@ export function legalMovesForDropPiece(
   });
 }
 
-export function legalMovesToTarget(legalMoves: BattleMove[], to: BoardCell) {
-  return legalMoves.filter((move) => move.toRow === to.row && move.toCol === to.col);
+export function legalMovesToTarget(
+  legalMoves: BattleMove[],
+  to: BoardCell,
+  boardOrigin?: BoardCell | null,
+) {
+  return legalMoves.filter((move) => {
+    const target = moveTargetCell(move, boardOrigin);
+    return target.row === to.row && target.col === to.col;
+  });
 }
 
 export function pieceCharFromCode(pieceCode: string, side: Side, promoted: boolean) {
@@ -617,7 +926,64 @@ export function pieceCharFromCode(pieceCode: string, side: Side, promoted: boole
   if (pieceCode === 'OU') {
     return side === 'enemy' ? '玉' : '王';
   }
+  const fromRegistry = getDisplayCharFromPieceCode(pieceCode);
+  if (fromRegistry) return fromRegistry;
   return CODE_TO_CHAR[pieceCode] ?? '?';
+}
+
+function moveOriginMatchesBoardCell(move: BattleMove, row: number, col: number): boolean {
+  if (move.dropPieceCode !== null || move.fromRow === null || move.fromCol === null) {
+    return false;
+  }
+  const nFr = normalizeCellIndex(move.fromRow);
+  const nFc = normalizeCellIndex(move.fromCol);
+  return (
+    (move.fromRow === row && move.fromCol === col) ||
+    (move.fromRow === row + 1 && move.fromCol === col + 1) ||
+    (nFr === row && nFc === col)
+  );
+}
+
+function moveUsesOneBasedCoordsForBoard(
+  move: BattleMove,
+  boardOrigin?: BoardCell | null,
+): boolean {
+  if (boardOrigin != null && move.fromRow != null && move.fromCol != null) {
+    return move.fromRow === boardOrigin.row + 1 && move.fromCol === boardOrigin.col + 1;
+  }
+  if (move.fromRow === 0 || move.fromCol === 0 || move.toRow === 0 || move.toCol === 0) {
+    return false;
+  }
+  if (
+    move.fromRow === BOARD_SIZE ||
+    move.fromCol === BOARD_SIZE ||
+    move.toRow === BOARD_SIZE ||
+    move.toCol === BOARD_SIZE
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function moveTargetCell(move: BattleMove, boardOrigin?: BoardCell | null): BoardCell {
+  if (moveUsesOneBasedCoordsForBoard(move, boardOrigin)) {
+    return { row: move.toRow - 1, col: move.toCol - 1 };
+  }
+  const nTr = normalizeCellIndex(move.toRow);
+  const nTc = normalizeCellIndex(move.toCol);
+  return {
+    row: nTr ?? move.toRow,
+    col: nTc ?? move.toCol,
+  };
+}
+
+function preferDisplayKanjiChar(
+  primary: string | null | undefined,
+  fallback: string | null | undefined,
+): string {
+  if (primary && isDisplayKanjiChar(primary)) return primary;
+  if (fallback && isDisplayKanjiChar(fallback)) return fallback;
+  return primary ?? fallback ?? '?';
 }
 
 export function handsFromCanonical(position: BattleCanonicalPosition): HandsState {
@@ -1195,6 +1561,21 @@ export function applyDeathCurseEffectToPieces(
   });
 }
 
+/** ステージ固定の×マス・矢印マスを表示用 skill_state にマージする。 */
+export function positionWithStageFixedBoardTiles(
+  position: BattleCanonicalPosition,
+  stageNo?: number,
+): BattleCanonicalPosition {
+  if (!stageNo || !Number.isInteger(stageNo) || stageNo <= 0) {
+    return position;
+  }
+  const normalized = normalizeBattlePosition(position);
+  return mergeStageFixedArrowTilesIntoPosition(
+    mergeStageFixedPitHazardsIntoPosition(normalized, stageNo),
+    stageNo,
+  ) as BattleCanonicalPosition;
+}
+
 export function poisonHazardCellsForDisplay(position: BattleCanonicalPosition): BoardCell[] {
   const boardState = asRecord(position.boardState);
   if (!boardState) return [];
@@ -1560,19 +1941,22 @@ function piecesFromCanonicalBoardState(
     seen.add(key);
 
     const fallbackExistingChar =
-      existingPieces.find((piece) => piece.side === side && piece.pieceCode === code)?.char ?? null;
-    const resolvedCharFromCode = pieceCharFromCode(code, side, rawPromoted);
-    const rawChar =
-      asString(nested.char ?? entry.char) ??
-      fallbackExistingChar ??
-      (resolvedCharFromCode === '?' ? code : resolvedCharFromCode);
-    const promoted = rawPromoted || PROMOTED_DISPLAY_CHARS.has(rawChar);
-    const char = rawChar;
-    const pieceDef = promoted
-      ? (promotedPieceDefsByCode[code] ?? pieceDefsByCode[code])
-      : pieceDefsByCode[code];
-    const imageSignedUrl = preferBundledPromotedImageOverRemoteUrl(
+      existingPieces.find((piece) => piece.side === side && piece.pieceCode === code)?.char ??
+      existingPieces.find((piece) => piece.side === side && piece.row === row && piece.col === col)
+        ?.char ??
+      null;
+    const identity = resolveStagePlacementIdentity({
+      char: asString(nested.char ?? entry.char) ?? fallbackExistingChar,
       code,
+    });
+    const promoted = rawPromoted || PROMOTED_DISPLAY_CHARS.has(identity.char);
+    const char = identity.char;
+    const resolvedCode = identity.pieceCode ?? code;
+    const pieceDef = promoted
+      ? (promotedPieceDefsByCode[resolvedCode] ?? pieceDefsByCode[resolvedCode])
+      : pieceDefsByCode[resolvedCode];
+    const imageSignedUrl = preferBundledPromotedImageOverRemoteUrl(
+      resolvedCode,
       promoted,
       asString(nested.imageSignedUrl ?? nested.image_signed_url ?? entry.imageSignedUrl) ??
         pieceDef?.imageSignedUrl ??
@@ -1580,7 +1964,7 @@ function piecesFromCanonicalBoardState(
           side,
           row,
           col,
-          pieceCode: code,
+          pieceCode: resolvedCode,
           char,
           promoted,
         }) ??
@@ -1591,7 +1975,7 @@ function piecesFromCanonicalBoardState(
       side,
       row,
       col,
-      pieceCode: code,
+      pieceCode: resolvedCode,
       char,
       promoted,
       imageSignedUrl,
@@ -1655,7 +2039,12 @@ export function piecesFromCanonicalPosition(
           null;
         const usedPreservedCode = !pieceCode && preservedAtCellAnySide?.pieceCode != null;
         if (usedPreservedCode && preservedAtCellAnySide?.pieceCode) {
-          pieceCode = preservedAtCellAnySide.pieceCode;
+          pieceCode =
+            pieceCodeFromPlacement(
+              preservedAtCellAnySide.pieceCode,
+              preservedAtCellAnySide.char ?? '',
+              pieceDefsByCharFromCodeMap(pieceDefsByCode),
+            ) ?? preservedAtCellAnySide.pieceCode;
         }
         const effectiveSide = usedPreservedCode ? (preservedAtCellAnySide?.side ?? side) : side;
         if (pieceCode && row >= 0 && row < BOARD_SIZE && col >= 0 && col < BOARD_SIZE) {
@@ -1729,7 +2118,12 @@ export function piecesFromCanonicalPosition(
         null;
       const usedPreservedCode = !pieceCode && preservedAtCellAnySide?.pieceCode != null;
       if (usedPreservedCode && preservedAtCellAnySide?.pieceCode) {
-        pieceCode = preservedAtCellAnySide.pieceCode;
+        pieceCode =
+          pieceCodeFromPlacement(
+            preservedAtCellAnySide.pieceCode,
+            preservedAtCellAnySide.char ?? '',
+            pieceDefsByCharFromCodeMap(pieceDefsByCode),
+          ) ?? preservedAtCellAnySide.pieceCode;
       }
       const effectiveSide = usedPreservedCode ? (preservedAtCellAnySide?.side ?? side) : side;
       if (pieceCode && row >= 0 && row < BOARD_SIZE && col >= 0 && col < BOARD_SIZE) {
@@ -1797,7 +2191,7 @@ export function piecesFromCanonicalPosition(
       const char =
         promoted && pieceCode
           ? pieceCharFromCode(pieceCode, side, true)
-          : (existing.char ?? piece.char);
+          : preferDisplayKanjiChar(existing.char, piece.char);
       const mergedUrl = existing.imageSignedUrl ?? piece.imageSignedUrl ?? null;
       mergedByKey.set(key, {
         ...piece,
@@ -2030,30 +2424,51 @@ function sameBoardPieceForReconcile(lhs: BoardPiece, rhs: BoardPiece) {
 export function reconcilePieceIdentity(
   nextPieces: BoardPiece[],
   existingPieces: BoardPiece[],
+  pieceDefsByChar: Partial<Record<string, PieceCatalogItem>> = {},
 ): BoardPiece[] {
   const existingByKey = new Map(existingPieces.map((piece) => [pieceIdentityKey(piece), piece]));
   return nextPieces.map((piece) => {
     const existing = existingByKey.get(pieceIdentityKey(piece));
-    if (!existing) return piece;
-    if (!sameBoardPieceForReconcile(existing, piece)) return piece;
-    if (isPromotedVisualPiece(piece) !== isPromotedVisualPiece(existing)) return piece;
-    return {
-      ...existing,
-      row: piece.row,
-      col: piece.col,
-      pieceCode: piece.pieceCode,
-      char: piece.char,
-      promoted: piece.promoted ?? existing.promoted,
-      cowChargeCount: piece.cowChargeCount ?? existing.cowChargeCount,
-      pigInheritedPieceCode:
-        piece.pigInheritedPieceCode !== undefined
-          ? piece.pigInheritedPieceCode
-          : existing.pigInheritedPieceCode,
-      pigInheritedChar: piece.pigInheritedChar ?? existing.pigInheritedChar,
-      pigInheritedPromoted: piece.pigInheritedPromoted ?? existing.pigInheritedPromoted,
-      kbossLivesRemaining: piece.kbossLivesRemaining ?? existing.kbossLivesRemaining,
-      imageSignedUrl: existing.imageSignedUrl ?? piece.imageSignedUrl,
-    };
+    const normalized = normalizeBoardPieceForDisplay(piece, pieceDefsByChar);
+    if (!existing) return normalized;
+
+    const withPreservedDisplay = normalizeBoardPieceForDisplay(
+      {
+        ...normalized,
+        char: preferDisplayKanjiChar(normalized.char, existing.char),
+        imageSignedUrl: existing.imageSignedUrl ?? normalized.imageSignedUrl,
+      },
+      pieceDefsByChar,
+    );
+    if (!sameBoardPieceForReconcile(existing, withPreservedDisplay)) {
+      return withPreservedDisplay;
+    }
+    if (isPromotedVisualPiece(withPreservedDisplay) !== isPromotedVisualPiece(existing)) {
+      return withPreservedDisplay;
+    }
+    const merged = normalizeBoardPieceForDisplay(
+      {
+        ...existing,
+        row: withPreservedDisplay.row,
+        col: withPreservedDisplay.col,
+        pieceCode: withPreservedDisplay.pieceCode ?? existing.pieceCode,
+        char: preferDisplayKanjiChar(withPreservedDisplay.char, existing.char),
+        promoted: withPreservedDisplay.promoted ?? existing.promoted,
+        cowChargeCount: withPreservedDisplay.cowChargeCount ?? existing.cowChargeCount,
+        pigInheritedPieceCode:
+          withPreservedDisplay.pigInheritedPieceCode !== undefined
+            ? withPreservedDisplay.pigInheritedPieceCode
+            : existing.pigInheritedPieceCode,
+        pigInheritedChar: withPreservedDisplay.pigInheritedChar ?? existing.pigInheritedChar,
+        pigInheritedPromoted:
+          withPreservedDisplay.pigInheritedPromoted ?? existing.pigInheritedPromoted,
+        kbossLivesRemaining:
+          withPreservedDisplay.kbossLivesRemaining ?? existing.kbossLivesRemaining,
+        imageSignedUrl: existing.imageSignedUrl ?? withPreservedDisplay.imageSignedUrl,
+      },
+      pieceDefsByChar,
+    );
+    return merged;
   });
 }
 
@@ -2444,6 +2859,7 @@ export function computePiecesAfterOptimisticMove(
 
 export function syncCanonicalState(params: {
   position: BattleCanonicalPosition;
+  stageNo?: number;
   existingPieces: BoardPiece[];
   persistentHazards: readonly BoardPiece[];
   pieceCatalog: readonly PieceCatalogItem[];
@@ -2455,6 +2871,7 @@ export function syncCanonicalState(params: {
 }) {
   const {
     position,
+    stageNo,
     existingPieces,
     persistentHazards,
     pieceCatalog,
@@ -2464,16 +2881,24 @@ export function syncCanonicalState(params: {
     preservedMovedPiece,
     optimisticBaseline,
   } = params;
+  const displayPosition = positionWithStageFixedBoardTiles(position, stageNo);
   const reconcileSource = optimisticBaseline ?? existingPieces;
   const parsedPieces = piecesFromCanonicalPosition(
-    position,
+    displayPosition,
     pieceSfenMapping,
     pieceDefsByCode,
     promotedPieceDefsByCode,
     reconcileSource,
   );
   const nextPieces = preserveMovedPieceIdentity(parsedPieces, preservedMovedPiece);
-  const reconciledPieces = reconcilePieceIdentity(nextPieces, reconcileSource);
+  const pieceDefsByCharEarly = Object.fromEntries(
+    pieceCatalog.filter((it) => it.char).map((item) => [item.char, item]),
+  ) as Partial<Record<string, PieceCatalogItem>>;
+  const reconciledPieces = reconcilePieceIdentity(
+    nextPieces,
+    reconcileSource,
+    pieceDefsByCharEarly,
+  );
   const withPersistentHazards = restoreMissingPersistentHazardPieces(
     reconciledPieces,
     reconcileSource,
@@ -2483,28 +2908,28 @@ export function syncCanonicalState(params: {
       ? overlayPromotionFromOptimistic(withPersistentHazards, optimisticBaseline)
       : withPersistentHazards;
   const withPersistentCells = enforcePersistentHazardCells(withPromotionOverlay, persistentHazards);
-  const withDarkVeil = applyDarkVeilFromSkillStateToPieces(withPersistentCells, position);
-  const withATransformEffect = applyATransformEffectToPieces(withDarkVeil, position);
-  const withPrisonChain = applyPrisonChainEffectToPieces(withATransformEffect, position);
-  const withStunAura = applyStunAuraEffectToPieces(withPrisonChain, position);
-  const withAbyssAura = applyAbyssAuraEffectToPieces(withStunAura, position);
-  const withChrysRevivalMark = applyChrysanthemumRevivalMarkToPieces(withAbyssAura, position);
+  const withDarkVeil = applyDarkVeilFromSkillStateToPieces(withPersistentCells, displayPosition);
+  const withATransformEffect = applyATransformEffectToPieces(withDarkVeil, displayPosition);
+  const withPrisonChain = applyPrisonChainEffectToPieces(withATransformEffect, displayPosition);
+  const withStunAura = applyStunAuraEffectToPieces(withPrisonChain, displayPosition);
+  const withAbyssAura = applyAbyssAuraEffectToPieces(withStunAura, displayPosition);
+  const withChrysRevivalMark = applyChrysanthemumRevivalMarkToPieces(withAbyssAura, displayPosition);
   const withLightProtectionAura = applyLightProtectionAuraEffectToPieces(
     withChrysRevivalMark,
-    position,
+    displayPosition,
   );
-  const withDeathCurseAura = applyDeathCurseEffectToPieces(withLightProtectionAura, position);
-  const poisonHazardCells = poisonHazardCellsForDisplay(position);
-  const rockObstacleCells = rockObstacleCellsForDisplay(position);
-  const batsuHazardCells = batsuHazardCellsForDisplay(position);
-  const arrowCells = arrowCellsForDisplay(position);
-  const thornHazardCells = thornHazardCellsForDisplay(position);
-  const safeRoomHazardCells = safeRoomHazardCellsForDisplay(position);
-  const henEdgeHighlightCells = henEdgeHighlightCellsForDisplay(position);
-  const rawMovementRuleByCell = movementRuleByCellFromCanonical(position);
-  const immobilizedKeys = immobilizedKeysFromCanonical(position);
+  const withDeathCurseAura = applyDeathCurseEffectToPieces(withLightProtectionAura, displayPosition);
+  const poisonHazardCells = poisonHazardCellsForDisplay(displayPosition);
+  const rockObstacleCells = rockObstacleCellsForDisplay(displayPosition);
+  const batsuHazardCells = batsuHazardCellsForDisplay(displayPosition);
+  const arrowCells = arrowCellsForDisplay(displayPosition);
+  const thornHazardCells = thornHazardCellsForDisplay(displayPosition);
+  const safeRoomHazardCells = safeRoomHazardCellsForDisplay(displayPosition);
+  const henEdgeHighlightCells = henEdgeHighlightCellsForDisplay(displayPosition);
+  const rawMovementRuleByCell = movementRuleByCellFromCanonical(displayPosition);
+  const immobilizedKeys = immobilizedKeysFromCanonical(displayPosition);
   const nextHands = remapHandsStateToDisplayPieceCodes(
-    normalizeHandsStateKeys(handsFromCanonical(position)),
+    normalizeHandsStateKeys(handsFromCanonical(displayPosition)),
     pieceCatalog,
   );
   const reconciledHands = reconcileExtendedPieceHandsAgainstBoard(nextHands, withPromotionOverlay);
@@ -2512,8 +2937,11 @@ export function syncCanonicalState(params: {
   const pieceDefsByChar = Object.fromEntries(
     pieceCatalog.filter((it) => it.char).map((item) => [item.char, item]),
   ) as Partial<Record<string, PieceCatalogItem>>;
+  const withNormalizedIdentity = stabilizedPieces.map((p) =>
+    normalizeBoardPieceForDisplay(p, pieceDefsByChar),
+  );
   const withSpringDragonAwakening = mapPiecesForSpringDragonAwakeningDisplay(
-    stabilizedPieces.map((p) => p),
+    withNormalizedIdentity,
     pieceDefsByChar,
   );
   const withYinYangSkillAura = applyYinYangSkillAuraDisplayToPieces(withSpringDragonAwakening);

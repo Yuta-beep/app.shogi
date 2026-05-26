@@ -21,6 +21,9 @@ export class ApiRollGachaUseCase implements RollGachaUseCase {
   constructor(private readonly dataSource = new GachaApiDataSource()) {}
 
   async execute(input: RollGachaInput): Promise<RollGachaResult> {
-    return this.dataSource.roll(input.gachaId);
+    return this.dataSource.roll({
+      gachaId: input.gachaId,
+      gachaBallColorIndex: input.gachaBallColorIndex,
+    });
   }
 }

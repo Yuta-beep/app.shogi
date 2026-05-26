@@ -3,22 +3,44 @@ import {
   StageClearRewardResult,
 } from '@/usecases/stage-battle/claim-stage-clear-reward-usecase';
 import {
+  throwIfInsufficientStageStamina,
+  trySpendNormalStageStamina,
+} from '@/lib/stamina/spend-stage-stamina';
+import {
   PrepareStageBattleUseCase,
   StageBattleSnapshot,
 } from '@/usecases/stage-battle/prepare-stage-battle-usecase';
 
+let mockPreparedStageId: string | null = null;
+
+const mockSnapshot = (stageLabel: string): StageBattleSnapshot => ({
+  stageLabel,
+  turnLabel: 'TURN 12 / 99',
+  handLabel: '歩 x2 / 桂 x1 / 角 x1',
+  boardSize: 9,
+  placements: [],
+});
+
 export class MockPrepareStageBattleUseCase implements PrepareStageBattleUseCase {
   async execute(input: { stageId?: string }): Promise<StageBattleSnapshot> {
-    const stageLabel = input.stageId ? `STAGE ${input.stageId}` : 'STAGE';
+    if (!input.stageId) {
+      return mockSnapshot('STAGE');
+    }
 
-    return {
-      stageLabel,
-      turnLabel: 'TURN 12 / 99',
-      handLabel: '歩 x2 / 桂 x1 / 角 x1',
-      boardSize: 9,
-      placements: [],
-    };
+    if (mockPreparedStageId === input.stageId) {
+      return mockSnapshot(`STAGE ${input.stageId}`);
+    }
+
+    const spend = trySpendNormalStageStamina();
+    throwIfInsufficientStageStamina(spend);
+    mockPreparedStageId = input.stageId;
+
+    return mockSnapshot(`STAGE ${input.stageId}`);
   }
+}
+
+export function resetMockPreparedStageId(): void {
+  mockPreparedStageId = null;
 }
 
 export class MockClaimStageClearRewardUseCase implements ClaimStageClearRewardUseCase {

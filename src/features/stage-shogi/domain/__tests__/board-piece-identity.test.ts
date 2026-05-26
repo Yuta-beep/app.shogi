@@ -1,0 +1,65 @@
+import { piecesFromBoardState } from '@/ai/model/position';
+import {
+  canonicalizeBoardPieceIdentity,
+  resolveStagePlacementIdentity,
+} from '@/features/stage-shogi/domain/board-piece-identity';
+import { getPieceImageSource } from '@/features/stage-shogi/ui/stage-shogi-screen.helpers';
+
+describe('canonicalizeBoardPieceIdentity', () => {
+  it('maps opaque 歩 id + 歩 char to FU', () => {
+    expect(
+      canonicalizeBoardPieceIdentity('piece_c518b11858f2', '歩'),
+    ).toEqual({ pieceCode: 'FU', char: '歩' });
+  });
+
+  it('maps FIR + 火 for summoned fire', () => {
+    expect(canonicalizeBoardPieceIdentity('FIR', '火')).toEqual({
+      pieceCode: 'FIR',
+      char: '火',
+    });
+  });
+});
+
+describe('resolveStagePlacementIdentity', () => {
+  it('does not use opaque code as char when char is missing', () => {
+    expect(
+      resolveStagePlacementIdentity({
+        char: null,
+        code: 'piece_c518b11858f2',
+      }),
+    ).toEqual({ pieceCode: 'FU', char: '歩' });
+  });
+});
+
+describe('piecesFromBoardState canonical codes', () => {
+  it('normalizes opaque deck piece to FU for legal move lookup', () => {
+    const pieces = piecesFromBoardState({
+      sideToMove: 'player',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: '9/9/9/9/9/9/9/9/9 b - 1',
+      stateHash: null,
+      boardState: {
+        pieces: [
+          {
+            side: 'player',
+            row: 6,
+            col: 4,
+            pieceCode: 'piece_c518b11858f2',
+            char: '歩',
+            promoted: false,
+          },
+        ],
+      },
+      hands: { player: {}, enemy: {} },
+    });
+    expect(pieces[0]?.pieceCode).toBe('FU');
+    expect(pieces[0]?.char).toBe('歩');
+  });
+});
+
+describe('getPieceImageSource', () => {
+  it('resolves 火 by char when pieceCode is canonical FIR', () => {
+    expect(getPieceImageSource({ pieceCode: 'FIR', char: '火' })).not.toBeNull();
+  });
+});

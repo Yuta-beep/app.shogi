@@ -7,6 +7,10 @@ import type {
 import { createRequestId } from '@/domain/matching-server/protocol';
 import { getMatchingServerWsBaseUrl } from '@/lib/config/online-match';
 import {
+  clearActiveMatchProfile,
+  setActiveMatchProfile,
+} from '@/lib/matching-server/match-profile-store';
+import {
   clearActiveMatchSession,
   setActiveMatchSession,
   updateActiveMatchGame,
@@ -136,11 +140,13 @@ export class MatchingServerClient {
     this.role = null;
     this.lastError = null;
     clearActiveMatchSession();
+    clearActiveMatchProfile();
   }
 
   enterQueue(input: {
     userId: string;
     rating: number;
+    displayName: string;
     battleSetupId: string;
   }): void {
     this.send({
@@ -148,6 +154,7 @@ export class MatchingServerClient {
       requestId: createRequestId(),
       userId: input.userId,
       rating: input.rating,
+      displayName: input.displayName,
       battleSetupId: input.battleSetupId,
     });
   }
@@ -200,6 +207,7 @@ export class MatchingServerClient {
       case 'match_found':
         this.matchId = message.matchId;
         this.role = message.role;
+        setActiveMatchProfile({ self: message.self, opponent: message.opponent });
         return;
       case 'game_started':
         this.matchId = message.matchId;

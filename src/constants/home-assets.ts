@@ -3,6 +3,8 @@ export const homeAssets = {
   /** タイトル画面右下「チュートリアル」 */
   tutorialButton: require('../../assets/home/ui/チュートリアル.png'),
   loadingImage: require('../../assets/home/ui/読み込み中.png'),
+  /** 未実装機能タップ時の「準備中」表示 */
+  comingSoon: require('../../assets/home/ui/準備中.png'),
   background: require('../../assets/home/background/home-bg.png'),
   userBar: require('../../assets/home/ui/ユーザーバー.png'),
   pvpBadge: require('../../assets/home/ui/pvp-badge.png'),
@@ -31,6 +33,7 @@ export const homeAssets = {
   },
   preloadTargets: [
     require('../../assets/home/ui/チュートリアル.png'),
+    require('../../assets/home/ui/準備中.png'),
     require('../../assets/home/background/home-bg.png'),
     require('../../assets/home/ui/ユーザーバー.png'),
     require('../../assets/home/ui/pvp-badge.png'),

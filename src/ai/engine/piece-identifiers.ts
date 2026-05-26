@@ -366,7 +366,7 @@ export function isTanePiece(piece: PieceLike): boolean {
   return raw.includes('PIECE_SHOP_TANE') || raw.includes('SHOP_TANE');
 }
 
-/** ガチャ「定」: 前後左右に各1マス。 */
+/** ガチャ「定」: 前後左右1マス。 */
 export function isSadamePiece(piece: PieceLike): boolean {
   const char = normKanjiForEngineRules(piece.char);
   if (char === '定') return true;
@@ -376,7 +376,7 @@ export function isSadamePiece(piece: PieceLike): boolean {
   return raw.includes('GACHA_SADAME');
 }
 
-/** ガチャ「進」: 毎ターンランダムな駒の移動範囲で動く。 */
+/** ガチャ「進」: 移動範囲不明（毎ターンランダムな駒の移動範囲で動く）。 */
 export function isShinPiece(piece: PieceLike): boolean {
   const char = normKanjiForEngineRules(piece.char);
   if (char === '進') return true;
@@ -386,7 +386,7 @@ export function isShinPiece(piece: PieceLike): boolean {
   return raw.includes('GACHA_SHIN');
 }
 
-/** ガチャ「逸」: 前斜め・後斜めに各1マス。 */
+/** ガチャ「逸」: 前と斜め4方向1マス。 */
 export function isItsuPiece(piece: PieceLike): boolean {
   const char = normKanjiForEngineRules(piece.char);
   if (char === '逸') return true;
@@ -396,7 +396,7 @@ export function isItsuPiece(piece: PieceLike): boolean {
   return raw.includes('GACHA_ITSU');
 }
 
-/** ガチャ「辺」: 前斜め・後斜めに各1マス。 */
+/** ガチャ「辺」: 前と斜め4方向1マス。 */
 export function isHenPiece(piece: PieceLike): boolean {
   const char = normKanjiForEngineRules(piece.char);
   if (char === '辺') return true;
@@ -426,7 +426,7 @@ export function isTouPiece(piece: PieceLike): boolean {
   return raw.includes('GACHA_TOU') && !raw.includes('GACHA_TOU2');
 }
 
-/** ガチャ「煽」: 前後左右に何マスでも。 */
+/** ガチャ「煽」: 前後左右何マスでも。 */
 export function isAoriPiece(piece: PieceLike): boolean {
   const char = normKanjiForEngineRules(piece.char);
   if (char === '煽') return true;
@@ -436,7 +436,7 @@ export function isAoriPiece(piece: PieceLike): boolean {
   return raw.includes('GACHA_AORI');
 }
 
-/** ガチャ「爆」: 前斜め・前・左右・後に各1マス。 */
+/** ガチャ「爆」: 前斜め前左右後ろ1マス。 */
 export function isBakuPiece(piece: PieceLike): boolean {
   const char = normKanjiForEngineRules(piece.char);
   if (char === '爆') return true;
@@ -446,7 +446,7 @@ export function isBakuPiece(piece: PieceLike): boolean {
   return raw.includes('GACHA_BAKU');
 }
 
-/** ガチャ「膠」: 前斜め・後1。隣接味方の横移動に追従。 */
+/** ガチャ「膠」: 前斜め前斜め後ろ1マス。隣接味方の横移動に追従。 */
 export function isKoPiece(piece: PieceLike): boolean {
   const char = normKanjiForEngineRules(piece.char);
   if (char === '膠') return true;
@@ -456,7 +456,7 @@ export function isKoPiece(piece: PieceLike): boolean {
   return raw.includes('GACHA_KOU') || raw.includes('PIECE_GACHA_KOU');
 }
 
-/** ガチャ「閹」: 縦横1マス + 味方王の前1マスへ移動可。 */
+/** ガチャ「閹」: 前後左右1マス（味方王の前1マスへも移動可）。 */
 export function isEnPiece(piece: PieceLike): boolean {
   const char = normKanjiForEngineRules(piece.char);
   if (char === '閹') return true;
@@ -466,7 +466,7 @@ export function isEnPiece(piece: PieceLike): boolean {
   return raw.includes('GACHA_EN');
 }
 
-/** ガチャ「艸」: 前最大2・左右後1。移動時周囲に×マス（pit_cell）。 */
+/** ガチャ「艸」: 前最大2マス左右後ろ1マス。移動時周囲に×マス（pit_cell）。 */
 export function isSouPiece(piece: PieceLike): boolean {
   const char = normKanjiForEngineRules(piece.char);
   if (char === '艸') return true;
@@ -476,7 +476,7 @@ export function isSouPiece(piece: PieceLike): boolean {
   return raw.includes('GACHA_SOU');
 }
 
-/** ガチャ「宋」: 前後何マスでも + 左右1マス。 */
+/** ガチャ「宋」: 前後何マスでも+左右1マス。 */
 export function isSoPiece(piece: PieceLike): boolean {
   const char = normKanjiForEngineRules(piece.char);
   if (char === '宋') return true;
@@ -486,7 +486,7 @@ export function isSoPiece(piece: PieceLike): boolean {
   return raw.includes('GACHA_SO') && !raw.includes('GACHA_SOU');
 }
 
-/** ガチャ「安」: 前後左右1マス + 桂馬跳び。 */
+/** ガチャ「安」: 前後左右1マス+桂馬飛び。 */
 export function isAnPiece(piece: PieceLike): boolean {
   const char = normKanjiForEngineRules(piece.char);
   if (char === '安') return true;
@@ -496,7 +496,7 @@ export function isAnPiece(piece: PieceLike): boolean {
   return raw.includes('GACHA_AN');
 }
 
-/** ガチャ「室」: 前・前斜め左右・左右・後に各1マス。 */
+/** ガチャ「室」: 前後左右斜め前1マス。 */
 export function isShitsuPiece(piece: PieceLike): boolean {
   const char = normKanjiForEngineRules(piece.char);
   if (char === '室') return true;

@@ -28,7 +28,7 @@ describe('gacha room usecases', () => {
     if (result.type === 'miss') {
       expect(result.currency).toBe('pawn');
       expect(result.amount).toBe(2);
-      expect(result.pawnCurrency).toBe(3000 - 30 + 2);
+      expect(result.pawnCurrency).toBe(3000 - 10 + 2);
     }
     randomSpy.mockRestore();
   });

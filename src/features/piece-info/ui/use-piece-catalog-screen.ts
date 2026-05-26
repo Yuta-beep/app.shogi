@@ -1,11 +1,41 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { PieceCatalogItem } from '@/domain/models/piece';
+import { buildCatalogItemFromGachaChar } from '@/constants/gacha-piece-metadata';
+import { hydrateGachaMockOwnedChars } from '@/features/gacha-room/lib/gacha-mock-store';
 import { useAuthSession } from '@/hooks/common/auth-session-context';
 import { createLoadPieceCatalogUseCase } from '@/usecases/piece-info/create-piece-info-usecases';
 import { createLoadDeckBuilderUseCase } from '@/usecases/deck-builder/create-deck-builder-usecases';
 import { isApiDataSource } from '@/lib/config/data-source';
 import { normalizePieceCatalogItemForDisplay } from '@/features/piece-info/lib/piece-catalog-display';
+
+function mergeOwnedPiecesIntoCatalog(
+  catalog: PieceCatalogItem[],
+  ownedPieces: Array<{
+    char: string;
+    pieceId?: number;
+    imageSignedUrl?: string | null;
+    quantity?: number;
+  }>,
+): PieceCatalogItem[] {
+  const byChar = new Map(catalog.map((piece) => [piece.char, piece]));
+
+  for (const owned of ownedPieces) {
+    if (byChar.has(owned.char)) continue;
+    const fallback = buildCatalogItemFromGachaChar(owned.char);
+    if (!fallback) continue;
+    const merged = {
+      ...normalizePieceCatalogItemForDisplay(fallback),
+      pieceId: owned.pieceId ?? fallback.pieceId,
+      imageSignedUrl: owned.imageSignedUrl ?? null,
+      quantity: owned.quantity,
+    };
+    byChar.set(owned.char, merged);
+  }
+
+  return Array.from(byChar.values());
+}
 
 export function usePieceCatalogScreen() {
   const isApiMode = isApiDataSource();
@@ -15,7 +45,7 @@ export function usePieceCatalogScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const loadUseCase = useMemo(() => createLoadPieceCatalogUseCase(), []);
 
-  useEffect(() => {
+  const reloadCatalog = useCallback(() => {
     let active = true;
     setIsLoading(true);
 
@@ -23,11 +53,9 @@ export function usePieceCatalogScreen() {
       const catalog = await loadUseCase.execute();
 
       if (!isApiMode) {
+        await hydrateGachaMockOwnedChars();
         const deckSnapshot = await createLoadDeckBuilderUseCase().execute();
-        const ownedByChar = new Set(deckSnapshot.ownedPieces.map((piece) => piece.char));
-        const ownedCatalog = catalog
-          .filter((piece) => ownedByChar.has(piece.char))
-          .map((piece) => normalizePieceCatalogItemForDisplay(piece));
+        const ownedCatalog = mergeOwnedPiecesIntoCatalog(catalog, deckSnapshot.ownedPieces);
         if (active) {
           setItems(ownedCatalog);
         }
@@ -42,7 +70,6 @@ export function usePieceCatalogScreen() {
       }
 
       const deckSnapshot = await createLoadDeckBuilderUseCase(accessToken).execute();
-
       const ownedByChar = new Map<
         string,
         { pieceId?: number; imageSignedUrl?: string | null; quantity?: number }
@@ -58,18 +85,23 @@ export function usePieceCatalogScreen() {
         }
       }
 
-      const ownedCatalog = catalog
+      const ownedFromMaster = catalog
         .filter((piece) => ownedByChar.has(piece.char))
         .map((piece) => {
           const owned = ownedByChar.get(piece.char);
           const display = normalizePieceCatalogItemForDisplay(piece);
           return {
             ...display,
-            pieceId: owned?.pieceId,
+            pieceId: owned?.pieceId ?? display.pieceId,
             imageSignedUrl: owned?.imageSignedUrl ?? null,
             quantity: owned?.quantity,
           };
         });
+
+      const ownedCatalog = mergeOwnedPiecesIntoCatalog(
+        ownedFromMaster,
+        deckSnapshot.ownedPieces,
+      );
 
       if (active) {
         setItems(ownedCatalog);
@@ -92,6 +124,8 @@ export function usePieceCatalogScreen() {
       active = false;
     };
   }, [accessToken, isApiMode, loadUseCase]);
+
+  useFocusEffect(reloadCatalog);
 
   useEffect(() => {
     if (items.length === 0) {

@@ -67,9 +67,7 @@ describe('進 毎ターンランダム模倣移動', () => {
     jest.restoreAllMocks();
   });
 
-  it('mimics pawn forward step when pool rolls to 歩', () => {
-    jest.spyOn(Math, 'random').mockReturnValue(0);
-
+  it('mimics pawn forward step when deterministic pool index selects 歩', () => {
     const position = positionWithShin();
     ensureShinTurnMimicForBattle(position, pieceCatalog);
     const legal = generateLegalMoves({ position, pieceCatalog });
@@ -81,20 +79,21 @@ describe('進 毎ターンランダム模倣移動', () => {
     expect(mimic?.bound_turn_number).toBe(1);
   });
 
-  it('mimics 定 orthogonal steps when pool rolls to 定', () => {
-    jest.spyOn(Math, 'random').mockReturnValue(0.99);
-
-    const position = positionWithShin();
+  it('mimics 定 orthogonal steps for a turn seed that selects 定', () => {
+    const position = {
+      ...positionWithShin(3),
+      stateHash: 'shin-mimic-sadame-seed',
+    };
     ensureShinTurnMimicForBattle(position, pieceCatalog);
     const legal = generateLegalMoves({ position, pieceCatalog });
     const fromShin = legal.legalMoves.filter((m) => m.fromRow === 5 && m.fromCol === 4);
     expect(fromShin.map((m) => `${m.toRow}:${m.toCol}`).sort()).toEqual(
       ['4:4', '5:3', '5:5', '6:4'].sort(),
     );
+    expect(readShinTurnMimic(position, 'player')?.mimic_char).toBe('定');
   });
 
   it('reuses the same mimic entry within the same turn', () => {
-    jest.spyOn(Math, 'random').mockReturnValue(0);
     const position = positionWithShin();
     ensureShinTurnMimicForBattle(position, pieceCatalog);
     const first = readShinTurnMimic(position, 'player');
@@ -102,6 +101,15 @@ describe('進 毎ターンランダム模倣移動', () => {
     generateLegalMoves({ position, pieceCatalog });
     const second = readShinTurnMimic(position, 'player');
     expect(second).toEqual(first);
-    expect(Math.random).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses the same mimic for the same turn seed after skill_state is cleared', () => {
+    const position = positionWithShin();
+    ensureShinTurnMimicForBattle(position, pieceCatalog);
+    const first = readShinTurnMimic(position, 'player');
+    const board = position.boardState as Record<string, unknown>;
+    board.skill_state = {};
+    ensureShinTurnMimicForBattle(position, pieceCatalog);
+    expect(readShinTurnMimic(position, 'player')).toEqual(first);
   });
 });

@@ -1,4 +1,4 @@
-import { CHAR_TO_CODE } from '@/features/stage-shogi/domain/piece-conversion';
+import { CHAR_TO_CODE, CODE_TO_CHAR } from '@/features/stage-shogi/domain/piece-conversion';
 
 export type PieceImageRecord = {
   pieceId?: number;
@@ -906,6 +906,15 @@ for (const [code, char] of Object.entries(aliasCodeToChar)) {
   }
 }
 
+// canonical コード（FIR / FU 等）からもローカル画像を引けるようにする（同期後の pieceCode 用）。
+for (const [code, char] of Object.entries(CODE_TO_CHAR)) {
+  const source = pieceImageByChar.get(char);
+  if (source != null) {
+    pieceImageByCode.set(code, source);
+    pieceImageByCode.set(code.toLowerCase(), source);
+  }
+}
+
 // 鬼バリアントは char ベースだと上書き順で誤画像になるため、コードごとに固定する。
 const redOniSource =
   pieceImageByCode.get('redOni') ??
@@ -922,6 +931,25 @@ if (blueOniSource != null) {
 const blackOniSource = pieceImageByCode.get('blackOni') ?? pieceImageByCode.get('BLACKONI');
 if (blackOniSource != null) {
   pieceImageByCode.set('BLACKONI', blackOniSource);
+}
+
+/** opaque `piece_…` などコードのみ分かるときの表示字（レジストリ参照）。 */
+export function getDisplayCharFromPieceCode(pieceCode: string | null | undefined): string | null {
+  if (!pieceCode) return null;
+  const raw = pieceCode.trim();
+  if (!raw) return null;
+  for (const record of pieceImageRecords) {
+    const code = record.pieceCode;
+    if (!code) continue;
+    if (code === raw || code.toLowerCase() === raw.toLowerCase()) {
+      return record.char;
+    }
+  }
+  const upper = raw.toUpperCase();
+  if (aliasCodeToChar[upper]) return aliasCodeToChar[upper];
+  const fromCanonical = CODE_TO_CHAR[upper];
+  if (fromCanonical) return fromCanonical;
+  return null;
 }
 
 export function getLocalPieceImageSource(input: {

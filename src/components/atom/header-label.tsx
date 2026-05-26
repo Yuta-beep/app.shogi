@@ -9,7 +9,7 @@ export function HeaderLabel({ text, onPress }: HeaderLabelProps) {
   const label = (
     <Text
       numberOfLines={1}
-      className="text-[17px] font-black text-[#4b2e1f]"
+      className="text-[20px] font-black text-[#4b2e1f]"
       style={{ fontFamily: 'ShipporiMincho_700Bold' }}
     >
       {text}

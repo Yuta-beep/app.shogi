@@ -2,7 +2,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ImageBackground, Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -85,10 +85,21 @@ function ResultBlock({ vm, selected }: { vm: GachaRoomVM; selected: GachaBanner 
     }
     const label = result.currency === 'gold' ? `金 x${result.amount}` : `歩 x${result.amount}`;
     const currencyChar = result.currency === 'gold' ? '金' : '歩';
+    const currencyImageSource = resolvePieceImageSource({ char: currencyChar });
     return (
       <View className="gap-2">
         <Text className="text-base font-black text-slate-100">{`${currencyChar}を獲得！`}</Text>
-        <Text className="py-2 text-center text-5xl text-white">{currencyChar}</Text>
+        {currencyImageSource ? (
+          <View className="items-center py-2">
+            <Image
+              source={currencyImageSource}
+              contentFit="contain"
+              style={{ width: 120, height: 120 }}
+            />
+          </View>
+        ) : (
+          <Text className="py-2 text-center text-5xl text-white">{currencyChar}</Text>
+        )}
         <Text className="text-sm text-slate-300">{`${label} の通貨が増えました。ショップで使いましょう。`}</Text>
       </View>
     );
@@ -98,19 +109,45 @@ function ResultBlock({ vm, selected }: { vm: GachaRoomVM; selected: GachaBanner 
 }
 
 function GachaVideoOverlay({ isHit, onEnd }: { isHit: boolean; onEnd: () => void }) {
+  const endedRef = useRef(false);
+  const onEndRef = useRef(onEnd);
+  onEndRef.current = onEnd;
+
   const source = isHit ? gachaRoomAssets.videos.hit : gachaRoomAssets.videos.miss;
   const player = useVideoPlayer(source, (p) => {
+    endedRef.current = false;
+    p.loop = false;
     p.play();
   });
 
   useEffect(() => {
-    const sub = player.addListener('playingChange', ({ isPlaying }) => {
-      if (!isPlaying && player.currentTime > 0) {
-        onEnd();
-      }
-    });
-    return () => sub.remove();
-  }, [player, onEnd]);
+    endedRef.current = false;
+  }, [source]);
+
+  useEffect(() => {
+    const finishOnce = () => {
+      if (endedRef.current) return;
+      endedRef.current = true;
+      onEndRef.current();
+    };
+
+    const subPlayToEnd = player.addListener('playToEnd', finishOnce);
+    return () => {
+      subPlayToEnd.remove();
+    };
+  }, [player]);
+
+  const handleSkip = () => {
+    try {
+      player.pause();
+    } catch {
+      // ignore
+    }
+    if (!endedRef.current) {
+      endedRef.current = true;
+      onEndRef.current();
+    }
+  };
 
   return (
     <Pressable
@@ -122,7 +159,7 @@ function GachaVideoOverlay({ isHit, onEnd }: { isHit: boolean; onEnd: () => void
         alignItems: 'center',
         justifyContent: 'center',
       }}
-      onPress={onEnd}
+      onPress={handleSkip}
     >
       <VideoView
         player={player}
@@ -171,12 +208,9 @@ function PieceOverlay({
   );
 }
 
-/** 一覧画面では常に draw-0 を使うガチャ（HTML 版の見た目に合わせる） */
-const INTRO_ALWAYS_DRAW0_KEYS = new Set<string>(['ukanmuri', 'hiHen']);
-
 function IntroDrawButton({
   banner,
-  active,
+  active: _active,
   onSelect,
 }: {
   banner: GachaBanner;
@@ -184,17 +218,10 @@ function IntroDrawButton({
   onSelect: () => void;
 }) {
   const key = resolveGachaBannerKey(banner.key);
-  const alwaysDraw0 = INTRO_ALWAYS_DRAW0_KEYS.has(key);
+  const isKanken1 = key === 'kanken1';
 
-  let drawImage = gachaRoomAssets.draw1;
-  if (banner.usesGold) {
-    drawImage = gachaRoomAssets.drawGold;
-  } else if (alwaysDraw0 || active) {
-    drawImage = gachaRoomAssets.draw0;
-  }
-
-  const isPawnDraw = !banner.usesGold;
-  const size = isPawnDraw ? { width: 360, height: 144 } : { width: 240, height: 96 };
+  const drawImage = isKanken1 ? gachaRoomAssets.drawGold : gachaRoomAssets.drawWalk;
+  const size = isKanken1 ? { width: 390, height: 150 } : { width: 360, height: 144 };
 
   return (
     <Pressable
@@ -203,6 +230,7 @@ function IntroDrawButton({
         onSelect();
       }}
       className="items-center active:opacity-90"
+      style={isKanken1 ? { marginTop: 25 } : undefined}
     >
       <Image source={drawImage} contentFit="contain" style={size} />
     </Pressable>
@@ -227,6 +255,8 @@ export function GachaRoomScreen() {
   const { isReady: areAssetsReady } = useAssetPreload(
     [
       gachaRoomAssets.backButton,
+      gachaRoomAssets.drawWalk,
+      gachaRoomAssets.drawGold,
       ...(Object.values(gachaRoomAssets.bannerByKey) as number[]),
       ...listLocalPieceImageModules(),
     ],
@@ -257,7 +287,10 @@ export function GachaRoomScreen() {
     );
   }
 
-  const isHit = vm.lastResult?.type === 'hit';
+  const isHit =
+    vm.phase === 'video' || vm.phase === 'pieceOverlay'
+      ? vm.lastResult?.type === 'hit'
+      : false;
   const canRoll = vm.phase === 'idle' || vm.phase === 'done';
   const bgSource = selectedBanner
     ? bannerImageSource(selectedBanner.key, selectedBanner.imageSignedUrl)

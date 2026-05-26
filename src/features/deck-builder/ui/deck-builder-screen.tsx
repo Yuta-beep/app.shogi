@@ -26,8 +26,7 @@ import { useScreenBgm } from '@/hooks/common/use-screen-bgm';
 import { playSe } from '@/lib/audio/audio-manager';
 import { resolvePieceImageSource } from '@/lib/piece-image';
 import { getDeckBuilderPieceCost } from '@/features/deck-builder/lib/deck-builder-piece-cost';
-import { createSaveOnlineMatchSetupUseCase } from '@/usecases/online-match/create-online-match-usecases';
-import { CHAR_TO_CODE } from '@/features/stage-shogi/domain/piece-conversion';
+import { saveOnlineMatchSetupFromDeck } from '@/lib/online-match/save-online-match-setup-from-deck';
 
 const BOARD_SIZE = 9;
 const BOARD_VIEWBOX = 900;
@@ -100,6 +99,14 @@ export function DeckBuilderScreen({ mode = 'default' }: DeckBuilderScreenProps) 
   const appliedSuccessMessage = isOnlineMatchSetup
     ? '対戦準備の盤面として反映されました。'
     : '反映されました';
+
+  const persistOnlineMatchSetup = useCallback(async () => {
+    await saveOnlineMatchSetupFromDeck(vm.boardPlacements, accessToken ?? undefined);
+  }, [accessToken, vm.boardPlacements]);
+
+  const goToMatching = useCallback(() => {
+    router.replace('/matching');
+  }, [router]);
 
   const handleBoardCellPress = useCallback(
     (row: number, col: number, hasPiece: boolean) => {
@@ -410,44 +417,20 @@ export function DeckBuilderScreen({ mode = 'default' }: DeckBuilderScreenProps) 
             if (!isOnlineMatchSetup) {
               return vm.applyAsBattleDeck();
             }
-
-            const useCase = createSaveOnlineMatchSetupUseCase(accessToken ?? undefined);
-            const placements = vm.boardPlacements
-              .filter((placement) => typeof placement.piece.pieceId === 'number')
-              .map((placement) => ({
-                row: placement.row,
-                col: placement.col,
-                pieceId: placement.piece.pieceId!,
-                pieceCode: (
-                  CHAR_TO_CODE[placement.piece.char] ?? placement.piece.char
-                ).toUpperCase(),
-              }));
-            const selectedPieceIds = placements.map((placement) => placement.pieceId);
-            await useCase.execute({
-              name: 'online-match-setup',
-              boardLayout: placements,
-              handsLayout: [],
-              selectedPieceIds,
-            });
+            await persistOnlineMatchSetup();
             return true;
           })()
             .then((ok) => {
               if (ok) {
-                if (isOnlineMatchSetup) {
-                  Alert.alert(appliedSuccessMessage, undefined, [
-                    {
-                      text: 'OK',
-                      onPress: () => {
-                        router.replace('/matching');
-                      },
-                    },
-                  ]);
-                } else {
-                  Alert.alert(appliedSuccessMessage);
-                }
+                Alert.alert(appliedSuccessMessage);
               } else {
                 Alert.alert('反映に失敗しました', '通信または保存処理を確認してください。');
               }
+            })
+            .catch((error: unknown) => {
+              const message =
+                error instanceof Error ? error.message : '通信または保存処理を確認してください。';
+              Alert.alert('反映に失敗しました', message);
             })
             .finally(() => {
               setApplyBattleBusy(false);
@@ -468,6 +451,52 @@ export function DeckBuilderScreen({ mode = 'default' }: DeckBuilderScreenProps) 
           </View>
         )}
       </Pressable>
+
+      {isOnlineMatchSetup ? (
+        <Pressable
+          disabled={vm.isDeckCostOverLimit || applyBattleBusy}
+          onPress={() => {
+            if (vm.isDeckCostOverLimit) {
+              void playSe('cancel');
+              Alert.alert(
+                'マッチングできません',
+                `合計コストが上限（${vm.deckCostLimit}）を超えています。配置を調整してください。`,
+              );
+              return;
+            }
+            void playSe('confirm');
+            setApplyBattleBusy(true);
+            void persistOnlineMatchSetup()
+              .then(() => {
+                goToMatching();
+              })
+              .catch((error: unknown) => {
+                const message =
+                  error instanceof Error
+                    ? error.message
+                    : '通信または保存処理を確認してください。';
+                Alert.alert('マッチングを開始できません', message);
+              })
+              .finally(() => {
+                setApplyBattleBusy(false);
+              });
+          }}
+          className={`mt-2 h-14 items-center justify-center rounded-xl px-3 active:scale-95 ${
+            vm.isDeckCostOverLimit || applyBattleBusy ? 'bg-neutral-400' : 'bg-[#1d4ed8]'
+          }`}
+        >
+          {applyBattleBusy ? (
+            <Text className="text-center text-base font-black text-white">準備中…</Text>
+          ) : (
+            <View>
+              <Text className="text-center text-base font-black text-white">マッチング開始</Text>
+              <Text className="mt-0.5 text-center text-[11px] font-bold text-white/90">
+                盤面を保存して対戦相手を探す
+              </Text>
+            </View>
+          )}
+        </Pressable>
+      ) : null}
 
       {/* 駒詳細モーダル */}
       <Modal

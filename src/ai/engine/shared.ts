@@ -83,6 +83,11 @@ export function createMove(base: {
   };
 }
 
+function normalizedMovePieceCode(code: string | null | undefined): string | null {
+  if (!code) return null;
+  return toBasePieceCode(code) ?? normalizePieceCode(code);
+}
+
 export function moveEquals(lhs: AiBattleMove, rhs: AiBattleMove) {
   return (
     lhs.fromRow === rhs.fromRow &&
@@ -90,9 +95,10 @@ export function moveEquals(lhs: AiBattleMove, rhs: AiBattleMove) {
     lhs.toRow === rhs.toRow &&
     lhs.toCol === rhs.toCol &&
     lhs.promote === rhs.promote &&
-    normalizePieceCode(lhs.pieceCode) === normalizePieceCode(rhs.pieceCode) &&
-    normalizePieceCode(lhs.dropPieceCode) === normalizePieceCode(rhs.dropPieceCode) &&
-    normalizePieceCode(lhs.capturedPieceCode) === normalizePieceCode(rhs.capturedPieceCode) &&
+    normalizedMovePieceCode(lhs.pieceCode) === normalizedMovePieceCode(rhs.pieceCode) &&
+    normalizedMovePieceCode(lhs.dropPieceCode) === normalizedMovePieceCode(rhs.dropPieceCode) &&
+    normalizedMovePieceCode(lhs.capturedPieceCode) ===
+      normalizedMovePieceCode(rhs.capturedPieceCode) &&
     (lhs.notation ?? null) === (rhs.notation ?? null)
   );
 }

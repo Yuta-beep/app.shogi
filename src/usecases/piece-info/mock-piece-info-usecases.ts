@@ -1,4 +1,5 @@
 import { buildGachaPieceCatalogItems } from '@/constants/gacha-piece-metadata';
+import { normalizePieceCatalogItemForDisplay } from '@/features/piece-info/lib/piece-catalog-display';
 import {
   LoadPieceCatalogUseCase,
   PieceCatalogItem,
@@ -119,6 +120,6 @@ const pieceCatalog: PieceCatalogItem[] = [...basePieceCatalog, ...buildGachaPiec
 
 export class MockLoadPieceCatalogUseCase implements LoadPieceCatalogUseCase {
   async execute(): Promise<PieceCatalogItem[]> {
-    return pieceCatalog;
+    return pieceCatalog.map((item) => normalizePieceCatalogItemForDisplay(item));
   }
 }

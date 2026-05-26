@@ -6,6 +6,8 @@ export const gachaRoomAssets = {
   draw1: require('../../assets/gacha/draw-1.png'),
   draw0: require('../../assets/gacha/draw-0.png'),
   drawGold: require('../../assets/gacha/draw-gold.png'),
+  /** ガチャ選択画面: うかんむり・ひへん・しんにょうの「ガチャを引く」 */
+  drawWalk: require('../../assets/gacha/draw-walk.png'),
   videos: {
     /** 外れ */
     miss: require('../../assets/gacha/ガチャ1.mp4'),

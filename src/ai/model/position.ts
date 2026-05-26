@@ -1,6 +1,10 @@
 import type { BoardPiece, HandsState } from '@/features/stage-shogi/domain/game-rules';
 import { createEmptyHandsState } from '@/features/stage-shogi/domain/game-rules';
 import type { BattleCanonicalPosition } from '@/usecases/stage-battle/game-move-contract';
+import {
+  canonicalizeBoardPieceIdentity,
+  sanitizeBoardStatePieceRecords,
+} from '@/features/stage-shogi/domain/board-piece-identity';
 import { CHAR_TO_CODE } from '@/features/stage-shogi/domain/piece-conversion';
 import { normalizePieceCode, toBasePieceCode } from '@/ai/model/move';
 
@@ -80,6 +84,7 @@ export function cloneBattlePosition(position: BattleCanonicalPosition): AiBattle
 
 export function normalizeBattlePosition(position: BattleCanonicalPosition): AiBattlePosition {
   const cloned = cloneBattlePosition(position);
+  const boardState = sanitizeBoardStatePieceRecords(cloneRecord(cloned.boardState)) ?? {};
   return {
     ...cloned,
     sideToMove: cloned.sideToMove === 'enemy' ? 'enemy' : 'player',
@@ -87,7 +92,7 @@ export function normalizeBattlePosition(position: BattleCanonicalPosition): AiBa
     moveCount: Math.max(0, Math.floor(cloned.moveCount)),
     sfen: cloned.sfen,
     stateHash: cloned.stateHash ?? null,
-    boardState: cloneRecord(cloned.boardState),
+    boardState,
     hands: normalizeHands(cloned.hands),
   };
 }
@@ -167,12 +172,13 @@ export function piecesFromBoardState(position: AiBattlePosition): AiBoardPiece[]
     const pigInheritedPromoted =
       typeof pigPr === 'boolean' ? pigPr : typeof pigPr === 'number' ? pigPr !== 0 : undefined;
 
+    const canonical = canonicalizeBoardPieceIdentity(baseCode ?? pieceCode, char);
     pieces.push({
       side,
       row,
       col,
-      pieceCode: baseCode,
-      char,
+      pieceCode: canonical.pieceCode,
+      char: canonical.char,
       promoted,
       ...(cowChargeCount != null ? { cowChargeCount } : {}),
       ...(pigInheritedPieceCode != null

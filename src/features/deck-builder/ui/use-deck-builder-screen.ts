@@ -1,3 +1,4 @@
+import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 
 import type { OwnedPiece, SavedDeck } from '@/domain/models/deck-builder';
@@ -10,6 +11,7 @@ import {
 import { createLoadPieceCatalogUseCase } from '@/usecases/piece-info/create-piece-info-usecases';
 import { isApiDataSource } from '@/lib/config/data-source';
 import { supabase } from '@/lib/supabase/supabase-client';
+import { filterOwnedPiecesForDeckBuilder } from '@/features/deck-builder/lib/deck-builder-excluded-pieces';
 import { getDeckBuilderPieceCost } from '@/features/deck-builder/lib/deck-builder-piece-cost';
 import { sortOwnedPiecesForDeckBuilder } from '@/features/piece-shop/lib/sort-owned-pieces-for-deck-builder';
 import { normalizeDeckBuilderPieceChar } from '@/features/deck-builder/lib/deck-builder-piece-char';
@@ -19,8 +21,10 @@ import {
   normalizePieceCatalogItemForDisplay,
 } from '@/features/piece-info/lib/piece-catalog-display';
 import type { PieceCatalogItem } from '@/domain/models/piece';
+import { buildCatalogItemFromGachaChar } from '@/constants/gacha-piece-metadata';
 import { CHAR_TO_CODE } from '@/features/stage-shogi/domain/piece-conversion';
 import { isBossPiece } from '@/features/deck-builder/lib/boss-pieces';
+import { isPieceExcludedFromDeckBuilder } from '@/features/deck-builder/lib/deck-builder-excluded-pieces';
 
 type BoardPlacement = {
   row: number;
@@ -239,15 +243,30 @@ function enrichOwnedPieceWithCatalog(
 ): OwnedPiece {
   const ruleChar = normalizeDeckBuilderPieceChar(piece.char, piece.name);
   const catalog = lookupCatalogPieceByChar(catalogByChar, ruleChar);
-  if (!catalog) return piece;
-  const display = normalizePieceCatalogItemForDisplay(catalog);
-  return {
-    ...piece,
-    name: (piece.name ?? '').trim() || display.name || piece.char,
-    desc: display.desc,
-    skill: display.skill,
-    move: display.move,
-  };
+  if (catalog) {
+    const display = normalizePieceCatalogItemForDisplay(catalog);
+    return {
+      ...piece,
+      name: (piece.name ?? '').trim() || display.name || piece.char,
+      desc: display.desc,
+      skill: display.skill,
+      move: display.move,
+    };
+  }
+
+  const gachaFallback = buildCatalogItemFromGachaChar(ruleChar);
+  if (gachaFallback) {
+    return {
+      ...piece,
+      pieceId: piece.pieceId ?? gachaFallback.pieceId,
+      name: (piece.name ?? '').trim() || gachaFallback.name || piece.char,
+      desc: gachaFallback.desc,
+      skill: gachaFallback.skill,
+      move: gachaFallback.move,
+    };
+  }
+
+  return piece;
 }
 
 function enrichOwnedPiecesWithCatalog(
@@ -308,7 +327,8 @@ export function isPieceBannedFromMyDeck(piece: OwnedPiece): boolean {
     piece.char === '実' ||
     piece.char === '異' ||
     isOniBoss ||
-    isBossPiece({ char: piece.char, name: piece.name })
+    isBossPiece({ char: piece.char, name: piece.name }) ||
+    isPieceExcludedFromDeckBuilder(piece)
   );
 }
 
@@ -482,7 +502,7 @@ export function useDeckBuilderScreen() {
     };
   }, [accessToken]);
 
-  useEffect(() => {
+  const reloadDeckSnapshot = useCallback(() => {
     if (isApiMode && !isSessionResolved) {
       return;
     }
@@ -501,9 +521,11 @@ export function useDeckBuilderScreen() {
         if (active) {
           const catalogByChar = buildPieceCatalogByCharMap(catalog);
           const normalizedOwnedPieces = sortOwnedPiecesForDeckBuilder(
-            enrichOwnedPiecesWithCatalog(
-              snapshot.ownedPieces.map(normalizeOwnedPieceText),
-              catalogByChar,
+            filterOwnedPiecesForDeckBuilder(
+              enrichOwnedPiecesWithCatalog(
+                snapshot.ownedPieces.map(normalizeOwnedPieceText),
+                catalogByChar,
+              ),
             ),
           );
           setOwnedPieces(normalizedOwnedPieces);
@@ -522,10 +544,13 @@ export function useDeckBuilderScreen() {
       .finally(() => {
         if (active) setIsLoading(false);
       });
+
     return () => {
       active = false;
     };
   }, [isApiMode, isSessionResolved, token]);
+
+  useFocusEffect(reloadDeckSnapshot);
 
   function saveDeck() {
     if (!deckName.trim()) return;

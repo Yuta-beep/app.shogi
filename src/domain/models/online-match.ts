@@ -25,10 +25,17 @@ export const SaveOnlineMatchSetupResultSchema = z.object({
   status: z.enum(['draft', 'validated', 'locked', 'consumed']),
 });
 
+export const MatchingPlayerLineSchema = z.object({
+  displayName: z.string(),
+  rating: z.number(),
+});
+
 export const MatchingSnapshotSchema = z.object({
   title: z.string(),
   status: z.string(),
   progress: z.number(),
+  self: MatchingPlayerLineSchema.optional(),
+  opponent: MatchingPlayerLineSchema.optional(),
 });
 
 export type BattleSetupPlacement = z.infer<typeof BattleSetupPlacementSchema>;

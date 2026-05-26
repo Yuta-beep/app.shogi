@@ -1,8 +1,12 @@
+import * as SecureStore from 'expo-secure-store';
+
 import { resolveGachaBannerKey } from '@/constants/gacha-room-assets';
 import {
   buildGachaOwnedPiecesForDeckBuilder,
   isGachaCollectibleChar,
 } from '@/constants/gacha-piece-metadata';
+
+const GACHA_OWNED_CHARS_KEY = 'gacha_mock_owned_chars_v1';
 
 type GachaMockWallet = {
   pawnCurrency: number;
@@ -15,6 +19,31 @@ let wallet: GachaMockWallet = {
 };
 
 const ownedGachaChars = new Set<string>();
+let ownedPersistReady = false;
+
+async function persistOwnedGachaChars(): Promise<void> {
+  await SecureStore.setItemAsync(GACHA_OWNED_CHARS_KEY, JSON.stringify([...ownedGachaChars]));
+}
+
+export async function hydrateGachaMockOwnedChars(): Promise<void> {
+  if (ownedPersistReady) return;
+  try {
+    const raw = await SecureStore.getItemAsync(GACHA_OWNED_CHARS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as unknown;
+      if (Array.isArray(parsed)) {
+        for (const char of parsed) {
+          if (typeof char === 'string' && isGachaCollectibleChar(char)) {
+            ownedGachaChars.add(char);
+          }
+        }
+      }
+    }
+  } catch {
+    // ignore corrupt storage
+  }
+  ownedPersistReady = true;
+}
 
 export function getGachaMockWallet(): GachaMockWallet {
   return { ...wallet };
@@ -34,6 +63,7 @@ export function grantGachaCollectible(char: string): boolean {
     return false;
   }
   ownedGachaChars.add(char);
+  void persistOwnedGachaChars();
   return true;
 }
 
@@ -47,10 +77,10 @@ export function getGachaMockOwnedPiecesForDeckBuilder() {
 }
 
 const GACHA_ROLL_COST: Record<string, { pawnCost: number; goldCost: number }> = {
-  ukanmuri: { pawnCost: 30, goldCost: 0 },
-  hiHen: { pawnCost: 30, goldCost: 0 },
-  shinnyo: { pawnCost: 30, goldCost: 0 },
-  kanken1: { pawnCost: 0, goldCost: 1 },
+  ukanmuri: { pawnCost: 10, goldCost: 0 },
+  hiHen: { pawnCost: 10, goldCost: 0 },
+  shinnyo: { pawnCost: 10, goldCost: 0 },
+  kanken1: { pawnCost: 0, goldCost: 2 },
 };
 
 export function spendGachaRollCost(gachaId: string): { ok: boolean; wallet: GachaMockWallet } {
@@ -83,4 +113,6 @@ export function addGachaMockCurrency(delta: { pawn?: number; gold?: number }): G
 export function resetGachaMockStore(): void {
   wallet = { pawnCurrency: 3000, goldCurrency: 20 };
   ownedGachaChars.clear();
+  ownedPersistReady = false;
+  void SecureStore.deleteItemAsync(GACHA_OWNED_CHARS_KEY);
 }

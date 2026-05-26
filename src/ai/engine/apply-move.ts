@@ -302,6 +302,13 @@ function resolveCapturedHandCode(
   ) {
     return 'GIANT';
   }
+  if (capturedChar === '進' || rawCapturedCode.includes('GACHA_SHIN')) {
+    return 'GACHA_SHIN';
+  }
+  if (rawCapturedCode.includes('GACHA_')) {
+    const fromRules = toBasePieceCode(capturedToHandPieceCode(captured));
+    if (fromRules) return fromRules;
+  }
   const fromCaptured = toBasePieceCode(capturedToHandPieceCode(captured));
   if (fromCaptured) return fromCaptured;
   const fb = toBasePieceCode(fallbackCapturedCode);

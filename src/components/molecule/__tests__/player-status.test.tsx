@@ -16,34 +16,32 @@ jest.mock('@/components/atom/header-label', () => ({
 describe('PlayerStatus', () => {
   const baseProps = {
     userName: 'Player 1',
-    rank: 10,
-    exp: 150,
-    expPerLevel: 200,
+    rating: 1500,
   };
 
   it('renders player name', () => {
     render(<PlayerStatus {...baseProps} />);
-    expect(screen.getByText('EXP 150')).toBeTruthy();
+    expect(screen.getByText('Player 1')).toBeTruthy();
   });
 
-  it('displays correct rank', () => {
+  it('displays pvp rating', () => {
     render(<PlayerStatus {...baseProps} />);
-    expect(screen.getByText('RANK 10')).toBeTruthy();
+    expect(screen.getByText('◆レート1500')).toBeTruthy();
   });
 
-  it('displays correct exp', () => {
-    render(<PlayerStatus {...baseProps} />);
-    expect(screen.getByText('EXP 150')).toBeTruthy();
+  it('floors fractional rating', () => {
+    render(<PlayerStatus {...baseProps} rating={1499.8} />);
+    expect(screen.getByText('◆レート1499')).toBeTruthy();
   });
 
-  it('handles zero exp', () => {
-    render(<PlayerStatus {...baseProps} exp={0} />);
-    expect(screen.getByText('EXP 0')).toBeTruthy();
+  it('handles zero rating', () => {
+    render(<PlayerStatus {...baseProps} rating={0} />);
+    expect(screen.getByText('◆レート0')).toBeTruthy();
   });
 
-  it('handles negative exp as zero', () => {
-    render(<PlayerStatus {...baseProps} exp={-50} />);
-    expect(screen.getByText('EXP 0')).toBeTruthy();
+  it('handles negative rating as zero', () => {
+    render(<PlayerStatus {...baseProps} rating={-50} />);
+    expect(screen.getByText('◆レート0')).toBeTruthy();
   });
 
   it('displays stamina with defaults', () => {
@@ -92,10 +90,5 @@ describe('PlayerStatus', () => {
     await waitFor(() => {
       expect(screen.queryByText(/\d{2}:\d{2}/)).toBeTruthy();
     });
-  });
-
-  it('handles very low exp per level', () => {
-    render(<PlayerStatus {...baseProps} expPerLevel={0} exp={100} />);
-    expect(screen.getByText('EXP 100')).toBeTruthy();
   });
 });

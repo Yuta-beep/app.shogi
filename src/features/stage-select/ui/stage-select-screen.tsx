@@ -2,6 +2,7 @@ import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Alert,
   ImageBackground,
   Pressable,
   ScrollView,
@@ -23,7 +24,11 @@ import { stageSelectBackgrounds } from '@/constants/stage-select-data';
 import { useAssetPreload } from '@/hooks/common/use-asset-preload';
 import { useStageSelectScreen } from '@/features/stage-select/ui/use-stage-select-screen';
 import { useScreenBgm } from '@/hooks/common/use-screen-bgm';
+import { clearActiveStageSession, clearLocalBattleGames } from '@/ai/local-battle-registry';
 import { playSe } from '@/lib/audio/audio-manager';
+import { NORMAL_STAGE_STAMINA_COST } from '@/lib/stamina/stamina-rules';
+import { ApiClientError } from '@/infra/http/api-client';
+import { createPrepareStageBattleUseCase } from '@/usecases/stage-battle/create-stage-battle-usecases';
 
 /** マップをこの px 以上スクロールしたらステージイメージを隠す（ユーザー操作時のみ） */
 const MAP_SCROLL_HIDE_PREVIEW_PX = 36;
@@ -35,6 +40,8 @@ export function StageSelectScreen() {
   const hasAutoScrolledRef = useRef(false);
   const [mapScrollY, setMapScrollY] = useState(0);
   const [userInteractedWithMapScroll, setUserInteractedWithMapScroll] = useState(false);
+  const [isStartingStage, setIsStartingStage] = useState(false);
+  const prepareStageBattle = useMemo(() => createPrepareStageBattleUseCase(), []);
 
   const {
     isLoading,
@@ -222,16 +229,47 @@ export function StageSelectScreen() {
                     </Animated.View>
                   ) : null}
                   <Pressable
+                    disabled={isStartingStage}
                     onPress={() => {
-                      void playSe('confirm');
-                      router.push({
-                        pathname: '/stage-shogi',
-                        params: { stage: String(selectedStage.id) },
-                      });
+                      void (async () => {
+                        void playSe('confirm');
+                        setIsStartingStage(true);
+                        try {
+                          clearLocalBattleGames();
+                          clearActiveStageSession();
+                          await prepareStageBattle.execute({
+                            stageId: String(selectedStage.id),
+                          });
+                          router.push({
+                            pathname: '/stage-shogi',
+                            params: { stage: String(selectedStage.id) },
+                          });
+                        } catch (error: unknown) {
+                          if (
+                            error instanceof ApiClientError &&
+                            error.code === 'INSUFFICIENT_STAMINA'
+                          ) {
+                            Alert.alert(
+                              'スタミナ不足',
+                              `ノーマルダンジョンにはスタミナ${NORMAL_STAGE_STAMINA_COST}が必要です。\n${error.message}`,
+                            );
+                            return;
+                          }
+                          const message =
+                            error instanceof Error ? error.message : 'ステージの開始に失敗しました';
+                          Alert.alert('エラー', message);
+                        } finally {
+                          setIsStartingStage(false);
+                        }
+                      })();
                     }}
-                    className="mt-2 rounded-lg bg-[#ffc107] px-4 py-3"
+                    className={`mt-2 rounded-lg bg-[#ffc107] px-4 py-3 ${isStartingStage ? 'opacity-60' : ''}`}
                   >
-                    <Text className="text-center text-base font-black text-white">開始</Text>
+                    <Text className="text-center text-base font-black text-white">
+                      {isStartingStage
+                        ? '準備中...'
+                        : `開始（スタミナ ${NORMAL_STAGE_STAMINA_COST}）`}
+                    </Text>
                   </Pressable>
                 </>
               ) : (

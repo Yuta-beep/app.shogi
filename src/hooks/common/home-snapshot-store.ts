@@ -1,4 +1,9 @@
 import type { HomeSnapshot } from '@/domain/models/home';
+import { isApiDataSource } from '@/lib/config/data-source';
+import {
+  mergeServerHomeStamina,
+  syncMockStaminaFromSnapshot,
+} from '@/lib/stamina/spend-stage-stamina';
 import { createLoadHomeSnapshotUseCase } from '@/usecases/home/create-home-usecases';
 
 const emptySnapshot: HomeSnapshot = {
@@ -57,6 +62,21 @@ export function getHomeSnapshotState() {
   return state;
 }
 
+export function patchHomeSnapshotRating(rating: number): void {
+  snapshot = { ...snapshot, rating };
+  syncState();
+  notify();
+}
+
+export function patchHomeSnapshotStamina(next: {
+  stamina: number;
+  nextRecoveryAt: string | null;
+}): void {
+  snapshot = { ...snapshot, stamina: next.stamina, nextRecoveryAt: next.nextRecoveryAt };
+  syncState();
+  notify();
+}
+
 export function loadHomeSnapshot(force = false): Promise<HomeSnapshot> {
   const now = Date.now();
   if (!force && now - lastLoadedAt < FRESH_MS) {
@@ -67,9 +87,12 @@ export function loadHomeSnapshot(force = false): Promise<HomeSnapshot> {
   inFlight = loadUseCase
     .execute()
     .then((next) => {
-      snapshot = next;
+      snapshot = mergeServerHomeStamina(next);
       lastLoadedAt = Date.now();
       error = null;
+      if (!isApiDataSource()) {
+        syncMockStaminaFromSnapshot(next.stamina, next.maxStamina);
+      }
       return next;
     })
     .catch((caught: unknown) => {

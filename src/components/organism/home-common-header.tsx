@@ -7,16 +7,13 @@ import { homeAssets } from '@/constants/home-assets';
 type HomeCommonHeaderProps = {
   userName: string;
   onUserNamePress?: () => void;
-  rank?: number;
-  exp?: number;
+  rating?: number;
   pawnCurrency?: number;
   goldCurrency?: number;
   stamina?: number;
   maxStamina?: number;
   nextRecoveryAt?: string | null;
 };
-
-const MOCK_EXP_PER_LEVEL = 1000;
 /** ユーザーバー.png のみ（ヘッダー枠とは別指定） */
 const USER_BAR_IMAGE_SCALE_X = 1.4;
 const USER_BAR_IMAGE_SCALE_Y = 4.0;
@@ -26,8 +23,7 @@ const USER_BAR_IMAGE_OFFSET_Y = 4;
 export function HomeCommonHeader({
   userName,
   onUserNamePress,
-  rank = 1,
-  exp = 0,
+  rating = 0,
   pawnCurrency = 0,
   goldCurrency = 0,
   stamina = 50,
@@ -66,9 +62,7 @@ export function HomeCommonHeader({
           <PlayerStatus
             userName={userName}
             onUserNamePress={onUserNamePress}
-            rank={rank}
-            exp={exp}
-            expPerLevel={MOCK_EXP_PER_LEVEL}
+            rating={rating}
             stamina={stamina}
             maxStamina={maxStamina}
             nextRecoveryAt={nextRecoveryAt}

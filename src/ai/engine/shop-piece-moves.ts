@@ -33,11 +33,11 @@ export const MAI_SKILL_DESCRIPTION_JA =
 
 export const MAI_MOVE_DESCRIPTION_JA = '前・前斜め左右・左右・後に各1マス進める。';
 
-/** 室（ガチャ）— 舞・金と同形6方向1マス。 */
-export const SHITSU_MOVE_DESCRIPTION_JA = MAI_MOVE_DESCRIPTION_JA;
+/** 室（ガチャ）— 前後左右・前斜めに各1マス（金と同形6方向）。 */
+export const SHITSU_MOVE_DESCRIPTION_JA = '前後左右斜め前1マス';
 
-/** 爆（ガチャ）— 前斜め・前・左右・後に各1マス（室・舞と同形）。 */
-export const BAKU_MOVE_DESCRIPTION_JA = MAI_MOVE_DESCRIPTION_JA;
+/** 爆（ガチャ）— 前斜め・前・左右・後に各1マス（金と同形6方向）。 */
+export const BAKU_MOVE_DESCRIPTION_JA = '前斜め前左右後ろ1マス';
 export const BAKU_MOVE_VECTORS: AiPieceDefinition['moveVectors'] = [
   { dx: -1, dy: -1, maxStep: 1 },
   { dx: 0, dy: -1, maxStep: 1 },
@@ -79,17 +79,19 @@ export const P_MOVE_VECTORS: AiPieceDefinition['moveVectors'] = [
   { dx: 0, dy: 1, maxStep: 1 },
 ];
 
-/** 定（ガチャ）— 縦横1マス（P・走と同形）。 */
-export const SADAME_MOVE_DESCRIPTION_JA = P_MOVE_DESCRIPTION_JA;
+/** 定（ガチャ）— 前後左右に各1マス（縦横4方向）。 */
+export const SADAME_MOVE_DESCRIPTION_JA = '前後左右1マス';
 export const SADAME_MOVE_VECTORS: AiPieceDefinition['moveVectors'] = [...P_MOVE_VECTORS];
 
-export const EN_MOVE_DESCRIPTION_JA =
-  '前後左右に各1マス進める。味方の「王」の前1マスへも移動できる。';
+export const EN_SKILL_DESCRIPTION_JA = '味方の「王」の前1マスへも移動できる。';
+
+/** 閹（ガチャ）— 前後左右に各1マス（王前1マスは合法手生成で追加）。 */
+export const EN_MOVE_DESCRIPTION_JA = '前後左右1マス';
 
 /** 閹（ガチャ）— 縦横1マス + 味方王の前1マス（合法手生成で追加）。 */
 export const EN_MOVE_VECTORS: AiPieceDefinition['moveVectors'] = [...P_MOVE_VECTORS];
 
-export const AN_MOVE_DESCRIPTION_JA = '前後左右に各1マス進め、桂馬のように跳べる。';
+export const AN_MOVE_DESCRIPTION_JA = '前後左右1マス+桂馬飛び';
 
 /** 安（ガチャ）— 縦横1マス + 桂馬跳び。 */
 export const AN_MOVE_VECTORS: AiPieceDefinition['moveVectors'] = [
@@ -98,9 +100,9 @@ export const AN_MOVE_VECTORS: AiPieceDefinition['moveVectors'] = [
   { dx: 1, dy: -2, maxStep: 1 },
 ];
 
-export const SO_MOVE_DESCRIPTION_JA = '前後に何マスでも進め、左右に各1マス進める。';
+export const SO_MOVE_DESCRIPTION_JA = '前後何マスでも+左右1マス';
 
-export const SOU_MOVE_DESCRIPTION_JA = '前に最大2マス、左右・後ろに各1マス進める。';
+export const SOU_MOVE_DESCRIPTION_JA = '前最大2マス左右後ろ1マス';
 
 /** 艸（ガチャ）— 前2 + 左右後1。 */
 export const SOU_MOVE_VECTORS: AiPieceDefinition['moveVectors'] = [
@@ -110,34 +112,36 @@ export const SOU_MOVE_VECTORS: AiPieceDefinition['moveVectors'] = [
   { dx: 0, dy: 1, maxStep: 1 },
 ];
 
-export const KOU_MOVE_DESCRIPTION_JA =
-  '前斜め左右・後ろに各1マス進める。隣接する味方が横移動したとき同じ向きに追従する。';
+export const KOU_SKILL_DESCRIPTION_JA =
+  '隣接する味方が横移動したとき、同じ向きに追従する（空マスのみ）。';
 
-/** 膠（ガチャ）— 前斜め2 + 後1（辺の斜めと同形 + 後直進）。 */
-export const KOU_MOVE_VECTORS: AiPieceDefinition['moveVectors'] = [
+/** 辺・逸（ガチャ）— 前1 + 斜め4方向各1マス。 */
+export const HEN_ITSU_MOVE_DESCRIPTION_JA = '前と斜め4方向1マス';
+
+export const HEN_ITSU_MOVE_VECTORS: AiPieceDefinition['moveVectors'] = [
+  { dx: 0, dy: -1, maxStep: 1 },
+  { dx: -1, dy: -1, maxStep: 1 },
+  { dx: 1, dy: -1, maxStep: 1 },
+  { dx: -1, dy: 1, maxStep: 1 },
+  { dx: 1, dy: 1, maxStep: 1 },
+];
+
+export const HEN_MOVE_DESCRIPTION_JA = HEN_ITSU_MOVE_DESCRIPTION_JA;
+export const ITSU_MOVE_DESCRIPTION_JA = HEN_ITSU_MOVE_DESCRIPTION_JA;
+
+export const HEN_MOVE_VECTORS: AiPieceDefinition['moveVectors'] = [...HEN_ITSU_MOVE_VECTORS];
+export const ITSU_MOVE_VECTORS: AiPieceDefinition['moveVectors'] = [...HEN_ITSU_MOVE_VECTORS];
+
+/** 膠（ガチャ）— 前斜め2 + 後1（横移動追従は合法手生成・スキル側）。 */
+export const GACHA_FORWARD_DIAG_BACK_MOVE_VECTORS: AiPieceDefinition['moveVectors'] = [
   { dx: -1, dy: -1, maxStep: 1 },
   { dx: 1, dy: -1, maxStep: 1 },
   { dx: 0, dy: 1, maxStep: 1 },
 ];
 
-export const HEN_MOVE_DESCRIPTION_JA = '前斜め・後斜めに各1マス進める。';
-
-export const ITSU_MOVE_DESCRIPTION_JA = HEN_MOVE_DESCRIPTION_JA;
-
-/** 逸（ガチャ）— 前斜め・後斜めに各1マス（辺と同形）。 */
-export const ITSU_MOVE_VECTORS: AiPieceDefinition['moveVectors'] = [
-  { dx: -1, dy: -1, maxStep: 1 },
-  { dx: 1, dy: -1, maxStep: 1 },
-  { dx: -1, dy: 1, maxStep: 1 },
-  { dx: 1, dy: 1, maxStep: 1 },
-];
-
-/** 辺（ガチャ）— 前斜め2 + 後斜め2（銀の斜めのみ）。 */
-export const HEN_MOVE_VECTORS: AiPieceDefinition['moveVectors'] = [
-  { dx: -1, dy: -1, maxStep: 1 },
-  { dx: 1, dy: -1, maxStep: 1 },
-  { dx: -1, dy: 1, maxStep: 1 },
-  { dx: 1, dy: 1, maxStep: 1 },
+export const KOU_MOVE_DESCRIPTION_JA = '前斜め前斜め後ろ1マス';
+export const KOU_MOVE_VECTORS: AiPieceDefinition['moveVectors'] = [
+  ...GACHA_FORWARD_DIAG_BACK_MOVE_VECTORS,
 ];
 
 export const TOU_MOVE_DESCRIPTION_JA = '前・後・左右・後斜めに各1マス進める。';
@@ -152,7 +156,7 @@ export const TOU_MOVE_VECTORS: AiPieceDefinition['moveVectors'] = [
   { dx: 1, dy: 1, maxStep: 1 },
 ];
 
-export const NIGE_MOVE_DESCRIPTION_JA = '全方向に各1マス進める。';
+export const NIGE_MOVE_DESCRIPTION_JA = '全方向1マス';
 
 /** 逃（ガチャ）— 王と同形の全方向1マス。 */
 export const NIGE_MOVE_VECTORS: AiPieceDefinition['moveVectors'] = [
@@ -166,10 +170,13 @@ export const NIGE_MOVE_VECTORS: AiPieceDefinition['moveVectors'] = [
   { dx: 1, dy: 1, maxStep: 1 },
 ];
 
-export const SHIN_MOVE_DESCRIPTION_JA =
+export const SHIN_SKILL_DESCRIPTION_JA =
   '毎ターン、盤上にいない駒も含む全駒からランダムに1種を選び、その駒と同じ移動範囲で動く。';
 
-export const AORI_MOVE_DESCRIPTION_JA = '前後左右に何マスでも進める。';
+/** 進（ガチャ）— 毎ターン移動範囲が変わるため図鑑では固定表示しない。 */
+export const SHIN_MOVE_DESCRIPTION_JA = '移動範囲不明';
+
+export const AORI_MOVE_DESCRIPTION_JA = '前後左右何マスでも';
 
 /** 煽（ガチャ）— 縦横スライド（飛車の縦横のみ）。 */
 export const AORI_MOVE_VECTORS: AiPieceDefinition['moveVectors'] = [

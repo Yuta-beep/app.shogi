@@ -1,11 +1,16 @@
 import type { DeckBuilderSnapshot } from '@/domain/models/deck-builder';
-import { getGachaMockOwnedPiecesForDeckBuilder } from '@/features/gacha-room/lib/gacha-mock-store';
+import {
+  getGachaMockOwnedPiecesForDeckBuilder,
+  hydrateGachaMockOwnedChars,
+} from '@/features/gacha-room/lib/gacha-mock-store';
 import { getPieceShopMockOwnedPiecesForDeckBuilder } from '@/features/piece-shop/lib/piece-shop-mock-store';
+import { filterOwnedPiecesForDeckBuilder } from '@/features/deck-builder/lib/deck-builder-excluded-pieces';
 import { sortOwnedPiecesForDeckBuilder } from '@/features/piece-shop/lib/sort-owned-pieces-for-deck-builder';
 import type { LoadDeckBuilderUseCase } from '@/usecases/deck-builder/load-deck-builder-usecase';
 
 export class MockLoadDeckBuilderUseCase implements LoadDeckBuilderUseCase {
   async execute(): Promise<DeckBuilderSnapshot> {
+    await hydrateGachaMockOwnedChars();
     const baseOwnedPieces = [
         {
           char: '忍',
@@ -103,11 +108,13 @@ export class MockLoadDeckBuilderUseCase implements LoadDeckBuilderUseCase {
     const gachaOwnedPieces = getGachaMockOwnedPiecesForDeckBuilder();
 
     return {
-      ownedPieces: sortOwnedPiecesForDeckBuilder([
-        ...gachaOwnedPieces,
-        ...shopOwnedPieces,
-        ...baseOwnedPieces,
-      ]),
+      ownedPieces: sortOwnedPiecesForDeckBuilder(
+        filterOwnedPiecesForDeckBuilder([
+          ...gachaOwnedPieces,
+          ...shopOwnedPieces,
+          ...baseOwnedPieces,
+        ]),
+      ),
       savedDecks: [
         {
           id: 'deck-1',

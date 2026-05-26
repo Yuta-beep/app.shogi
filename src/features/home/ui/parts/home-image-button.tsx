@@ -8,6 +8,8 @@ type HomeImageButtonProps = {
   imageWidth?: number;
   imageHeight?: number;
   overflowVisible?: boolean;
+  /** 未解放・準備中など、利用不可の見た目 */
+  dimmed?: boolean;
 };
 
 export function HomeImageButton({
@@ -17,6 +19,7 @@ export function HomeImageButton({
   imageWidth,
   imageHeight,
   overflowVisible = false,
+  dimmed = false,
 }: HomeImageButtonProps) {
   return (
     <View className={`${frameClassName} min-w-0 flex-1 basis-0`}>
@@ -36,8 +39,16 @@ export function HomeImageButton({
                 width: imageWidth ?? '100%',
                 height: imageHeight ?? '100%',
                 maxHeight: imageHeight ?? undefined,
+                opacity: dimmed ? 0.85 : 1,
               }}
             />
+            {dimmed ? (
+              <View
+                pointerEvents="none"
+                className="absolute inset-0 rounded-md"
+                style={{ backgroundColor: 'rgba(75, 85, 99, 0.28)' }}
+              />
+            ) : null}
           </View>
         </View>
       </Pressable>

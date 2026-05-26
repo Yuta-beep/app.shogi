@@ -10,10 +10,20 @@ import {
 import { battleMoveToServerPayload, fromViewCoord } from '@/lib/matching-server/game-bridge';
 import { canonicalToMatchingWire, isMyTurnInCanonical } from '@/lib/matching-server/canonical-game';
 import {
+  formatMatchPlayerLabel,
+  getActiveMatchProfile,
+} from '@/lib/matching-server/match-profile-store';
+import {
   getActiveMatchSession,
   setActiveMatchSession,
   updateActiveMatchGame,
 } from '@/lib/matching-server/session-store';
+import {
+  applyPvpRatingAfterMatch,
+  PVP_RATING_LOSS_DELTA,
+  PVP_RATING_WIN_DELTA,
+} from '@/lib/online-match/player-pvp-rating';
+import { loadHomeSnapshot, patchHomeSnapshotRating } from '@/hooks/common/home-snapshot-store';
 import type { WebSocketServerMessage } from '@/domain/matching-server/protocol';
 import {
   applyOnlineBattleMove,
@@ -104,12 +114,17 @@ function buildSession(
 ): OnlineBattleSession {
   const isMyTurn = game.turn === role;
   const opponentSide = role === 'black' ? 'white' : 'black';
+  const profile = getActiveMatchProfile();
   return {
     roomId: matchId.slice(0, 6).toUpperCase(),
     matchId,
     connectionStatus,
-    playerLabel: `あなた: ${sideLabel(role)}`,
-    opponentLabel: `相手: ${sideLabel(opponentSide)}`,
+    playerLabel: profile
+      ? formatMatchPlayerLabel(profile.self, 'あなた')
+      : `あなた: ${sideLabel(role)}`,
+    opponentLabel: profile
+      ? formatMatchPlayerLabel(profile.opponent, '相手')
+      : `相手: ${sideLabel(opponentSide)}`,
     role,
     isMyTurn,
     turnLabel: isMyTurn ? 'あなたの手番' : '相手の手番',
@@ -346,6 +361,24 @@ export function useOnlineBattleGame(matchId?: string) {
           return;
         case 'game_finished': {
           const won = payload.winnerUserId === userId;
+          const ratingDelta = won ? PVP_RATING_WIN_DELTA : -PVP_RATING_LOSS_DELTA;
+          void applyPvpRatingAfterMatch({ matchId: payload.matchId, won })
+            .then(({ rating: nextRating, delta }) => {
+              patchHomeSnapshotRating(nextRating);
+              const appliedDelta = delta !== 0 ? delta : ratingDelta;
+              setSession((current) => ({
+                ...current,
+                logLines: [
+                  ...current.logLines,
+                  `レート ${appliedDelta >= 0 ? '+' : ''}${appliedDelta}（現在 ${nextRating}）`,
+                ].slice(-20),
+              }));
+            })
+            .catch(() => {
+              void loadHomeSnapshot(true).then((snap) => {
+                patchHomeSnapshotRating(snap.rating);
+              });
+            });
           setSelectedCell(null);
           setLegalTargets([]);
           setPendingPromotion(null);

@@ -20,8 +20,7 @@ type HomeHeaderSectionProps = {
   onPressMatching: () => void;
   onPressGachaBallIcon: () => void;
   playerName: string;
-  playerRank: number;
-  playerExp: number;
+  playerRating: number;
   pawnCurrency: number;
   goldCurrency: number;
   stamina?: number;
@@ -34,8 +33,7 @@ export function HomeHeaderSection({
   onPressMatching,
   onPressGachaBallIcon,
   playerName,
-  playerRank,
-  playerExp,
+  playerRating,
   pawnCurrency,
   goldCurrency,
   stamina,
@@ -46,8 +44,7 @@ export function HomeHeaderSection({
     <View pointerEvents="box-none">
       <EditableHomeCommonHeader
         userName={playerName}
-        rank={playerRank}
-        exp={playerExp}
+        rating={playerRating}
         pawnCurrency={pawnCurrency}
         goldCurrency={goldCurrency}
         stamina={stamina}

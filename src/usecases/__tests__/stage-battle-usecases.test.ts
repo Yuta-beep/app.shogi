@@ -1,9 +1,64 @@
+import { ApiClientError } from '@/infra/http/api-client';
+import { resetMockStaminaState } from '@/lib/stamina/spend-stage-stamina';
+
+const mockSnapshot = {
+  playerName: 'Test',
+  rating: 0,
+  pawnCurrency: 0,
+  goldCurrency: 0,
+  playerRank: 1,
+  playerExp: 0,
+  stamina: 50,
+  maxStamina: 50,
+  nextRecoveryAt: null as string | null,
+};
+
+jest.mock('@/hooks/common/home-snapshot-store', () => ({
+  getHomeSnapshotState: () => ({ snapshot: mockSnapshot, isLoading: false, error: null }),
+  patchHomeSnapshotStamina: (next: { stamina: number; nextRecoveryAt: string | null }) => {
+    mockSnapshot.stamina = next.stamina;
+    mockSnapshot.nextRecoveryAt = next.nextRecoveryAt;
+  },
+}));
 import {
   MockClaimStageClearRewardUseCase,
   MockPrepareStageBattleUseCase,
+  resetMockPreparedStageId,
 } from '@/usecases/stage-battle/mock-stage-battle-usecases';
 
+describe('MockPrepareStageBattleUseCase stamina', () => {
+  beforeEach(() => {
+    resetMockPreparedStageId();
+    resetMockStaminaState(50);
+    mockSnapshot.stamina = 50;
+    mockSnapshot.nextRecoveryAt = null;
+  });
+
+  it('throws when stamina is insufficient', async () => {
+    resetMockStaminaState(2);
+    mockSnapshot.stamina = 2;
+    const usecase = new MockPrepareStageBattleUseCase();
+    await expect(usecase.execute({ stageId: '1' })).rejects.toBeInstanceOf(ApiClientError);
+  });
+
+  it('does not spend stamina twice for the same stage', async () => {
+    resetMockStaminaState(10);
+    mockSnapshot.stamina = 10;
+    const usecase = new MockPrepareStageBattleUseCase();
+    await usecase.execute({ stageId: '2' });
+    await usecase.execute({ stageId: '2' });
+    expect(mockSnapshot.stamina).toBe(5);
+  });
+});
+
 describe('MockPrepareStageBattleUseCase', () => {
+  beforeEach(() => {
+    resetMockPreparedStageId();
+    resetMockStaminaState(50);
+    mockSnapshot.stamina = 50;
+    mockSnapshot.nextRecoveryAt = null;
+  });
+
   it('returns generic stage label when stage id is not provided', async () => {
     const usecase = new MockPrepareStageBattleUseCase();
     const snapshot = await usecase.execute({});

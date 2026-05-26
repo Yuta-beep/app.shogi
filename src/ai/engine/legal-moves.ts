@@ -615,6 +615,25 @@ function lastMovedPieceForBook(
 /** `CHAR_TO_CODE` に無い幻駒は、カタログの漢字→pieceCode で着手の pieceCode を決める（刀が歩になる不具合の防止）。 */
 function resolvePieceCodeForLegalMove(piece: AiBoardPiece, lookups: AiPieceLookups): string {
   const ch = normKanjiForEngineRules(piece.char);
+  if (isShinPiece(piece)) {
+    const catalog = lookups.pieceDefsByChar[piece.char] ?? lookups.pieceDefsByChar[ch];
+    const fromCatalog = toBasePieceCode(catalog?.pieceCode ?? null);
+    if (fromCatalog && !isOpaquePieceInstanceId(fromCatalog)) return fromCatalog;
+    return 'GACHA_SHIN';
+  }
+  if (isItsuPiece(piece)) return 'GACHA_ITSU';
+  if (isHenPiece(piece)) return 'GACHA_HEN';
+  if (isTouPiece(piece)) return 'GACHA_TOU';
+  if (isNigePiece(piece)) return 'GACHA_TOU2';
+  if (isSadamePiece(piece)) return 'GACHA_SADAME';
+  if (isAnPiece(piece)) return 'GACHA_AN';
+  if (isSoPiece(piece)) return 'GACHA_SO';
+  if (isSouPiece(piece)) return 'GACHA_SOU';
+  if (isBakuPiece(piece)) return 'GACHA_BAKU';
+  if (isAoriPiece(piece)) return 'GACHA_AORI';
+  if (isEnPiece(piece)) return 'GACHA_EN';
+  if (isKoPiece(piece)) return 'GACHA_KOU';
+  if (isShitsuPiece(piece)) return 'GACHA_SHITSU';
   if (ch === '剣') return 'HOLY_SWORD';
   if (ch === '刀') return 'SWORD';
   const direct = toBasePieceCode(piece.pieceCode);
@@ -1614,8 +1633,7 @@ function resolveEffectiveVectorsForPiece(
     const boardState = asRecord(position.boardState);
     const customMoveVectors = asRecord(boardState?.custom_move_vectors);
     const marker = lastMovedPieceForBook(position, piece);
-    const markerVectorsRaw = (marker as unknown as { copiedMoveVectors?: unknown })
-      .copiedMoveVectors;
+    const markerVectorsRaw = marker?.copiedMoveVectors;
     if (Array.isArray(markerVectorsRaw) && markerVectorsRaw.length > 0) {
       const markerVectors = markerVectorsRaw
         .map((v) => asRecord(v))
@@ -1905,7 +1923,8 @@ export function ensureShinTurnMimicForBattle(
   return ensureShinTurnMimic(position, side, () => {
     const pool = buildShinMimicPool(pieceCatalog, lookups, position, pieces);
     if (pool.length === 0) return null;
-    const idx = Math.floor(Math.random() * pool.length);
+    const seed = `${position.stateHash ?? ''}:${position.turnNumber}:${side}:${position.moveCount}`;
+    const idx = stableHash(seed) % pool.length;
     const pick = pool[idx]!;
     return {
       mimic_char: pick.char,

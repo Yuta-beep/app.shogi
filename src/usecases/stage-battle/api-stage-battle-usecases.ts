@@ -1,4 +1,5 @@
 import { StageRepository } from '@/domain/repositories/stage-repository';
+import { resolveStagePlacementIdentity } from '@/features/stage-shogi/domain/board-piece-identity';
 import { ApiStageRepository } from '@/infra/repositories/stage-repository';
 import {
   ClaimStageClearRewardUseCase,
@@ -41,17 +42,23 @@ export class ApiPrepareStageBattleUseCase implements PrepareStageBattleUseCase {
       turnLabel: setup.labels.turnLabel,
       handLabel: setup.labels.handLabel,
       boardSize: setup.board?.size ?? 9,
-      placements: (setup.board?.placements ?? []).map((placement) => ({
-        side: placement.side,
-        row: placement.row,
-        col: placement.col,
-        pieceId: placement.piece.id ?? null,
-        pieceCode: placement.piece.code ?? null,
-        char: placement.piece.char ?? placement.piece.code ?? '?',
-        imageBucket: placement.piece.imageBucket ?? null,
-        imageKey: placement.piece.imageKey ?? null,
-        imageSignedUrl: placement.piece.imageSignedUrl ?? null,
-      })),
+      placements: (setup.board?.placements ?? []).map((placement) => {
+        const identity = resolveStagePlacementIdentity({
+          char: placement.piece.char,
+          code: placement.piece.code,
+        });
+        return {
+          side: placement.side,
+          row: placement.row,
+          col: placement.col,
+          pieceId: placement.piece.id ?? null,
+          pieceCode: identity.pieceCode,
+          char: identity.char,
+          imageBucket: placement.piece.imageBucket ?? null,
+          imageKey: placement.piece.imageKey ?? null,
+          imageSignedUrl: placement.piece.imageSignedUrl ?? null,
+        };
+      }),
     };
   }
 }

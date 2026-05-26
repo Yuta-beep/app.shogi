@@ -2,6 +2,10 @@ import { applyMove } from '@/ai/engine/apply-move';
 import * as guardrails from '@/ai/engine/guardrails';
 import { generateLegalMoves } from '@/ai/engine/legal-moves';
 import { mergeStageFixedArrowTilesIntoPosition } from '@/ai/engine/stage-fixed-arrow-tiles';
+import {
+  arrowCellsForDisplay,
+  positionWithStageFixedBoardTiles,
+} from '@/features/stage-shogi/ui/stage-shogi-screen.helpers';
 import { tickSkillStateDurations } from '@/ai/engine/skill-runtime';
 import {
   createLocalBattleGame,
@@ -65,6 +69,24 @@ describe('ステージ23 矢印マス', () => {
       '5:2:up',
       '5:3:right',
     ]);
+  });
+
+  it('1手目の表示用局面でも矢印マスが抽出できる', () => {
+    const base: AiBattlePosition = {
+      sideToMove: 'player',
+      turnNumber: 1,
+      moveCount: 0,
+      sfen: 'seed',
+      stateHash: 'seed',
+      boardState: { pieces: [] },
+      hands: { player: {}, enemy: {} },
+    };
+    const display = positionWithStageFixedBoardTiles(base, 23);
+    expect(
+      arrowCellsForDisplay(display)
+        .map((c) => `${c.row}:${c.col}:${c.direction}`)
+        .sort(),
+    ).toEqual(['3:5:left', '3:6:down', '5:2:up', '5:3:right']);
   });
 
   it('tick 後も stage_fixed 矢印は残る', () => {
