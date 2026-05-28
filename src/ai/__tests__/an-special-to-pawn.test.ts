@@ -74,7 +74,14 @@ describe('安 特殊駒→歩', () => {
       stateHash: 'seed',
       boardState: {
         pieces: [
-          { side: 'player', row: 5, col: 4, pieceCode: 'piece_gacha_an', char: '安', promoted: false },
+          {
+            side: 'player',
+            row: 5,
+            col: 4,
+            pieceCode: 'piece_gacha_an',
+            char: '安',
+            promoted: false,
+          },
           { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
         ],
         skill_definitions_v2: skillDefinitionsV2ForGachaChar('安'),
@@ -100,9 +107,23 @@ describe('安 特殊駒→歩', () => {
       boardState: {
         pieces: [
           { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
-          { side: 'enemy', row: 2, col: 2, pieceCode: 'piece_shop_kirin', char: '麒', promoted: false },
+          {
+            side: 'enemy',
+            row: 2,
+            col: 2,
+            pieceCode: 'piece_shop_kirin',
+            char: '麒',
+            promoted: false,
+          },
           { side: 'enemy', row: 2, col: 6, pieceCode: 'FU', char: '歩', promoted: false },
-          { side: 'player', row: 5, col: 4, pieceCode: 'piece_gacha_an', char: '安', promoted: false },
+          {
+            side: 'player',
+            row: 5,
+            col: 4,
+            pieceCode: 'piece_gacha_an',
+            char: '安',
+            promoted: false,
+          },
           { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
         ],
         skill_definitions_v2: skillDefinitionsV2ForGachaChar('安'),
@@ -147,11 +168,7 @@ describe('安 特殊駒→歩', () => {
     ).skill_state;
     expect(
       (skillState?.piece_statuses ?? []).some(
-        (s) =>
-          s.status_type === 'an_transform' &&
-          s.side === 'enemy' &&
-          s.row === 2 &&
-          s.col === 2,
+        (s) => s.status_type === 'an_transform' && s.side === 'enemy' && s.row === 2 && s.col === 2,
       ),
     ).toBe(true);
   });
@@ -168,8 +185,22 @@ describe('安 特殊駒→歩', () => {
       boardState: {
         pieces: [
           { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
-          { side: 'enemy', row: 2, col: 2, pieceCode: 'piece_shop_kirin', char: '麒', promoted: false },
-          { side: 'player', row: 5, col: 4, pieceCode: 'piece_gacha_an', char: '安', promoted: false },
+          {
+            side: 'enemy',
+            row: 2,
+            col: 2,
+            pieceCode: 'piece_shop_kirin',
+            char: '麒',
+            promoted: false,
+          },
+          {
+            side: 'player',
+            row: 5,
+            col: 4,
+            pieceCode: 'piece_gacha_an',
+            char: '安',
+            promoted: false,
+          },
           { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
         ],
         skill_definitions_v2: skillDefinitionsV2ForGachaChar('安'),

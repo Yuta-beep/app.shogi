@@ -55,7 +55,14 @@ describe('辺 辺封印', () => {
       stateHash: 'seed',
       boardState: {
         pieces: [
-          { side: 'player', row: 5, col: 4, pieceCode: 'piece_gacha_hen', char: '辺', promoted: false },
+          {
+            side: 'player',
+            row: 5,
+            col: 4,
+            pieceCode: 'piece_gacha_hen',
+            char: '辺',
+            promoted: false,
+          },
           { side: 'player', row: 8, col: 0, pieceCode: 'OU', char: '王', promoted: false },
         ],
         skill_definitions_v2: skillDefinitionsV2ForGachaChar('辺'),
@@ -83,7 +90,14 @@ describe('辺 辺封印', () => {
           { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
           { side: 'enemy', row: 0, col: 2, pieceCode: 'FU', char: '歩', promoted: false },
           { side: 'player', row: 0, col: 6, pieceCode: 'FU', char: '歩', promoted: false },
-          { side: 'player', row: 5, col: 4, pieceCode: 'piece_gacha_hen', char: '辺', promoted: false },
+          {
+            side: 'player',
+            row: 5,
+            col: 4,
+            pieceCode: 'piece_gacha_hen',
+            char: '辺',
+            promoted: false,
+          },
           { side: 'player', row: 8, col: 0, pieceCode: 'OU', char: '王', promoted: false },
         ],
         skill_definitions_v2: skillDefinitionsV2ForGachaChar('辺'),

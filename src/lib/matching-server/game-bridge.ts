@@ -101,8 +101,7 @@ export function buildMatchingBattleContext(input: {
   };
   const catalog = normalizePieceCatalog(input.pieceCatalog);
   const legal = generateLegalMoves({ position, pieceCatalog: catalog });
-  const playerLegalMoves =
-    sideToMove === 'player' ? legal.legalMoves : [];
+  const playerLegalMoves = sideToMove === 'player' ? legal.legalMoves : [];
   return { pieces, hands, sideToMove, position, playerLegalMoves };
 }
 
@@ -130,7 +129,11 @@ export function battleMoveToServerPayload(move: BattleMove, myRole: PlayerSide):
 }
 
 /** 表示用に盤を180度回転（後手プレイヤー向け） */
-export function toViewCoord(row: number, col: number, myRole: PlayerSide): { row: number; col: number } {
+export function toViewCoord(
+  row: number,
+  col: number,
+  myRole: PlayerSide,
+): { row: number; col: number } {
   if (myRole === 'white') {
     return { row: 8 - row, col: 8 - col };
   }

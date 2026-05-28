@@ -17,7 +17,10 @@ export function henBoardEdgeCells(edge: HenBoardEdge): { row: number; col: numbe
   return out;
 }
 
-export function pieceOnHenBoardEdge(piece: { row: number; col: number }, edge: HenBoardEdge): boolean {
+export function pieceOnHenBoardEdge(
+  piece: { row: number; col: number },
+  edge: HenBoardEdge,
+): boolean {
   if (edge === 'top') return piece.row === 0;
   if (edge === 'bottom') return piece.row === 8;
   if (edge === 'left') return piece.col === 0;

@@ -105,10 +105,10 @@ export type WebSocketServerMessage =
       status: 'started';
       initialState: MatchingGameState;
     }
-  | {
+  | ({
       type: 'game_state_updated';
       matchId: string;
-    } & MatchingGameState
+    } & MatchingGameState)
   | {
       type: 'game_finished';
       matchId: string;

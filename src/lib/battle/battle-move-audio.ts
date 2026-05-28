@@ -2,7 +2,10 @@ import { toBasePieceCode as toAiBasePieceCode } from '@/ai/model/move';
 import { BATTLE_PIECE_EFFECT_SOUND_MODULES } from '@/constants/battle-piece-effect-sound-modules.generated';
 import type { MovePayload } from '@/domain/matching-server/protocol';
 import type { BoardPiece, Side } from '@/features/stage-shogi/domain/game-rules';
-import { CODE_TO_CHAR, PROMOTED_CODE_TO_CHAR } from '@/features/stage-shogi/domain/piece-conversion';
+import {
+  CODE_TO_CHAR,
+  PROMOTED_CODE_TO_CHAR,
+} from '@/features/stage-shogi/domain/piece-conversion';
 import { normalizeSkillName } from '@/features/stage-shogi/ui/stage-shogi-screen.presenters';
 import {
   playBattlePieceEffectSound,

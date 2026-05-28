@@ -98,10 +98,7 @@ export function usePieceCatalogScreen() {
           };
         });
 
-      const ownedCatalog = mergeOwnedPiecesIntoCatalog(
-        ownedFromMaster,
-        deckSnapshot.ownedPieces,
-      );
+      const ownedCatalog = mergeOwnedPiecesIntoCatalog(ownedFromMaster, deckSnapshot.ownedPieces);
 
       if (active) {
         setItems(ownedCatalog);

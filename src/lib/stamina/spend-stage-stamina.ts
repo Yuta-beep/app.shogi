@@ -1,9 +1,6 @@
 import type { HomeSnapshot } from '@/domain/models/home';
 import { ApiClientError } from '@/infra/http/api-client';
-import {
-  getHomeSnapshotState,
-  patchHomeSnapshotStamina,
-} from '@/hooks/common/home-snapshot-store';
+import { getHomeSnapshotState, patchHomeSnapshotStamina } from '@/hooks/common/home-snapshot-store';
 import { isApiDataSource } from '@/lib/config/data-source';
 import {
   calculateStaminaWithRecovery,
@@ -36,10 +33,7 @@ export function resetPendingClientStaminaDeduction(): void {
 export function mergeServerHomeStamina(server: HomeSnapshot): HomeSnapshot {
   if (pendingClientOnlyStaminaDeduction <= 0) return server;
 
-  if (
-    staminaBaselineWhenPendingSet != null &&
-    server.stamina < staminaBaselineWhenPendingSet
-  ) {
+  if (staminaBaselineWhenPendingSet != null && server.stamina < staminaBaselineWhenPendingSet) {
     resetPendingClientStaminaDeduction();
     return server;
   }
@@ -98,7 +92,11 @@ export function getMockStaminaDisplay(): {
   return currentMockStamina();
 }
 
-function currentMockStamina(): { stamina: number; maxStamina: number; nextRecoveryAt: string | null } {
+function currentMockStamina(): {
+  stamina: number;
+  maxStamina: number;
+  nextRecoveryAt: string | null;
+} {
   const max = getHomeSnapshotState().snapshot.maxStamina;
   const { stamina, nextRecoveryAt } = calculateStaminaWithRecovery({
     stored: mockStaminaStored,

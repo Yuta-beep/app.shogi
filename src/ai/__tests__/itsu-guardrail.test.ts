@@ -39,7 +39,14 @@ function positionForPlayerItsu(): AiBattlePosition {
     boardState: {
       pieces: [
         { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
-        { side: 'player', row: 4, col: 4, pieceCode: 'piece_gacha_itsu', char: '逸', promoted: false },
+        {
+          side: 'player',
+          row: 4,
+          col: 4,
+          pieceCode: 'piece_gacha_itsu',
+          char: '逸',
+          promoted: false,
+        },
         { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
       ],
       skill_definitions_v2: skillDefinitionsV2ForGachaChar('逸'),
@@ -60,7 +67,9 @@ describe('逸 guardrail', () => {
   it('accepts opaque instance pieceCode from the client', () => {
     const position = positionForPlayerItsu();
     const legal = generateLegalMoves({ position, pieceCatalog });
-    const itsuMove = legal.legalMoves.find((m) => m.fromRow === 4 && m.fromCol === 4 && m.toRow === 3);
+    const itsuMove = legal.legalMoves.find(
+      (m) => m.fromRow === 4 && m.fromCol === 4 && m.toRow === 3,
+    );
     expect(itsuMove).toBeDefined();
 
     expect(() =>
@@ -79,7 +88,9 @@ describe('逸 guardrail', () => {
   it('accepts 1-based coordinates when the board cell is 0-based', () => {
     const position = positionForPlayerItsu();
     const legal = generateLegalMoves({ position, pieceCatalog });
-    const itsuMove = legal.legalMoves.find((m) => m.fromRow === 4 && m.fromCol === 4 && m.toRow === 3);
+    const itsuMove = legal.legalMoves.find(
+      (m) => m.fromRow === 4 && m.fromCol === 4 && m.toRow === 3,
+    );
     expect(itsuMove).toBeDefined();
 
     expect(() =>

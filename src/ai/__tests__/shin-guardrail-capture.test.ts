@@ -59,7 +59,14 @@ function positionForPlayerShinMove(): AiBattlePosition {
     boardState: {
       pieces: [
         { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
-        { side: 'player', row: 5, col: 4, pieceCode: 'piece_gacha_shin', char: '進', promoted: false },
+        {
+          side: 'player',
+          row: 5,
+          col: 4,
+          pieceCode: 'piece_gacha_shin',
+          char: '進',
+          promoted: false,
+        },
         { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
       ],
       skill_state: {
@@ -87,7 +94,14 @@ function positionForEnemyCaptureShin(): AiBattlePosition {
     boardState: {
       pieces: [
         { side: 'enemy', row: 2, col: 4, pieceCode: 'OU', char: '王', promoted: false },
-        { side: 'player', row: 3, col: 4, pieceCode: 'piece_gacha_shin', char: '進', promoted: false },
+        {
+          side: 'player',
+          row: 3,
+          col: 4,
+          pieceCode: 'piece_gacha_shin',
+          char: '進',
+          promoted: false,
+        },
         { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
       ],
     },
@@ -113,7 +127,9 @@ describe('進 guardrail and capture', () => {
     const position = positionForPlayerShinMove();
     ensureShinTurnMimicForBattle(position, pieceCatalog);
     const legal = generateLegalMoves({ position, pieceCatalog });
-    const shinMove = legal.legalMoves.find((m) => m.fromRow === 5 && m.fromCol === 4 && m.toRow === 4);
+    const shinMove = legal.legalMoves.find(
+      (m) => m.fromRow === 5 && m.fromCol === 4 && m.toRow === 4,
+    );
     expect(shinMove).toBeDefined();
 
     expect(() =>

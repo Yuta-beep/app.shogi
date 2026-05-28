@@ -1,7 +1,4 @@
-import {
-  henBoardEdgeCells,
-  pieceOnHenBoardEdge,
-} from '@/ai/engine/hen-board-edge';
+import { henBoardEdgeCells, pieceOnHenBoardEdge } from '@/ai/engine/hen-board-edge';
 
 describe('hen-board-edge', () => {
   it('lists 9 cells per edge', () => {

@@ -319,206 +319,206 @@ const BoardPieceSprite = memo(function BoardPieceSprite({
             backgroundColor: aTransformed ? 'rgba(255, 215, 64, 0.14)' : 'transparent',
           }}
         >
-        <View style={{ width: '100%', height: '100%', position: 'relative' }}>
-          {localPromotedImageSource != null ? (
-            <Image
-              key={`pl-${instantPromotedKey ?? 'n'}-${piece.side}-${piece.row}-${piece.col}-${piece.promoted ? 1 : 0}-${piece.char}-${piece.pieceCode ?? ''}`}
-              recyclingKey={pieceImageRecyclingKey}
-              source={localPromotedImageSource}
-              contentFit="contain"
-              transition={0}
-              cachePolicy="memory-disk"
-              style={{ width: '100%', height: '100%' }}
-            />
-          ) : imageSource ? (
-            <Image
-              key={`uri-${piece.side}-${piece.row}-${piece.col}-${piece.promoted ? 1 : 0}-${piece.char}-${piece.pieceCode ?? ''}-src${imageAssetFingerprint}`}
-              recyclingKey={pieceImageRecyclingKey}
-              source={imageSource}
-              contentFit="contain"
-              style={{ width: '100%', height: '100%' }}
-              onError={onImageError}
-            />
-          ) : (
-            <View style={{ width: '100%', height: '100%' }}>
-              <Svg width="100%" height="100%" viewBox="0 0 100 120">
-                <Polygon
-                  points="50,3 97,30 83,117 17,117 3,30"
-                  fill={fallbackPiecePalette(piece.side).fill}
-                  stroke={fallbackPiecePalette(piece.side).stroke}
-                  strokeWidth={5}
-                />
-              </Svg>
+          <View style={{ width: '100%', height: '100%', position: 'relative' }}>
+            {localPromotedImageSource != null ? (
+              <Image
+                key={`pl-${instantPromotedKey ?? 'n'}-${piece.side}-${piece.row}-${piece.col}-${piece.promoted ? 1 : 0}-${piece.char}-${piece.pieceCode ?? ''}`}
+                recyclingKey={pieceImageRecyclingKey}
+                source={localPromotedImageSource}
+                contentFit="contain"
+                transition={0}
+                cachePolicy="memory-disk"
+                style={{ width: '100%', height: '100%' }}
+              />
+            ) : imageSource ? (
+              <Image
+                key={`uri-${piece.side}-${piece.row}-${piece.col}-${piece.promoted ? 1 : 0}-${piece.char}-${piece.pieceCode ?? ''}-src${imageAssetFingerprint}`}
+                recyclingKey={pieceImageRecyclingKey}
+                source={imageSource}
+                contentFit="contain"
+                style={{ width: '100%', height: '100%' }}
+                onError={onImageError}
+              />
+            ) : (
+              <View style={{ width: '100%', height: '100%' }}>
+                <Svg width="100%" height="100%" viewBox="0 0 100 120">
+                  <Polygon
+                    points="50,3 97,30 83,117 17,117 3,30"
+                    fill={fallbackPiecePalette(piece.side).fill}
+                    stroke={fallbackPiecePalette(piece.side).stroke}
+                    strokeWidth={5}
+                  />
+                </Svg>
+                <View
+                  style={{
+                    position: 'absolute',
+                    inset: 0,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 2,
+                  }}
+                >
+                  {king ? (
+                    <Crown size={16} color={fallbackPiecePalette(piece.side).icon} />
+                  ) : (
+                    <Shield size={16} color={fallbackPiecePalette(piece.side).icon} />
+                  )}
+                  <Text
+                    className="text-sm font-black"
+                    style={{ color: fallbackPiecePalette(piece.side).text }}
+                  >
+                    {darkVeiled ? '' : getDisplayChar(piece)}
+                  </Text>
+                </View>
+              </View>
+            )}
+            {darkVeiled ? (
               <View
+                pointerEvents="none"
                 style={{
                   position: 'absolute',
-                  inset: 0,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 2,
+                  left: 0,
+                  right: 0,
+                  top: 0,
+                  bottom: 0,
+                  backgroundColor: '#000000',
+                }}
+              />
+            ) : null}
+            {prisonChained && !darkVeiled ? (
+              <View
+                pointerEvents="none"
+                style={{
+                  position: 'absolute',
+                  left: '6%',
+                  right: '6%',
+                  top: '8%',
+                  bottom: '8%',
+                  opacity: 0.88,
                 }}
               >
-                {king ? (
-                  <Crown size={16} color={fallbackPiecePalette(piece.side).icon} />
-                ) : (
-                  <Shield size={16} color={fallbackPiecePalette(piece.side).icon} />
-                )}
-                <Text
-                  className="text-sm font-black"
-                  style={{ color: fallbackPiecePalette(piece.side).text }}
-                >
-                  {darkVeiled ? '' : getDisplayChar(piece)}
+                <Image
+                  source={PRISON_CHAIN_IMAGE_SOURCE}
+                  contentFit="contain"
+                  style={{ width: '100%', height: '100%' }}
+                />
+              </View>
+            ) : null}
+            {stunnedAura && !darkVeiled ? (
+              <View
+                pointerEvents="none"
+                style={{
+                  position: 'absolute',
+                  left: '10%',
+                  right: '10%',
+                  top: '10%',
+                  bottom: '10%',
+                  borderRadius: 999,
+                  borderWidth: 2,
+                  borderColor: 'rgba(34, 197, 94, 0.95)',
+                  backgroundColor: 'rgba(34, 197, 94, 0.16)',
+                  opacity: 0.95,
+                }}
+              />
+            ) : null}
+            {abyssAura && !darkVeiled ? (
+              <View
+                pointerEvents="none"
+                style={{
+                  position: 'absolute',
+                  left: '10%',
+                  right: '10%',
+                  top: '10%',
+                  bottom: '10%',
+                  borderRadius: 999,
+                  borderWidth: 2,
+                  borderColor: 'rgba(147, 51, 234, 0.95)',
+                  backgroundColor: 'rgba(147, 51, 234, 0.18)',
+                  opacity: 0.95,
+                }}
+              />
+            ) : null}
+            {lightProtectionAura && !darkVeiled ? (
+              <View
+                pointerEvents="none"
+                style={{
+                  position: 'absolute',
+                  left: '9%',
+                  right: '9%',
+                  top: '9%',
+                  bottom: '9%',
+                  borderRadius: 999,
+                  borderWidth: 2,
+                  borderColor: 'rgba(254, 249, 210, 0.98)',
+                  backgroundColor: 'rgba(255, 252, 220, 0.28)',
+                  opacity: 0.98,
+                }}
+              />
+            ) : null}
+            {deathCurseAura && !darkVeiled ? (
+              <View
+                pointerEvents="none"
+                style={{
+                  position: 'absolute',
+                  left: '8%',
+                  right: '8%',
+                  top: '8%',
+                  bottom: '8%',
+                  borderRadius: 999,
+                  borderWidth: 2,
+                  borderColor: 'rgba(239, 68, 68, 0.95)',
+                  backgroundColor: 'rgba(239, 68, 68, 0.2)',
+                  opacity: 0.96,
+                }}
+              />
+            ) : null}
+            {deathCurseAura && !darkVeiled && deathCurseCountdown != null ? (
+              <View
+                pointerEvents="none"
+                style={{
+                  position: 'absolute',
+                  top: '2%',
+                  right: '2%',
+                  minWidth: 16,
+                  height: 16,
+                  borderRadius: 8,
+                  backgroundColor: 'rgba(127, 29, 29, 0.95)',
+                  borderWidth: 1,
+                  borderColor: 'rgba(255, 200, 200, 0.95)',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  paddingHorizontal: 3,
+                }}
+              >
+                <Text style={{ color: '#fff', fontSize: 10, fontWeight: '900' }}>
+                  {String(deathCurseCountdown)}
                 </Text>
               </View>
-            </View>
-          )}
-          {darkVeiled ? (
-            <View
-              pointerEvents="none"
-              style={{
-                position: 'absolute',
-                left: 0,
-                right: 0,
-                top: 0,
-                bottom: 0,
-                backgroundColor: '#000000',
-              }}
-            />
-          ) : null}
-          {prisonChained && !darkVeiled ? (
-            <View
-              pointerEvents="none"
-              style={{
-                position: 'absolute',
-                left: '6%',
-                right: '6%',
-                top: '8%',
-                bottom: '8%',
-                opacity: 0.88,
-              }}
-            >
-              <Image
-                source={PRISON_CHAIN_IMAGE_SOURCE}
-                contentFit="contain"
-                style={{ width: '100%', height: '100%' }}
-              />
-            </View>
-          ) : null}
-          {stunnedAura && !darkVeiled ? (
-            <View
-              pointerEvents="none"
-              style={{
-                position: 'absolute',
-                left: '10%',
-                right: '10%',
-                top: '10%',
-                bottom: '10%',
-                borderRadius: 999,
-                borderWidth: 2,
-                borderColor: 'rgba(34, 197, 94, 0.95)',
-                backgroundColor: 'rgba(34, 197, 94, 0.16)',
-                opacity: 0.95,
-              }}
-            />
-          ) : null}
-          {abyssAura && !darkVeiled ? (
-            <View
-              pointerEvents="none"
-              style={{
-                position: 'absolute',
-                left: '10%',
-                right: '10%',
-                top: '10%',
-                bottom: '10%',
-                borderRadius: 999,
-                borderWidth: 2,
-                borderColor: 'rgba(147, 51, 234, 0.95)',
-                backgroundColor: 'rgba(147, 51, 234, 0.18)',
-                opacity: 0.95,
-              }}
-            />
-          ) : null}
-          {lightProtectionAura && !darkVeiled ? (
-            <View
-              pointerEvents="none"
-              style={{
-                position: 'absolute',
-                left: '9%',
-                right: '9%',
-                top: '9%',
-                bottom: '9%',
-                borderRadius: 999,
-                borderWidth: 2,
-                borderColor: 'rgba(254, 249, 210, 0.98)',
-                backgroundColor: 'rgba(255, 252, 220, 0.28)',
-                opacity: 0.98,
-              }}
-            />
-          ) : null}
-          {deathCurseAura && !darkVeiled ? (
-            <View
-              pointerEvents="none"
-              style={{
-                position: 'absolute',
-                left: '8%',
-                right: '8%',
-                top: '8%',
-                bottom: '8%',
-                borderRadius: 999,
-                borderWidth: 2,
-                borderColor: 'rgba(239, 68, 68, 0.95)',
-                backgroundColor: 'rgba(239, 68, 68, 0.2)',
-                opacity: 0.96,
-              }}
-            />
-          ) : null}
-          {deathCurseAura && !darkVeiled && deathCurseCountdown != null ? (
-            <View
-              pointerEvents="none"
-              style={{
-                position: 'absolute',
-                top: '2%',
-                right: '2%',
-                minWidth: 16,
-                height: 16,
-                borderRadius: 8,
-                backgroundColor: 'rgba(127, 29, 29, 0.95)',
-                borderWidth: 1,
-                borderColor: 'rgba(255, 200, 200, 0.95)',
-                alignItems: 'center',
-                justifyContent: 'center',
-                paddingHorizontal: 3,
-              }}
-            >
-              <Text style={{ color: '#fff', fontSize: 10, fontWeight: '900' }}>
-                {String(deathCurseCountdown)}
-              </Text>
-            </View>
-          ) : null}
-          {chrysanthemumRevivalMark && !darkVeiled ? (
-            <View
-              pointerEvents="none"
-              style={{
-                position: 'absolute',
-                top: '-2%',
-                right: '2%',
-                width: '54%',
-                height: '54%',
-                maxWidth: 56,
-                maxHeight: 56,
-              }}
-            >
-              <Image
-                source={CHRYSANTHEMUM_REVIVAL_IMAGE_SOURCE}
-                contentFit="contain"
-                style={{ width: '100%', height: '100%' }}
-              />
-            </View>
-          ) : null}
-          {yinSkillSparkle && !darkVeiled ? <YinSkillSparkleRing /> : null}
-          {yangSkillSparkle && !darkVeiled ? <YangSkillSparkleRing /> : null}
-          {maiDanceRestrictionMark && !darkVeiled ? <MaiDanceRestrictionXMark /> : null}
-        </View>
+            ) : null}
+            {chrysanthemumRevivalMark && !darkVeiled ? (
+              <View
+                pointerEvents="none"
+                style={{
+                  position: 'absolute',
+                  top: '-2%',
+                  right: '2%',
+                  width: '54%',
+                  height: '54%',
+                  maxWidth: 56,
+                  maxHeight: 56,
+                }}
+              >
+                <Image
+                  source={CHRYSANTHEMUM_REVIVAL_IMAGE_SOURCE}
+                  contentFit="contain"
+                  style={{ width: '100%', height: '100%' }}
+                />
+              </View>
+            ) : null}
+            {yinSkillSparkle && !darkVeiled ? <YinSkillSparkleRing /> : null}
+            {yangSkillSparkle && !darkVeiled ? <YangSkillSparkleRing /> : null}
+            {maiDanceRestrictionMark && !darkVeiled ? <MaiDanceRestrictionXMark /> : null}
+          </View>
         </View>
         {kirinImmunityShieldMark && !darkVeiled ? <KirinImmunityShieldBadge /> : null}
       </View>

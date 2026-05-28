@@ -1,4 +1,7 @@
-import { effectiveGachaPieceWeight, pieceRateMultiplierForColorIndex } from '@/lib/gacha/gacha-ball-piece-rate';
+import {
+  effectiveGachaPieceWeight,
+  pieceRateMultiplierForColorIndex,
+} from '@/lib/gacha/gacha-ball-piece-rate';
 
 describe('gacha-ball-piece-rate', () => {
   it('applies color multipliers', () => {

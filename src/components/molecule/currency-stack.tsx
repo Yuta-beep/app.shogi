@@ -25,11 +25,17 @@ export function CurrencyStack({
   const alignClass = align === 'start' ? 'items-start' : 'items-end';
 
   return (
-    <View
-      className={`min-w-[120px] ${alignClass} ${isColumn ? 'gap-2' : 'flex-row gap-3'}`}
-    >
-      <CurrencyChip iconSource={pawnPieceCoinIcon} value={pawnCurrency} valueClassName={valueClassName} />
-      <CurrencyChip iconSource={goldPieceCoinIcon} value={goldCurrency} valueClassName={valueClassName} />
+    <View className={`min-w-[120px] ${alignClass} ${isColumn ? 'gap-2' : 'flex-row gap-3'}`}>
+      <CurrencyChip
+        iconSource={pawnPieceCoinIcon}
+        value={pawnCurrency}
+        valueClassName={valueClassName}
+      />
+      <CurrencyChip
+        iconSource={goldPieceCoinIcon}
+        value={goldCurrency}
+        valueClassName={valueClassName}
+      />
     </View>
   );
 }

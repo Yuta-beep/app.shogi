@@ -36,7 +36,14 @@ describe('煽 移動', () => {
       stateHash: 'seed',
       boardState: {
         pieces: [
-          { side: 'player', row: 5, col: 4, pieceCode: 'piece_gacha_aori', char: '煽', promoted: false },
+          {
+            side: 'player',
+            row: 5,
+            col: 4,
+            pieceCode: 'piece_gacha_aori',
+            char: '煽',
+            promoted: false,
+          },
           { side: 'player', row: 8, col: 0, pieceCode: 'OU', char: '王', promoted: false },
         ],
       },

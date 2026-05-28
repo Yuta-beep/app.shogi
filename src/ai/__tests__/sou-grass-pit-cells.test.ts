@@ -73,9 +73,7 @@ describe('艸 ×マス', () => {
     const legal = generateLegalMoves({ position, pieceCatalog });
     const fromSou = legal.legalMoves.filter((m) => m.fromRow === 5 && m.fromCol === 4);
     const targets = fromSou.map((m) => `${m.toRow}:${m.toCol}`).sort();
-    expect(targets).toEqual(
-      ['3:4', '4:4', '5:3', '5:5', '6:4'].sort(),
-    );
+    expect(targets).toEqual(['3:4', '4:4', '5:3', '5:5', '6:4'].sort());
   });
 
   it('marks up to 3 random adjacent empty cells as pit_cell on move', () => {

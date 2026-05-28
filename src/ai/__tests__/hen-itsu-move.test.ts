@@ -15,12 +15,7 @@ function catalogFor(chars: Array<{ char: string; code: string }>): AiPieceDefini
   }));
 }
 
-function movesFrom(
-  char: string,
-  code: string,
-  row: number,
-  col: number,
-): string[] {
+function movesFrom(char: string, code: string, row: number, col: number): string[] {
   const position: AiBattlePosition = {
     sideToMove: 'player',
     turnNumber: 1,
@@ -28,9 +23,7 @@ function movesFrom(
     sfen: 'seed',
     stateHash: 'seed',
     boardState: {
-      pieces: [
-        { side: 'player', row, col, pieceCode: code, char, promoted: false },
-      ],
+      pieces: [{ side: 'player', row, col, pieceCode: code, char, promoted: false }],
     },
     hands: { player: {}, enemy: {} },
   };
@@ -49,8 +42,6 @@ describe('辺・逸 前と斜め4方向1マス', () => {
     ['辺', 'piece_gacha_hen'],
     ['逸', 'piece_gacha_itsu'],
   ])('%s は前1+斜め4方向のみ', (char, code) => {
-    expect(movesFrom(char, code, 4, 4)).toEqual(
-      ['3:3', '3:4', '3:5', '5:3', '5:5'].sort(),
-    );
+    expect(movesFrom(char, code, 4, 4)).toEqual(['3:3', '3:4', '3:5', '5:3', '5:5'].sort());
   });
 });

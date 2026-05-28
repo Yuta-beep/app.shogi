@@ -561,7 +561,9 @@ export function alignLegalMovesToBoardPieces(
       }
     }
 
-    const fallback = playerPieces.find((piece) => moveOriginMatchesCoord(move, piece.row, piece.col));
+    const fallback = playerPieces.find((piece) =>
+      moveOriginMatchesCoord(move, piece.row, piece.col),
+    );
     if (fallback) {
       return rewriteMoveCoordsToBoardCell(move, fallback.row, fallback.col);
     }
@@ -643,10 +645,7 @@ export function normalizeBoardPieceForDisplay(
       : resolvedCode
         ? pieceCharFromCode(resolvedCode, piece.side, promoted)
         : piece.char;
-  const canonical = canonicalizeBoardPieceIdentity(
-    resolvedCode ?? piece.pieceCode,
-    resolvedChar,
-  );
+  const canonical = canonicalizeBoardPieceIdentity(resolvedCode ?? piece.pieceCode, resolvedChar);
   return {
     ...piece,
     pieceCode: canonical.pieceCode ?? resolvedCode ?? piece.pieceCode,
@@ -944,10 +943,7 @@ function moveOriginMatchesBoardCell(move: BattleMove, row: number, col: number):
   );
 }
 
-function moveUsesOneBasedCoordsForBoard(
-  move: BattleMove,
-  boardOrigin?: BoardCell | null,
-): boolean {
+function moveUsesOneBasedCoordsForBoard(move: BattleMove, boardOrigin?: BoardCell | null): boolean {
   if (boardOrigin != null && move.fromRow != null && move.fromCol != null) {
     return move.fromRow === boardOrigin.row + 1 && move.fromCol === boardOrigin.col + 1;
   }
@@ -1784,12 +1780,7 @@ export function thornHazardCellsForDisplay(position: BattleCanonicalPosition): B
   return out;
 }
 
-function isChebyshevAdjacentCells(
-  aRow: number,
-  aCol: number,
-  bRow: number,
-  bCol: number,
-): boolean {
+function isChebyshevAdjacentCells(aRow: number, aCol: number, bRow: number, bCol: number): boolean {
   const dr = Math.abs(aRow - bRow);
   const dc = Math.abs(aCol - bCol);
   return dr <= 1 && dc <= 1 && (dr !== 0 || dc !== 0);
@@ -1814,8 +1805,7 @@ export function pruneDanceMovementRulesForDisplay(
     if (!Number.isFinite(row) || !Number.isFinite(col)) continue;
     const targetSide = sideRaw === 'enemy' ? 'enemy' : 'player';
     const kept = maiAllies.some(
-      (mai) =>
-        mai.side !== targetSide && isChebyshevAdjacentCells(mai.row, mai.col, row, col),
+      (mai) => mai.side !== targetSide && isChebyshevAdjacentCells(mai.row, mai.col, row, col),
     );
     if (kept) out.set(key, rule);
   }
@@ -2913,12 +2903,18 @@ export function syncCanonicalState(params: {
   const withPrisonChain = applyPrisonChainEffectToPieces(withATransformEffect, displayPosition);
   const withStunAura = applyStunAuraEffectToPieces(withPrisonChain, displayPosition);
   const withAbyssAura = applyAbyssAuraEffectToPieces(withStunAura, displayPosition);
-  const withChrysRevivalMark = applyChrysanthemumRevivalMarkToPieces(withAbyssAura, displayPosition);
+  const withChrysRevivalMark = applyChrysanthemumRevivalMarkToPieces(
+    withAbyssAura,
+    displayPosition,
+  );
   const withLightProtectionAura = applyLightProtectionAuraEffectToPieces(
     withChrysRevivalMark,
     displayPosition,
   );
-  const withDeathCurseAura = applyDeathCurseEffectToPieces(withLightProtectionAura, displayPosition);
+  const withDeathCurseAura = applyDeathCurseEffectToPieces(
+    withLightProtectionAura,
+    displayPosition,
+  );
   const poisonHazardCells = poisonHazardCellsForDisplay(displayPosition);
   const rockObstacleCells = rockObstacleCellsForDisplay(displayPosition);
   const batsuHazardCells = batsuHazardCellsForDisplay(displayPosition);

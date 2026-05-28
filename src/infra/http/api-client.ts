@@ -19,9 +19,16 @@ export class ApiClientError extends Error {
 
 let hasLoggedApiBase = false;
 
+function normalizeApiBaseUrl(raw: string): string {
+  const trimmed = raw.trim();
+  // `.env` の `http:// 192.168.x.x` のような誤入力を吸収する
+  const withoutSpaces = trimmed.replace(/\s+/g, '');
+  return withoutSpaces.replace(/\/+$/, '');
+}
+
 function baseUrl() {
   const raw = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://localhost:3000';
-  const normalized = raw.replace(/\/+$/, '');
+  const normalized = normalizeApiBaseUrl(raw);
   if (!hasLoggedApiBase) {
     hasLoggedApiBase = true;
     console.log('[api-client] EXPO_PUBLIC_API_BASE_URL =', normalized);

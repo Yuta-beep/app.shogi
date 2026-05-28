@@ -1,5 +1,8 @@
 import { enrichGachaBanner, UKANMURI_GACHA_LINEUP } from '@/constants/gacha-lineup-catalog';
-import { gachaLineupDropRatePercent, gachaLineupWeightTotal } from '@/features/gacha-room/lib/gacha-lineup-rates';
+import {
+  gachaLineupDropRatePercent,
+  gachaLineupWeightTotal,
+} from '@/features/gacha-room/lib/gacha-lineup-rates';
 import type { GachaBanner } from '@/usecases/gacha-room/load-gacha-lobby-usecase';
 
 describe('gacha-lineup-catalog ukanmuri', () => {
@@ -7,10 +10,7 @@ describe('gacha-lineup-catalog ukanmuri', () => {
 
   it('has the specified piece drop rates', () => {
     const rate = (char: string) =>
-      gachaLineupDropRatePercent(
-        UKANMURI_GACHA_LINEUP.find((e) => e.char === char)!,
-        total,
-      );
+      gachaLineupDropRatePercent(UKANMURI_GACHA_LINEUP.find((e) => e.char === char)!, total);
 
     expect(rate('室')).toBe(7);
     expect(rate('定')).toBe(10);

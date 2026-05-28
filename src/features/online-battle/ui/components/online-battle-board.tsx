@@ -45,7 +45,9 @@ export function OnlineBattleBoard(props: {
     return { ...piece, viewRow: view.row, viewCol: view.col };
   });
 
-  const selectedView = selectedCell ? toViewCoord(selectedCell.row, selectedCell.col, myRole) : null;
+  const selectedView = selectedCell
+    ? toViewCoord(selectedCell.row, selectedCell.col, myRole)
+    : null;
   const targetsView = legalTargets.map((t) => toViewCoord(t.row, t.col, myRole));
 
   return (

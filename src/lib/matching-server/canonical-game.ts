@@ -6,7 +6,11 @@ import {
   CODE_TO_CHAR,
   PROMOTED_CODE_TO_CHAR,
 } from '@/features/stage-shogi/domain/piece-conversion';
-import { createEmptyHandsState, type BoardPiece, type Side } from '@/features/stage-shogi/domain/game-rules';
+import {
+  createEmptyHandsState,
+  type BoardPiece,
+  type Side,
+} from '@/features/stage-shogi/domain/game-rules';
 import { decodeEncodedBoardPiece } from '@/lib/matching-server/game-bridge';
 import { formatMatchingSquare, parseMatchingSquare } from '@/lib/matching-server/square';
 import type { PieceCatalogItem } from '@/usecases/piece-info/load-piece-catalog-usecase';
@@ -121,10 +125,7 @@ export function isMyTurnInCanonical(myRole: PlayerSide, position: AiBattlePositi
 }
 
 /** UI 表示用: 自分の駒を player 側として見せる */
-export function piecesForDisplay(
-  pieces: BoardPiece[],
-  myRole: PlayerSide,
-): BoardPiece[] {
+export function piecesForDisplay(pieces: BoardPiece[], myRole: PlayerSide): BoardPiece[] {
   if (myRole === 'black') return pieces;
   return pieces.map((piece) => ({
     ...piece,

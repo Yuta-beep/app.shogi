@@ -1,7 +1,4 @@
-import {
-  resolveGachaRollCode,
-  toGachaRollCode,
-} from '@/constants/gacha-room-assets';
+import { resolveGachaRollCode, toGachaRollCode } from '@/constants/gacha-room-assets';
 
 describe('gacha roll code', () => {
   it('maps hiHen intro key to hihen for API', () => {

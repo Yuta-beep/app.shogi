@@ -50,11 +50,11 @@ describe('ステージ10 常設×マス', () => {
       hands: { player: {}, enemy: {} },
     };
     const display = positionWithStageFixedBoardTiles(base, 10);
-    expect(batsuHazardCellsForDisplay(display).map((c) => `${c.row}:${c.col}`).sort()).toEqual([
-      '4:3',
-      '4:4',
-      '4:5',
-    ]);
+    expect(
+      batsuHazardCellsForDisplay(display)
+        .map((c) => `${c.row}:${c.col}`)
+        .sort(),
+    ).toEqual(['4:3', '4:4', '4:5']);
   });
 
   it('tick 後も stage_fixed × は残る', () => {

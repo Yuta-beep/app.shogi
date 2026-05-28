@@ -1253,11 +1253,7 @@ function applyArrowTileSlideAfterLanding(input: {
   if (captured) {
     if (
       captured.side === input.actorSide &&
-      !(
-        movingBefore &&
-        captured.row === movingBefore.row &&
-        captured.col === movingBefore.col
-      )
+      !(movingBefore && captured.row === movingBefore.row && captured.col === movingBefore.col)
     ) {
       throw new Error('arrow slide blocked by ally');
     }

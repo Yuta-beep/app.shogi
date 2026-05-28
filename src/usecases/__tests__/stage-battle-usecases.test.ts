@@ -24,6 +24,7 @@ import {
   MockClaimStageClearRewardUseCase,
   MockPrepareStageBattleUseCase,
   resetMockPreparedStageId,
+  resetMockStageClearRewards,
 } from '@/usecases/stage-battle/mock-stage-battle-usecases';
 
 describe('MockPrepareStageBattleUseCase stamina', () => {
@@ -77,12 +78,27 @@ describe('MockPrepareStageBattleUseCase', () => {
 });
 
 describe('MockClaimStageClearRewardUseCase', () => {
+  beforeEach(() => {
+    resetMockStageClearRewards();
+  });
+
   it('returns rewards for a cleared stage', async () => {
     const usecase = new MockClaimStageClearRewardUseCase();
     const result = await usecase.execute({ stageId: '3', result: 'cleared' });
 
     expect(result?.stageNo).toBe(3);
     expect(result?.firstClear).toBe(true);
+    expect(result?.granted).toEqual({ pawn: 20, gold: 1, pieces: [] });
+  });
+
+  it('2回目以降は歩のみ floor(stageNo/5)+2', async () => {
+    const usecase = new MockClaimStageClearRewardUseCase();
+    await usecase.execute({ stageId: '10', result: 'cleared' });
+    const repeat = await usecase.execute({ stageId: '10', result: 'cleared' });
+
+    expect(repeat?.firstClear).toBe(false);
+    expect(repeat?.clearCount).toBe(2);
+    expect(repeat?.granted).toEqual({ pawn: 4, gold: 0, pieces: [] });
   });
 
   it('returns null for failed result', async () => {

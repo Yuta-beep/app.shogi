@@ -453,7 +453,12 @@ export function isKoPiece(piece: PieceLike): boolean {
   const base = toBasePieceCode(piece.pieceCode);
   if (base === 'GACHA_KOU' || base === 'GACHA_KO') return true;
   const raw = pieceRawUpper(piece);
-  return raw.includes('GACHA_KOU') || raw.includes('PIECE_GACHA_KOU');
+  return (
+    raw.includes('GACHA_KOU') ||
+    raw.includes('PIECE_GACHA_KOU') ||
+    raw.includes('PIECE_GACHA_KO') ||
+    raw.includes('MOVE_GACHA_KO')
+  );
 }
 
 /** ガチャ「閹」: 前後左右1マス（味方王の前1マスへも移動可）。 */

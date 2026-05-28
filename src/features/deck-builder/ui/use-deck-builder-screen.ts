@@ -1,5 +1,5 @@
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import type { OwnedPiece, SavedDeck } from '@/domain/models/deck-builder';
 import { useAuthSession } from '@/hooks/common/auth-session-context';
@@ -25,6 +25,11 @@ import { buildCatalogItemFromGachaChar } from '@/constants/gacha-piece-metadata'
 import { CHAR_TO_CODE } from '@/features/stage-shogi/domain/piece-conversion';
 import { isBossPiece } from '@/features/deck-builder/lib/boss-pieces';
 import { isPieceExcludedFromDeckBuilder } from '@/features/deck-builder/lib/deck-builder-excluded-pieces';
+import {
+  DECK_REQUIRED_CELL_MESSAGE,
+  isDeckRequiredFormationComplete,
+  listEmptyRequiredDeckCells,
+} from '@/features/deck-builder/lib/deck-builder-required-cells';
 
 type BoardPlacement = {
   row: number;
@@ -555,6 +560,7 @@ export function useDeckBuilderScreen() {
   function saveDeck() {
     if (!deckName.trim()) return;
     if (deckTotalCost > DECK_COST_LIMIT) return;
+    if (!isDeckRequiredFormationComplete(boardPlacements)) return;
 
     const apiPlacements = boardPlacements
       .filter((placement) => isDeckAreaRow(placement.row))
@@ -590,6 +596,7 @@ export function useDeckBuilderScreen() {
 
   async function applyAsBattleDeck(): Promise<boolean> {
     if (deckTotalCost > DECK_COST_LIMIT) return false;
+    if (!isDeckRequiredFormationComplete(boardPlacements)) return false;
 
     const apiPlacements = boardPlacements
       .filter((placement) => isDeckAreaRow(placement.row))
@@ -664,6 +671,12 @@ export function useDeckBuilderScreen() {
     isDeckBuilderSpecialChar(placement.piece.char, placement.piece.name),
   ).length;
   const isDeckCostOverLimit = deckTotalCost > DECK_COST_LIMIT;
+  const emptyRequiredDeckCells = useMemo(
+    () => listEmptyRequiredDeckCells(boardPlacements),
+    [boardPlacements],
+  );
+  const isDeckFormationIncomplete = emptyRequiredDeckCells.length > 0;
+  const cannotApplyOrSaveDeck = isDeckCostOverLimit || isDeckFormationIncomplete;
 
   const isValidPlacementAt = useCallback(
     (row: number, col: number) => {
@@ -741,6 +754,10 @@ export function useDeckBuilderScreen() {
     deckTotalCost,
     deckCostLimit: DECK_COST_LIMIT,
     isDeckCostOverLimit,
+    isDeckFormationIncomplete,
+    emptyRequiredDeckCells,
+    deckRequiredCellMessage: DECK_REQUIRED_CELL_MESSAGE,
+    cannotApplyOrSaveDeck,
     deckSpecialPieceCount,
     loadModalOpen,
     openLoadModal: () => setLoadModalOpen(true),

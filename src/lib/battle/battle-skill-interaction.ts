@@ -79,7 +79,11 @@ export function countPeopleOnBoardUi(
   pieceDefsByChar: Partial<Record<string, PieceCatalogItem>>,
 ): number {
   return board.filter((p) => {
-    const c = pieceCodeFromPlacementLite(p.pieceCode ?? null, p.char, pieceDefsByChar)?.toUpperCase();
+    const c = pieceCodeFromPlacementLite(
+      p.pieceCode ?? null,
+      p.char,
+      pieceDefsByChar,
+    )?.toUpperCase();
     const ch = normalizeKanjiForSkillId(p.char);
     return (
       c === 'PEOPLE' ||
@@ -151,11 +155,7 @@ export function resolveSatoriEnemyPick(actionableMoves: BattleMove[]): SatoriPic
   return { moves: stunVariants, targetCells };
 }
 
-export function findSatoriMoveAt(
-  moves: BattleMove[],
-  row: number,
-  col: number,
-): BattleMove | null {
+export function findSatoriMoveAt(moves: BattleMove[], row: number, col: number): BattleMove | null {
   return (
     moves.find((mv) => {
       const p = /^satori_stun:(\d+):(\d+)$/i.exec(mv.notation ?? '');
@@ -182,11 +182,7 @@ export function resolveHeartAllyPick(actionableMoves: BattleMove[]): HeartPickSt
   return { moves: protectVariants, targetCells };
 }
 
-export function findHeartMoveAt(
-  moves: BattleMove[],
-  row: number,
-  col: number,
-): BattleMove | null {
+export function findHeartMoveAt(moves: BattleMove[], row: number, col: number): BattleMove | null {
   return (
     moves.find((mv) => {
       const p = /^heart_protect:(\d+):(\d+)$/i.exec(mv.notation ?? '');

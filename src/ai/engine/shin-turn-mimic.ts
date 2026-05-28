@@ -74,31 +74,20 @@ export function readShinTurnMimic(
   if (!Array.isArray(rawList)) return null;
   for (const raw of rawList) {
     const entry = parseShinTurnMimicEntry(raw);
-    if (
-      entry &&
-      entry.side === side &&
-      entry.bound_turn_number === position.turnNumber
-    ) {
+    if (entry && entry.side === side && entry.bound_turn_number === position.turnNumber) {
       return entry;
     }
   }
   return null;
 }
 
-export function writeShinTurnMimic(
-  position: AiBattlePosition,
-  entry: ShinTurnMimicEntry,
-): void {
+export function writeShinTurnMimic(position: AiBattlePosition, entry: ShinTurnMimicEntry): void {
   const skillState = { ...readSkillState(position) };
-  const prev = Array.isArray(skillState.shin_turn_mimics)
-    ? skillState.shin_turn_mimics
-    : [];
+  const prev = Array.isArray(skillState.shin_turn_mimics) ? skillState.shin_turn_mimics : [];
   const filtered = prev.filter((raw) => {
     const parsed = parseShinTurnMimicEntry(raw);
     if (!parsed) return false;
-    return !(
-      parsed.side === entry.side && parsed.bound_turn_number === entry.bound_turn_number
-    );
+    return !(parsed.side === entry.side && parsed.bound_turn_number === entry.bound_turn_number);
   });
   skillState.shin_turn_mimics = [...filtered, entry];
   writeSkillState(position, skillState);

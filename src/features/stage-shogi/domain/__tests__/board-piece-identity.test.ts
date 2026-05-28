@@ -7,9 +7,10 @@ import { getPieceImageSource } from '@/features/stage-shogi/ui/stage-shogi-scree
 
 describe('canonicalizeBoardPieceIdentity', () => {
   it('maps opaque 歩 id + 歩 char to FU', () => {
-    expect(
-      canonicalizeBoardPieceIdentity('piece_c518b11858f2', '歩'),
-    ).toEqual({ pieceCode: 'FU', char: '歩' });
+    expect(canonicalizeBoardPieceIdentity('piece_c518b11858f2', '歩')).toEqual({
+      pieceCode: 'FU',
+      char: '歩',
+    });
   });
 
   it('maps FIR + 火 for summoned fire', () => {

@@ -12,9 +12,7 @@ export function isPermanentBoardHazardEntry(entry: Record<string, unknown>): boo
   return Number.isFinite(remaining) && remaining >= 999;
 }
 
-export function stageFixedPitHazardEntries(
-  stageNo: number,
-): Record<string, unknown>[] {
+export function stageFixedPitHazardEntries(stageNo: number): Record<string, unknown>[] {
   return fixedPitCellsForStageNo(stageNo).map(({ row, col }) => ({
     row,
     col,

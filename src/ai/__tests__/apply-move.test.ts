@@ -1928,11 +1928,12 @@ describe('ai engine apply move', () => {
     expect(left?.char).toBe('銀');
     expect(right?.pieceCode).toBe('KE');
     expect(right?.char).toBe('桂');
-    const statuses = (
-      committed.position.boardState as {
-        skill_state?: { piece_statuses?: Record<string, unknown>[] };
-      }
-    ).skill_state?.piece_statuses ?? [];
+    const statuses =
+      (
+        committed.position.boardState as {
+          skill_state?: { piece_statuses?: Record<string, unknown>[] };
+        }
+      ).skill_state?.piece_statuses ?? [];
     expect(statuses.some((s) => (s.status_type as string) === 'a_transform')).toBe(false);
   });
 

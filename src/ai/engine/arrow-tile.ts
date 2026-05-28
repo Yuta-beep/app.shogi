@@ -50,9 +50,7 @@ export function arrowSlideDestination(
   }
 }
 
-export function buildArrowTileByCellMap(
-  position: AiBattlePosition,
-): Map<string, ArrowDirection> {
+export function buildArrowTileByCellMap(position: AiBattlePosition): Map<string, ArrowDirection> {
   const out = new Map<string, ArrowDirection>();
   for (const entry of readArrowTiles(position)) {
     const row = Number(entry.row);

@@ -3,10 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { MatchingGameState, PlayerSide } from '@/domain/matching-server/protocol';
 import { useAuthSession } from '@/hooks/common/auth-session-context';
 import { getMatchingServerClient } from '@/infra/matching-server/matching-server-client';
-import {
-  boardPiecesFromState,
-  handSummary,
-} from '@/lib/matching-server/board-view';
+import { boardPiecesFromState, handSummary } from '@/lib/matching-server/board-view';
 import { battleMoveToServerPayload, fromViewCoord } from '@/lib/matching-server/game-bridge';
 import { canonicalToMatchingWire, isMyTurnInCanonical } from '@/lib/matching-server/canonical-game';
 import {
@@ -162,10 +159,7 @@ export function useOnlineBattleGame(matchId?: string) {
   const client = useMemo(() => getMatchingServerClient(), []);
   const loadCatalogUseCase = useMemo(() => createLoadPieceCatalogUseCase(), []);
   const pieceDefsByCode = useMemo(() => catalogDefsByCode(pieceCatalog), [pieceCatalog]);
-  const pieceDefsByChar = useMemo(
-    () => pieceDefsByCharFromCatalog(pieceCatalog),
-    [pieceCatalog],
-  );
+  const pieceDefsByChar = useMemo(() => pieceDefsByCharFromCatalog(pieceCatalog), [pieceCatalog]);
   const promotedPieceDefsByCode = useMemo(
     () => buildPromotedPieceDefsByCode(pieceCatalog, pieceDefsByChar),
     [pieceCatalog, pieceDefsByChar],
@@ -238,13 +232,13 @@ export function useOnlineBattleGame(matchId?: string) {
   }, []);
 
   const applyServerGame = useCallback(
-    (
-      matchIdValue: string,
-      nextRole: PlayerSide,
-      nextGame: MatchingGameState,
-      logLine?: string,
-    ) => {
-      setActiveMatchSession({ matchId: matchIdValue, role: nextRole, userId: userId ?? '', game: nextGame });
+    (matchIdValue: string, nextRole: PlayerSide, nextGame: MatchingGameState, logLine?: string) => {
+      setActiveMatchSession({
+        matchId: matchIdValue,
+        role: nextRole,
+        userId: userId ?? '',
+        game: nextGame,
+      });
       updateActiveMatchGame(nextGame);
       setGame(nextGame);
       setRole(nextRole);
@@ -508,20 +502,23 @@ export function useOnlineBattleGame(matchId?: string) {
     ],
   );
 
-  const beginSatoriEnemySelectionIfNeeded = useCallback((actionableMoves: BattleMove[]): boolean => {
-    const pick = resolveSatoriEnemyPick(actionableMoves);
-    if (!pick) return false;
-    setPendingSatoriEnemyPick(pick.moves);
-    setPendingHeartAllyPick(null);
-    setSelectedCell(null);
-    setSelectedDropPieceCode(null);
-    setLegalTargets([]);
-    setEnemyPreviewTargets(pick.targetCells);
-    setPendingHouseSkillCell(null);
-    setPendingTimeActionCell(null);
-    setTimeActionMode(null);
-    return true;
-  }, []);
+  const beginSatoriEnemySelectionIfNeeded = useCallback(
+    (actionableMoves: BattleMove[]): boolean => {
+      const pick = resolveSatoriEnemyPick(actionableMoves);
+      if (!pick) return false;
+      setPendingSatoriEnemyPick(pick.moves);
+      setPendingHeartAllyPick(null);
+      setSelectedCell(null);
+      setSelectedDropPieceCode(null);
+      setLegalTargets([]);
+      setEnemyPreviewTargets(pick.targetCells);
+      setPendingHouseSkillCell(null);
+      setPendingTimeActionCell(null);
+      setTimeActionMode(null);
+      return true;
+    },
+    [],
+  );
 
   const beginHeartAllySelectionIfNeeded = useCallback((actionableMoves: BattleMove[]): boolean => {
     const pick = resolveHeartAllyPick(actionableMoves);

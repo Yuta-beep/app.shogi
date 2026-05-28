@@ -288,9 +288,7 @@ export function GachaRoomScreen() {
   }
 
   const isHit =
-    vm.phase === 'video' || vm.phase === 'pieceOverlay'
-      ? vm.lastResult?.type === 'hit'
-      : false;
+    vm.phase === 'video' || vm.phase === 'pieceOverlay' ? vm.lastResult?.type === 'hit' : false;
   const canRoll = vm.phase === 'idle' || vm.phase === 'done';
   const bgSource = selectedBanner
     ? bannerImageSource(selectedBanner.key, selectedBanner.imageSignedUrl)

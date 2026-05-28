@@ -1,4 +1,5 @@
 import type { GachaCollectibleChar } from '@/constants/gacha-piece-metadata';
+import { AN_SKILL_DESCRIPTION_JA, SOU_SKILL_DESCRIPTION_JA } from '@/ai/engine/shop-piece-moves';
 
 /**
  * ガチャ駒の skill_definitions_v2（Supabase 未登録時のクライアント正典）。
@@ -108,8 +109,7 @@ const ENGINE_READY_GACHA_SKILLS: GachaPieceSkillBinding[] = [
         },
       ],
       source: {
-        skillText:
-          '移動後、次の相手番のみコスト5以下の駒しか動かせない。',
+        skillText: '移動後、次の相手番のみコスト5以下の駒しか動かせない。',
         sourceKind: 'manual',
         sourceFile: 'gacha-piece-skill-definitions',
         sourceFunction: 'SADAME_COST_CAP',
@@ -140,7 +140,7 @@ const ENGINE_READY_GACHA_SKILLS: GachaPieceSkillBinding[] = [
         },
       ],
       source: {
-        skillText: '移動時10%の確率で、相手の特殊駒を1体「歩」に変える。',
+        skillText: AN_SKILL_DESCRIPTION_JA,
         sourceKind: 'manual',
         sourceFile: 'gacha-piece-skill-definitions',
         sourceFunction: 'AN_SPECIAL_TO_PAWN',
@@ -167,7 +167,11 @@ const ENGINE_READY_GACHA_SKILLS: GachaPieceSkillBinding[] = [
         {
           type: 'script_hook',
           target: { group: 'self', selector: 'self_piece' },
-          params: { hook: 'so_summon_random_adjacent_gold', summonPieceCode: 'KI', summonPieceChar: '金' },
+          params: {
+            hook: 'so_summon_random_adjacent_gold',
+            summonPieceCode: 'KI',
+            summonPieceChar: '金',
+          },
         },
       ],
       source: {
@@ -298,7 +302,7 @@ const ENGINE_READY_GACHA_SKILLS: GachaPieceSkillBinding[] = [
     'skill_gacha_sou',
     90125,
     'sou_grass_random_pit_cells',
-    '移動時、周囲8マスのうちランダムな空きマス最大3マスを1ターンの×マスにする。',
+    SOU_SKILL_DESCRIPTION_JA,
   ),
   afterMoveScriptHook(
     '膠',
@@ -313,17 +317,18 @@ const ENGINE_READY_GACHA_SKILLS: GachaPieceSkillBinding[] = [
 export const GACHA_SKILL_TODO: ReadonlyArray<{
   char: GachaCollectibleChar;
   skillCode: string;
-}> = [
-  { char: '煽', skillCode: 'skill_gacha_aori' },
-];
+}> = [{ char: '煽', skillCode: 'skill_gacha_aori' }];
 
-export const GACHA_PIECE_SKILL_BINDINGS: readonly GachaPieceSkillBinding[] = ENGINE_READY_GACHA_SKILLS;
+export const GACHA_PIECE_SKILL_BINDINGS: readonly GachaPieceSkillBinding[] =
+  ENGINE_READY_GACHA_SKILLS;
 
 export function gachaSkillDefinitionsV2Payload(): { definitions: Record<string, unknown>[] } {
   return { definitions: GACHA_PIECE_SKILL_BINDINGS.map((b) => b.definition) };
 }
 
-export function skillDefinitionsV2ForGachaChar(char: string): { definitions: Record<string, unknown>[] } | null {
+export function skillDefinitionsV2ForGachaChar(
+  char: string,
+): { definitions: Record<string, unknown>[] } | null {
   const binding = GACHA_PIECE_SKILL_BINDINGS.find((b) => b.char === char);
   if (!binding) return null;
   return { definitions: [binding.definition] };

@@ -4,8 +4,7 @@ const LEAF_SKILL_DESCRIPTION = '移動時10%の確率で「葉」駒を周囲1�
 const TANE_SKILL_DESCRIPTION =
   '移動時20%の確率で、周囲8マスのランダムな空きマス1マスに「葉」駒を召喚する。';
 const KIRIN_SKILL_DESCRIPTION = '「金」「銀」「歩」駒から取られない。';
-const KIRIN_MOVE_DESCRIPTION =
-  '前後左右に何マスでも進める。斜め4方向に1マス進める。';
+const KIRIN_MOVE_DESCRIPTION = '前後左右に何マスでも進める。斜め4方向に1マス進める。';
 const MAI_SKILL_DESCRIPTION =
   '移動時、その時点で周囲8マスにいる敵駒の移動範囲を斜め前1マスのみに制限する。';
 const MAI_MOVE_DESCRIPTION = '前・前斜め左右・左右・後に各1マス進める。';

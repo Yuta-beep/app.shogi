@@ -20,5 +20,9 @@ export type OnlineBattleSession = {
 };
 
 export interface LoadOnlineBattleSessionUseCase {
-  execute(input: { matchId?: string; opponent?: string; rating?: string }): Promise<OnlineBattleSession>;
+  execute(input: {
+    matchId?: string;
+    opponent?: string;
+    rating?: string;
+  }): Promise<OnlineBattleSession>;
 }

@@ -2,6 +2,7 @@ import { skillDefinitionsV2ForGachaChar } from '@/ai/engine/gacha-piece-skill-de
 import {
   AN_MOVE_DESCRIPTION_JA,
   AN_MOVE_VECTORS,
+  AN_SKILL_DESCRIPTION_JA,
   AORI_MOVE_DESCRIPTION_JA,
   AORI_MOVE_VECTORS,
   BAKU_MOVE_DESCRIPTION_JA,
@@ -10,6 +11,7 @@ import {
   SO_MOVE_VECTORS,
   SOU_MOVE_DESCRIPTION_JA,
   SOU_MOVE_VECTORS,
+  SOU_SKILL_DESCRIPTION_JA,
   SADAME_MOVE_DESCRIPTION_JA,
   SADAME_MOVE_VECTORS,
   EN_MOVE_DESCRIPTION_JA,
@@ -102,8 +104,8 @@ const GACHA_PIECE_META: Record<GachaCollectibleChar, GachaPieceMeta> = {
     name: '安',
     rarity: 'R',
     unlock: 'うかんむりガチャ',
-    desc: '移動時10%の確率で、相手の特殊駒を1体「歩」に変える。',
-    skill: '移動時10%の確率で、相手の特殊駒を1体「歩」に変える。',
+    desc: AN_SKILL_DESCRIPTION_JA,
+    skill: AN_SKILL_DESCRIPTION_JA,
     move: AN_MOVE_DESCRIPTION_JA,
   },
   宋: {
@@ -138,8 +140,8 @@ const GACHA_PIECE_META: Record<GachaCollectibleChar, GachaPieceMeta> = {
     name: '煽',
     rarity: 'SR',
     unlock: 'ひへんガチャ',
-    desc: '相手を煽りたい人の為に。',
-    skill: '相手を煽りたい人の為に。',
+    desc: '前後左右に何マスでも進める。',
+    skill: 'スキルなし。',
     move: AORI_MOVE_DESCRIPTION_JA,
   },
   灯: {
@@ -186,7 +188,7 @@ const GACHA_PIECE_META: Record<GachaCollectibleChar, GachaPieceMeta> = {
     name: '進',
     rarity: 'R',
     unlock: 'しんにょうガチャ',
-    desc: '次はどこに進んでいくのか。',
+    desc: SHIN_SKILL_DESCRIPTION_JA,
     skill: SHIN_SKILL_DESCRIPTION_JA,
     move: SHIN_MOVE_DESCRIPTION_JA,
   },
@@ -210,8 +212,8 @@ const GACHA_PIECE_META: Record<GachaCollectibleChar, GachaPieceMeta> = {
     name: '艸',
     rarity: 'UR',
     unlock: '漢検１級ガチャ',
-    desc: '移動時、周囲8マスのうちランダムな空きマス最大3マスを1ターンの×マスにする。',
-    skill: '移動時、周囲8マスのうちランダムな空きマス最大3マスを1ターンの×マスにする。',
+    desc: SOU_SKILL_DESCRIPTION_JA,
+    skill: SOU_SKILL_DESCRIPTION_JA,
     move: SOU_MOVE_DESCRIPTION_JA,
   },
   閹: {
@@ -222,7 +224,7 @@ const GACHA_PIECE_META: Record<GachaCollectibleChar, GachaPieceMeta> = {
     name: '閹',
     rarity: 'UR',
     unlock: '漢検１級ガチャ',
-    desc: '緊急時に王を守り抜く。',
+    desc: EN_SKILL_DESCRIPTION_JA,
     skill: EN_SKILL_DESCRIPTION_JA,
     move: EN_MOVE_DESCRIPTION_JA,
   },
@@ -234,7 +236,7 @@ const GACHA_PIECE_META: Record<GachaCollectibleChar, GachaPieceMeta> = {
     name: '膠',
     rarity: 'SSR',
     unlock: '漢検１級ガチャ',
-    desc: '位置関係を膠着させる。',
+    desc: KOU_SKILL_DESCRIPTION_JA,
     skill: KOU_SKILL_DESCRIPTION_JA,
     move: KOU_MOVE_DESCRIPTION_JA,
   },
@@ -247,6 +249,31 @@ export function isGachaCollectibleChar(char: string): char is GachaCollectibleCh
 export function getGachaPieceMeta(char: string): GachaPieceMeta | null {
   if (!isGachaCollectibleChar(char)) return null;
   return GACHA_PIECE_META[char];
+}
+
+/** 図鑑・デッキビルダー表示用（API の古い skill 文言より優先） */
+export function gachaCollectibleSkillText(char: string): string | null {
+  return getGachaPieceMeta(char)?.skill ?? null;
+}
+
+/** 図鑑・バトル用（API の移動ベクトルより優先） */
+export function gachaCollectibleMoveText(char: string): string | null {
+  return getGachaPieceMeta(char)?.move ?? null;
+}
+
+/** BFF カタログの移動定義をガチャ駒マスタで上書きする。 */
+export function applyGachaPieceCatalogOverrides<T extends PieceCatalogItem>(item: T): T {
+  if (!isGachaCollectibleChar(item.char)) return item;
+  const meta = getGachaPieceMeta(item.char)!;
+  return {
+    ...item,
+    pieceCode: item.pieceCode?.trim() ? item.pieceCode : meta.pieceCode,
+    desc: meta.desc,
+    skill: meta.skill,
+    move: meta.move,
+    moveVectors: moveVectorsForGachaChar(item.char),
+    isRepeatable: false,
+  };
 }
 
 function moveVectorsForGachaChar(char: GachaCollectibleChar): PieceCatalogItem['moveVectors'] {

@@ -74,7 +74,9 @@ export function GachaLineupSection({ banner }: GachaLineupSectionProps) {
                   <View className="flex-row items-start justify-between gap-2">
                     <Text className="flex-1 font-semibold text-white">
                       {entry.name}
-                      <Text style={{ color: rarityColor(entry.rarity) }}>{`（${entry.rarity}）`}</Text>
+                      <Text
+                        style={{ color: rarityColor(entry.rarity) }}
+                      >{`（${entry.rarity}）`}</Text>
                     </Text>
                     <View className="rounded-full bg-amber-500/25 px-2.5 py-0.5">
                       <Text className="text-xs font-black text-amber-100">{rateLabel}</Text>

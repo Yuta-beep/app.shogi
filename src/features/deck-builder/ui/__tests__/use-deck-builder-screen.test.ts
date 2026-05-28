@@ -1,6 +1,18 @@
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
+import { DECK_REQUIRED_UI_CELLS } from '@/features/deck-builder/lib/deck-builder-required-cells';
 import { useDeckBuilderScreen } from '@/features/deck-builder/ui/use-deck-builder-screen';
+
+const standardDeckOwnedPieces = [
+  { pieceId: 101, char: '歩', name: '歩', imageSignedUrl: null },
+  { pieceId: 102, char: '香', name: '香', imageSignedUrl: null },
+  { pieceId: 103, char: '桂', name: '桂', imageSignedUrl: null },
+  { pieceId: 104, char: '銀', name: '銀', imageSignedUrl: null },
+  { pieceId: 105, char: '金', name: '金', imageSignedUrl: null },
+  { pieceId: 106, char: '王', name: '王', imageSignedUrl: null },
+  { pieceId: 107, char: '角', name: '角', imageSignedUrl: null },
+  { pieceId: 108, char: '飛', name: '飛', imageSignedUrl: null },
+];
 
 const mockLoadExecute = jest.fn();
 const mockSaveExecute = jest.fn();
@@ -92,10 +104,7 @@ describe('useDeckBuilderScreen', () => {
 
   it('保存時に盤面下段の座標をAPI座標(0..2)へ逆変換する', async () => {
     mockLoadExecute.mockResolvedValue({
-      ownedPieces: [
-        { pieceId: 201, char: '飛', name: '飛車', imageSignedUrl: null },
-        { pieceId: 202, char: '王', name: '王将', imageSignedUrl: null },
-      ],
+      ownedPieces: standardDeckOwnedPieces,
       savedDecks: [],
     });
 
@@ -103,47 +112,54 @@ describe('useDeckBuilderScreen', () => {
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
     act(() => {
-      result.current.selectPieceForPlacement({
-        pieceId: 201,
-        char: '飛',
-        name: '飛車',
-        imageSignedUrl: null,
-        desc: '',
-        skill: '',
-        move: '',
-      });
-    });
-    act(() => {
-      result.current.placeSelectedPieceAt(6, 7); // 飛は固定位置以外に置けず、既定配置(7,7)が使われる
-    });
-
-    act(() => {
-      result.current.selectPieceForPlacement({
-        pieceId: 202,
-        char: '王',
-        name: '王将',
-        imageSignedUrl: null,
-        desc: '',
-        skill: '',
-        move: '',
-      });
-    });
-    act(() => {
-      result.current.placeSelectedPieceAt(8, 4); // UI行8 -> API行2
+      result.current.loadDefault();
       result.current.setDeckName('マイデッキ');
     });
+    expect(result.current.isDeckFormationIncomplete).toBe(false);
+    expect(result.current.emptyRequiredDeckCells).toEqual([]);
 
     await act(async () => {
       result.current.saveDeck();
     });
 
-    expect(mockSaveExecute).toHaveBeenCalledWith({
-      name: 'マイデッキ',
-      placements: [
-        { rowNo: 1, colNo: 7, pieceId: 201 },
-        { rowNo: 2, colNo: 4, pieceId: 202 },
-      ],
+    expect(mockSaveExecute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'マイデッキ',
+        placements: expect.arrayContaining([
+          { rowNo: 1, colNo: 7, pieceId: 108 },
+          { rowNo: 2, colNo: 4, pieceId: 106 },
+        ]),
+      }),
+    );
+    expect(mockSaveExecute.mock.calls[0]?.[0].placements).toHaveLength(20);
+  });
+
+  it('必須マスが空のときは反映・保存できない', async () => {
+    mockLoadExecute.mockResolvedValue({
+      ownedPieces: [{ pieceId: 201, char: '飛', name: '飛', imageSignedUrl: null }],
+      savedDecks: [],
     });
+
+    const { result } = renderHook(() => useDeckBuilderScreen());
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.isDeckFormationIncomplete).toBe(true);
+    expect(result.current.emptyRequiredDeckCells.length).toBe(DECK_REQUIRED_UI_CELLS.length);
+
+    let applied = true;
+    await act(async () => {
+      applied = await result.current.applyAsBattleDeck();
+    });
+    expect(applied).toBe(false);
+    expect(mockSaveExecute).not.toHaveBeenCalled();
+
+    act(() => {
+      result.current.setDeckName('未完成');
+    });
+    await act(async () => {
+      result.current.saveDeck();
+    });
+    expect(mockSaveExecute).not.toHaveBeenCalled();
   });
 
   it('HTML版準拠で所持数では配置を制限せず、残数表示は無限扱いになる', async () => {
@@ -182,7 +198,15 @@ describe('useDeckBuilderScreen', () => {
   });
 
   it('removePieceAt で盤上の駒をデッキから外せる', async () => {
-    const rook = { pieceId: 201, char: '飛', name: '飛車', imageSignedUrl: null, desc: '', skill: '', move: '' };
+    const rook = {
+      pieceId: 201,
+      char: '飛',
+      name: '飛車',
+      imageSignedUrl: null,
+      desc: '',
+      skill: '',
+      move: '',
+    };
     mockLoadExecute.mockResolvedValue({
       ownedPieces: [rook, { pieceId: 202, char: '王', name: '王将', imageSignedUrl: null }],
       savedDecks: [],
@@ -204,7 +228,15 @@ describe('useDeckBuilderScreen', () => {
   });
 
   it('駒未選択の placeSelectedPieceAt は盤面を変更しない', async () => {
-    const rook = { pieceId: 201, char: '飛', name: '飛車', imageSignedUrl: null, desc: '', skill: '', move: '' };
+    const rook = {
+      pieceId: 201,
+      char: '飛',
+      name: '飛車',
+      imageSignedUrl: null,
+      desc: '',
+      skill: '',
+      move: '',
+    };
     mockLoadExecute.mockResolvedValue({
       ownedPieces: [rook, { pieceId: 202, char: '王', name: '王将', imageSignedUrl: null }],
       savedDecks: [],

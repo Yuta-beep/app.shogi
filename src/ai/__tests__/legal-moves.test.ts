@@ -1003,7 +1003,14 @@ describe('ai engine legal moves', () => {
       stateHash: 'run-clear',
       boardState: {
         pieces: [
-          { side: 'player', row: 6, col: 4, pieceCode: 'piece_shop_so', char: '走', promoted: false },
+          {
+            side: 'player',
+            row: 6,
+            col: 4,
+            pieceCode: 'piece_shop_so',
+            char: '走',
+            promoted: false,
+          },
           { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
         ],
       },
@@ -1037,7 +1044,14 @@ describe('ai engine legal moves', () => {
       stateHash: 'run-blocked',
       boardState: {
         pieces: [
-          { side: 'player', row: 6, col: 4, pieceCode: 'piece_shop_so', char: '走', promoted: false },
+          {
+            side: 'player',
+            row: 6,
+            col: 4,
+            pieceCode: 'piece_shop_so',
+            char: '走',
+            promoted: false,
+          },
           { side: 'enemy', row: 5, col: 4, pieceCode: 'FU', char: '歩', promoted: false },
           { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
         ],
@@ -1259,9 +1273,7 @@ describe('ai engine legal moves', () => {
         m.fromCol != null &&
         ((m.fromRow === 4 && m.fromCol === 2) || (m.fromRow === 3 && m.fromCol === 4)),
     );
-    const freeEnemyMoves = legal.legalMoves.filter(
-      (m) => m.fromRow === 2 && m.fromCol === 2,
-    );
+    const freeEnemyMoves = legal.legalMoves.filter((m) => m.fromRow === 2 && m.fromCol === 2);
     expect(lockedEnemyMoves).toHaveLength(0);
     expect(freeEnemyMoves.length).toBeGreaterThan(0);
   });

@@ -1,7 +1,4 @@
-import {
-  normalizePvpRating,
-  PVP_RATING_INITIAL,
-} from '@/lib/online-match/pvp-rating-constants';
+import { normalizePvpRating, PVP_RATING_INITIAL } from '@/lib/online-match/pvp-rating-constants';
 
 describe('pvp-rating-constants', () => {
   it('normalizes invalid values to 0', () => {

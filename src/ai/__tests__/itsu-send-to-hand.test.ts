@@ -54,7 +54,14 @@ describe('逸 敵駒を手駒へ', () => {
       stateHash: 'seed',
       boardState: {
         pieces: [
-          { side: 'player', row: 5, col: 4, pieceCode: 'piece_gacha_itsu', char: '逸', promoted: false },
+          {
+            side: 'player',
+            row: 5,
+            col: 4,
+            pieceCode: 'piece_gacha_itsu',
+            char: '逸',
+            promoted: false,
+          },
           { side: 'player', row: 8, col: 0, pieceCode: 'OU', char: '王', promoted: false },
         ],
         skill_definitions_v2: skillDefinitionsV2ForGachaChar('逸'),
@@ -82,7 +89,14 @@ describe('逸 敵駒を手駒へ', () => {
           { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
           { side: 'enemy', row: 2, col: 2, pieceCode: 'FU', char: '歩', promoted: false },
           { side: 'enemy', row: 2, col: 6, pieceCode: 'KI', char: '金', promoted: false },
-          { side: 'player', row: 5, col: 4, pieceCode: 'piece_gacha_itsu', char: '逸', promoted: false },
+          {
+            side: 'player',
+            row: 5,
+            col: 4,
+            pieceCode: 'piece_gacha_itsu',
+            char: '逸',
+            promoted: false,
+          },
           { side: 'player', row: 8, col: 0, pieceCode: 'OU', char: '王', promoted: false },
         ],
         skill_definitions_v2: skillDefinitionsV2ForGachaChar('逸'),
@@ -132,7 +146,14 @@ describe('逸 敵駒を手駒へ', () => {
       boardState: {
         pieces: [
           { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
-          { side: 'player', row: 5, col: 4, pieceCode: 'piece_gacha_itsu', char: '逸', promoted: false },
+          {
+            side: 'player',
+            row: 5,
+            col: 4,
+            pieceCode: 'piece_gacha_itsu',
+            char: '逸',
+            promoted: false,
+          },
           { side: 'player', row: 8, col: 0, pieceCode: 'OU', char: '王', promoted: false },
         ],
         skill_definitions_v2: skillDefinitionsV2ForGachaChar('逸'),
@@ -178,7 +199,14 @@ describe('逸 敵駒を手駒へ', () => {
         pieces: [
           { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
           { side: 'enemy', row: 2, col: 2, pieceCode: 'FU', char: '歩', promoted: false },
-          { side: 'player', row: 5, col: 4, pieceCode: 'piece_gacha_itsu', char: '逸', promoted: false },
+          {
+            side: 'player',
+            row: 5,
+            col: 4,
+            pieceCode: 'piece_gacha_itsu',
+            char: '逸',
+            promoted: false,
+          },
           { side: 'player', row: 8, col: 0, pieceCode: 'OU', char: '王', promoted: false },
         ],
         skill_definitions_v2: skillDefinitionsV2ForGachaChar('逸'),

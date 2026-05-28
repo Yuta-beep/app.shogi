@@ -50,8 +50,22 @@ function positionWithTouBesideNige(): AiBattlePosition {
     boardState: {
       pieces: [
         { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
-        { side: 'player', row: 5, col: 4, pieceCode: 'piece_gacha_tou', char: '灯', promoted: false },
-        { side: 'player', row: 5, col: 5, pieceCode: 'piece_gacha_tou2', char: '逃', promoted: false },
+        {
+          side: 'player',
+          row: 5,
+          col: 4,
+          pieceCode: 'piece_gacha_tou',
+          char: '灯',
+          promoted: false,
+        },
+        {
+          side: 'player',
+          row: 5,
+          col: 5,
+          pieceCode: 'piece_gacha_tou2',
+          char: '逃',
+          promoted: false,
+        },
         { side: 'player', row: 8, col: 0, pieceCode: 'OU', char: '王', promoted: false },
       ],
       skill_definitions_v2: {

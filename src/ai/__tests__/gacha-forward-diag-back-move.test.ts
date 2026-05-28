@@ -15,12 +15,7 @@ function catalogFor(chars: Array<{ char: string; code: string }>): AiPieceDefini
   }));
 }
 
-function movesFrom(
-  char: string,
-  code: string,
-  row: number,
-  col: number,
-): string[] {
+function movesFrom(char: string, code: string, row: number, col: number): string[] {
   const position: AiBattlePosition = {
     sideToMove: 'player',
     turnNumber: 1,
@@ -28,9 +23,7 @@ function movesFrom(
     sfen: 'seed',
     stateHash: 'seed',
     boardState: {
-      pieces: [
-        { side: 'player', row, col, pieceCode: code, char, promoted: false },
-      ],
+      pieces: [{ side: 'player', row, col, pieceCode: code, char, promoted: false }],
     },
     hands: { player: {}, enemy: {} },
   };

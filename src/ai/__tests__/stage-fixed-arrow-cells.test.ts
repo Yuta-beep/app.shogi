@@ -63,12 +63,7 @@ describe('ステージ23 矢印マス', () => {
       hands: { player: {}, enemy: {} },
     };
     const merged = mergeStageFixedArrowTilesIntoPosition(base, 23);
-    expect(arrowTiles(merged)).toEqual([
-      '3:5:left',
-      '3:6:down',
-      '5:2:up',
-      '5:3:right',
-    ]);
+    expect(arrowTiles(merged)).toEqual(['3:5:left', '3:6:down', '5:2:up', '5:3:right']);
   });
 
   it('1手目の表示用局面でも矢印マスが抽出できる', () => {
@@ -103,12 +98,7 @@ describe('ステージ23 矢印マス', () => {
       23,
     );
     tickSkillStateDurations(merged);
-    expect(arrowTiles(merged)).toEqual([
-      '3:5:left',
-      '3:6:down',
-      '5:2:up',
-      '5:3:right',
-    ]);
+    expect(arrowTiles(merged)).toEqual(['3:5:left', '3:6:down', '5:2:up', '5:3:right']);
   });
 
   it('左矢印に入ると1マス左へスライドする', () => {
@@ -211,12 +201,7 @@ describe('ステージ23 矢印マス', () => {
       },
     });
     const loaded = getLocalBattleGame(created.gameId);
-    expect(arrowTiles(loaded!.position)).toEqual([
-      '3:5:left',
-      '3:6:down',
-      '5:2:up',
-      '5:3:right',
-    ]);
+    expect(arrowTiles(loaded!.position)).toEqual(['3:5:left', '3:6:down', '5:2:up', '5:3:right']);
   });
 });
 
@@ -335,12 +320,7 @@ describe('ステージ29 矢印マス', () => {
       hands: { player: {}, enemy: {} },
     };
     const merged = mergeStageFixedArrowTilesIntoPosition(base, 29);
-    expect(arrowTiles(merged)).toEqual([
-      '4:1:left',
-      '4:2:right',
-      '4:6:left',
-      '4:7:right',
-    ]);
+    expect(arrowTiles(merged)).toEqual(['4:1:left', '4:2:right', '4:6:left', '4:7:right']);
   });
 
   it('tick 後も stage_fixed 矢印は残る', () => {
@@ -357,12 +337,7 @@ describe('ステージ29 矢印マス', () => {
       29,
     );
     tickSkillStateDurations(merged);
-    expect(arrowTiles(merged)).toEqual([
-      '4:1:left',
-      '4:2:right',
-      '4:6:left',
-      '4:7:right',
-    ]);
+    expect(arrowTiles(merged)).toEqual(['4:1:left', '4:2:right', '4:6:left', '4:7:right']);
   });
 
   it('右矢印に入ると1マス右へスライドする', () => {
@@ -450,12 +425,7 @@ describe('ステージ34 矢印マス', () => {
       hands: { player: {}, enemy: {} },
     };
     const merged = mergeStageFixedArrowTilesIntoPosition(base, 34);
-    expect(arrowTiles(merged)).toEqual([
-      '3:2:down',
-      '3:6:down',
-      '5:2:up',
-      '5:6:up',
-    ]);
+    expect(arrowTiles(merged)).toEqual(['3:2:down', '3:6:down', '5:2:up', '5:6:up']);
   });
 
   it('tick 後も stage_fixed 矢印は残る', () => {
@@ -472,12 +442,7 @@ describe('ステージ34 矢印マス', () => {
       34,
     );
     tickSkillStateDurations(merged);
-    expect(arrowTiles(merged)).toEqual([
-      '3:2:down',
-      '3:6:down',
-      '5:2:up',
-      '5:6:up',
-    ]);
+    expect(arrowTiles(merged)).toEqual(['3:2:down', '3:6:down', '5:2:up', '5:6:up']);
   });
 
   it('下矢印に入ると1マス下へスライドする', () => {
@@ -541,12 +506,7 @@ describe('ステージ34 矢印マス', () => {
       },
     });
     const loaded = getLocalBattleGame(created.gameId);
-    expect(arrowTiles(loaded!.position)).toEqual([
-      '3:2:down',
-      '3:6:down',
-      '5:2:up',
-      '5:6:up',
-    ]);
+    expect(arrowTiles(loaded!.position)).toEqual(['3:2:down', '3:6:down', '5:2:up', '5:6:up']);
   });
 });
 

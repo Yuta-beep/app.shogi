@@ -82,10 +82,7 @@ export function PieceShopScreen() {
                 marginLeft: PIECE_SHOP_CURRENCY_MARGIN_LEFT,
               }}
             >
-              <PieceShopCurrencyBar
-                pawnCurrency={vm.pawnCurrency}
-                goldCurrency={vm.goldCurrency}
-              />
+              <PieceShopCurrencyBar pawnCurrency={vm.pawnCurrency} goldCurrency={vm.goldCurrency} />
             </View>
           </View>
           <ScrollView className="mt-2 flex-1" contentContainerClassName="pb-6">

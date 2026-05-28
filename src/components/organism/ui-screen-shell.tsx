@@ -72,16 +72,16 @@ export function UiScreenShell({
           <View className="flex-1" />
         )}
         {rightAction ??
-          (hideBackButton ? null : (
-            backAction ?? (
-              <BackButton
-                onPress={() => {
-                  void playSe('tap');
-                  router.back();
-                }}
-              />
-            )
-          )) ??
+          (hideBackButton
+            ? null
+            : (backAction ?? (
+                <BackButton
+                  onPress={() => {
+                    void playSe('tap');
+                    router.back();
+                  }}
+                />
+              ))) ??
           (hideBackButton ? null : (
             <Pressable
               onPress={() => {
@@ -107,14 +107,14 @@ export function UiScreenShell({
         {hideBackButton ? (
           <View />
         ) : (
-          backAction ?? (
+          (backAction ?? (
             <BackButton
               onPress={() => {
                 void playSe('tap');
                 router.back();
               }}
             />
-          )
+          ))
         )}
         {rightAction ?? (
           <Pressable

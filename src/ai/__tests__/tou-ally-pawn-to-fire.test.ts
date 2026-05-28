@@ -43,7 +43,14 @@ describe('灯 味方歩→火', () => {
       stateHash: 'seed',
       boardState: {
         pieces: [
-          { side: 'player', row: 5, col: 4, pieceCode: 'piece_gacha_tou', char: '灯', promoted: false },
+          {
+            side: 'player',
+            row: 5,
+            col: 4,
+            pieceCode: 'piece_gacha_tou',
+            char: '灯',
+            promoted: false,
+          },
           { side: 'player', row: 8, col: 0, pieceCode: 'OU', char: '王', promoted: false },
         ],
         skill_definitions_v2: skillDefinitionsV2ForGachaChar('灯'),
@@ -71,7 +78,14 @@ describe('灯 味方歩→火', () => {
           { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
           { side: 'player', row: 6, col: 3, pieceCode: 'FU', char: '歩', promoted: false },
           { side: 'player', row: 6, col: 5, pieceCode: 'FU', char: '歩', promoted: false },
-          { side: 'player', row: 5, col: 4, pieceCode: 'piece_gacha_tou', char: '灯', promoted: false },
+          {
+            side: 'player',
+            row: 5,
+            col: 4,
+            pieceCode: 'piece_gacha_tou',
+            char: '灯',
+            promoted: false,
+          },
           { side: 'player', row: 8, col: 0, pieceCode: 'OU', char: '王', promoted: false },
         ],
         skill_definitions_v2: skillDefinitionsV2ForGachaChar('灯'),
@@ -123,7 +137,14 @@ describe('灯 味方歩→火', () => {
         pieces: [
           { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
           { side: 'player', row: 6, col: 4, pieceCode: 'FU', char: '歩', promoted: false },
-          { side: 'player', row: 5, col: 4, pieceCode: 'piece_gacha_tou', char: '灯', promoted: false },
+          {
+            side: 'player',
+            row: 5,
+            col: 4,
+            pieceCode: 'piece_gacha_tou',
+            char: '灯',
+            promoted: false,
+          },
           { side: 'player', row: 8, col: 0, pieceCode: 'OU', char: '王', promoted: false },
         ],
         skill_definitions_v2: skillDefinitionsV2ForGachaChar('灯'),
@@ -147,9 +168,9 @@ describe('灯 味方歩→火', () => {
       },
     });
 
-    const pawn = (
-      committed.position.boardState.pieces as { char: string }[]
-    ).find((p) => p.char === '歩');
+    const pawn = (committed.position.boardState.pieces as { char: string }[]).find(
+      (p) => p.char === '歩',
+    );
     expect(pawn).toBeDefined();
     expect(
       (committed.position.boardState.pieces as { char: string }[]).some((p) => p.char === '火'),

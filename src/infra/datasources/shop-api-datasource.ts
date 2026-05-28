@@ -24,6 +24,10 @@ export class ShopApiDataSource {
 
   async postPurchase(item: ShopItem): Promise<PurchaseResponse> {
     const token = await this.getToken();
-    return postJson<PurchaseResponse>('/api/v1/shops/piece/purchase', { itemKey: item.key }, { token });
+    return postJson<PurchaseResponse>(
+      '/api/v1/shops/piece/purchase',
+      { itemKey: item.key },
+      { token },
+    );
   }
 }

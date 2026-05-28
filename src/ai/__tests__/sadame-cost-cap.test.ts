@@ -63,7 +63,14 @@ describe('定 コスト上限スキル', () => {
       stateHash: 'seed',
       boardState: {
         pieces: [
-          { side: 'player', row: 5, col: 4, pieceCode: 'piece_gacha_sadame', char: '定', promoted: false },
+          {
+            side: 'player',
+            row: 5,
+            col: 4,
+            pieceCode: 'piece_gacha_sadame',
+            char: '定',
+            promoted: false,
+          },
           { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
         ],
         skill_definitions_v2: skillDefinitionsV2ForGachaChar('定'),
@@ -87,8 +94,22 @@ describe('定 コスト上限スキル', () => {
       boardState: {
         pieces: [
           { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
-          { side: 'player', row: 5, col: 4, pieceCode: 'piece_gacha_sadame', char: '定', promoted: false },
-          { side: 'enemy', row: 2, col: 2, pieceCode: 'piece_shop_kirin', char: '麒', promoted: false },
+          {
+            side: 'player',
+            row: 5,
+            col: 4,
+            pieceCode: 'piece_gacha_sadame',
+            char: '定',
+            promoted: false,
+          },
+          {
+            side: 'enemy',
+            row: 2,
+            col: 2,
+            pieceCode: 'piece_shop_kirin',
+            char: '麒',
+            promoted: false,
+          },
           { side: 'enemy', row: 2, col: 6, pieceCode: 'FU', char: '歩', promoted: false },
           { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
         ],
@@ -131,9 +152,23 @@ describe('定 コスト上限スキル', () => {
       boardState: {
         pieces: [
           { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
-          { side: 'enemy', row: 2, col: 2, pieceCode: 'piece_shop_kirin', char: '麒', promoted: false },
+          {
+            side: 'enemy',
+            row: 2,
+            col: 2,
+            pieceCode: 'piece_shop_kirin',
+            char: '麒',
+            promoted: false,
+          },
           { side: 'enemy', row: 2, col: 6, pieceCode: 'FU', char: '歩', promoted: false },
-          { side: 'player', row: 4, col: 4, pieceCode: 'piece_gacha_sadame', char: '定', promoted: false },
+          {
+            side: 'player',
+            row: 4,
+            col: 4,
+            pieceCode: 'piece_gacha_sadame',
+            char: '定',
+            promoted: false,
+          },
           { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
         ],
         skill_state: {

@@ -1,10 +1,6 @@
 import { findPieceCoveringCell } from '@/ai/engine/giant-piece';
 import { generateLegalMoves } from '@/ai/engine/legal-moves';
-import {
-  isHenPiece,
-  isItsuPiece,
-  isShinPiece,
-} from '@/ai/engine/piece-identifiers';
+import { isHenPiece, isItsuPiece, isShinPiece } from '@/ai/engine/piece-identifiers';
 import { moveEquals } from '@/ai/engine/shared';
 import type { AiBattleMove, AiBattlePosition, AiPieceDefinition } from '@/ai/model';
 import { normalizeBattleMove, piecesFromBoardState } from '@/ai/model';
@@ -87,8 +83,12 @@ function boardCellMatchesForGuardrail(
 
 function moveCoordinatesMatchForGuardrail(candidate: AiBattleMove, move: AiBattleMove): boolean {
   return (
-    boardCellMatchesForGuardrail(candidate.fromRow, candidate.fromCol, move.fromRow, move.fromCol) &&
-    boardCellMatchesForGuardrail(candidate.toRow, candidate.toCol, move.toRow, move.toCol)
+    boardCellMatchesForGuardrail(
+      candidate.fromRow,
+      candidate.fromCol,
+      move.fromRow,
+      move.fromCol,
+    ) && boardCellMatchesForGuardrail(candidate.toRow, candidate.toCol, move.toRow, move.toCol)
   );
 }
 
@@ -119,13 +119,13 @@ function findCoordinateLegalMoveFallback(
   const pieces = piecesFromBoardState(position);
   const fromPiece =
     findPieceCoveringCell(pieces, move.fromRow, move.fromCol) ??
-    pieces.find(
-      (piece) =>
-        boardCellMatchesForGuardrail(piece.row, piece.col, move.fromRow, move.fromCol),
+    pieces.find((piece) =>
+      boardCellMatchesForGuardrail(piece.row, piece.col, move.fromRow, move.fromCol),
     );
   if (!fromPiece || !isGachaPieceForCoordinateGuardrail(fromPiece)) return undefined;
   return legalMoves.find(
     (candidate) =>
-      moveCoordinatesMatchForGuardrail(candidate, move) && moveMetaMatchesForGuardrail(candidate, move),
+      moveCoordinatesMatchForGuardrail(candidate, move) &&
+      moveMetaMatchesForGuardrail(candidate, move),
   );
 }

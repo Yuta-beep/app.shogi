@@ -21,7 +21,11 @@ const mockSessionBase: OnlineBattleSession = {
 };
 
 export class MockLoadOnlineBattleSessionUseCase implements LoadOnlineBattleSessionUseCase {
-  async execute(input: { matchId?: string; opponent?: string; rating?: string }): Promise<OnlineBattleSession> {
+  async execute(input: {
+    matchId?: string;
+    opponent?: string;
+    rating?: string;
+  }): Promise<OnlineBattleSession> {
     const opponent = input.opponent ?? 'searching...';
     const rating = input.rating ?? '----';
 

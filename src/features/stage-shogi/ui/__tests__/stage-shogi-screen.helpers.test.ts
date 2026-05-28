@@ -65,9 +65,7 @@ describe('alignLegalMovesToBoardPieces', () => {
   };
 
   it('rewrites 1-based legal move origins onto 0-based board cells', () => {
-    const moves: BattleMove[] = [
-      { ...baseMove, fromRow: 7, fromCol: 3, toRow: 6, toCol: 3 },
-    ];
+    const moves: BattleMove[] = [{ ...baseMove, fromRow: 7, fromCol: 3, toRow: 6, toCol: 3 }];
     const aligned = alignLegalMovesToBoardPieces([boardPawn], moves);
     expect(aligned[0]).toMatchObject({ fromRow: 6, fromCol: 2, toRow: 5, toCol: 2 });
     expect(legalMovesForBoardPiece(aligned, 6, 2)).toHaveLength(1);

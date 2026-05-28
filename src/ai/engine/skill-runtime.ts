@@ -531,10 +531,7 @@ function moveAdjacentAllyKoGlueFollowLeader(input: {
       if (piece.side !== input.actorSide) return false;
       if (!isKoPiece(piece)) return false;
       if (piece.row === input.fromRow && piece.col === input.fromCol) return false;
-      return (
-        Math.abs(piece.row - input.fromRow) <= 1 &&
-        Math.abs(piece.col - input.fromCol) <= 1
-      );
+      return Math.abs(piece.row - input.fromRow) <= 1 && Math.abs(piece.col - input.fromCol) <= 1;
     });
   let moved = 0;
   for (const { piece, idx } of candidates) {
@@ -1039,12 +1036,7 @@ function cellKey(side: Side, row: number, col: number): string {
   return `${side}:${row}:${col}`;
 }
 
-function isChebyshevAdjacent(
-  aRow: number,
-  aCol: number,
-  bRow: number,
-  bCol: number,
-): boolean {
+function isChebyshevAdjacent(aRow: number, aCol: number, bRow: number, bCol: number): boolean {
   const dr = Math.abs(aRow - bRow);
   const dc = Math.abs(aCol - bCol);
   return dr <= 1 && dc <= 1 && (dr !== 0 || dc !== 0);
@@ -1065,9 +1057,7 @@ function pruneDanceMovementModifiersNotAdjacentToMai(
     if (row == null || col == null) return false;
     if (maiAllies.length === 0) return false;
     return maiAllies.some(
-      (mai) =>
-        mai.side !== side &&
-        isChebyshevAdjacent(mai.row, mai.col, row, col),
+      (mai) => mai.side !== side && isChebyshevAdjacent(mai.row, mai.col, row, col),
     );
   });
 }
@@ -1326,9 +1316,7 @@ export function pieceHasActiveCaptureImmunityFromBoardState(
 }
 
 /** 封・駒ショップPなど、盤上オーラで移動不能になるマス（`side:row:col`）。 */
-export function passiveAuraImmobilizedCellKeys(
-  boardPieces: AiBoardPiece[],
-): Set<string> {
+export function passiveAuraImmobilizedCellKeys(boardPieces: AiBoardPiece[]): Set<string> {
   const immobilizedCells = new Set<string>();
   for (const piece of boardPieces) {
     if (isSealPieceForAura(piece)) {
@@ -1489,11 +1477,7 @@ export function createSkillRuntimeView(position: AiBattlePosition): SkillRuntime
         : 'player';
     if (row == null || col == null || remaining <= 0) continue;
     const kingOnCell = boardPieces.find(
-      (p) =>
-        p.side === affectsSide &&
-        p.row === row &&
-        p.col === col &&
-        isKingPiece(p),
+      (p) => p.side === affectsSide && p.row === row && p.col === col && isKingPiece(p),
     );
     if (!kingOnCell) continue;
     const key = cellKey(affectsSide, row, col);
@@ -4223,8 +4207,7 @@ export function applyMoveSkillEffects(input: {
           const selected = candidates[Math.floor(Math.random() * candidates.length)]!;
           const target = selected.p;
           const handCode =
-            toBasePieceCode(capturedToHandPieceCode(target)) ??
-            toBasePieceCode(target.pieceCode);
+            toBasePieceCode(capturedToHandPieceCode(target)) ?? toBasePieceCode(target.pieceCode);
           const before = {
             char: target.char,
             pieceCode: target.pieceCode,
@@ -4377,7 +4360,11 @@ export function applyMoveSkillEffects(input: {
           anSkillDebugLog({
             hook,
             actorSide: input.actorSide,
-            mover: { char: input.movedPiece.char, row: input.movedPiece.row, col: input.movedPiece.col },
+            mover: {
+              char: input.movedPiece.char,
+              row: input.movedPiece.row,
+              col: input.movedPiece.col,
+            },
             candidateCount: candidates.length,
             candidates: candidates.map(({ p }) => ({
               char: p.char,
@@ -4430,8 +4417,14 @@ export function applyMoveSkillEffects(input: {
             hook,
             transformed: true,
             before,
-            after: { char: target.char, pieceCode: target.pieceCode, row: target.row, col: target.col },
+            after: {
+              char: target.char,
+              pieceCode: target.pieceCode,
+              row: target.row,
+              col: target.col,
+            },
           });
+          markMoveSkillFx();
           continue;
         }
 
@@ -4456,9 +4449,7 @@ export function applyMoveSkillEffects(input: {
           const imprisonTurns = Math.max(
             2,
             Math.floor(
-              asNumber(params.durationTurns) ??
-                asNumber(params.duration_turns) ??
-                duration,
+              asNumber(params.durationTurns) ?? asNumber(params.duration_turns) ?? duration,
             ),
           );
           const selectedEdge: HenBoardEdge =

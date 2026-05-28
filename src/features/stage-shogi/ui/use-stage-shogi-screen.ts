@@ -23,7 +23,10 @@ import {
   createPieceSfenMapping,
 } from '@/features/stage-shogi/domain/piece-conversion';
 import type { PromotionImageFlash } from '@/features/stage-shogi/ui/components/stage-shogi-board';
-import { normalizePieceCatalogItemForDisplay } from '@/features/piece-info/lib/piece-catalog-display';
+import {
+  normalizePieceCatalogItemForDisplay,
+  preparePieceCatalogForBattleAndDisplay,
+} from '@/features/piece-info/lib/piece-catalog-display';
 import { useStageBattleScreen } from '@/features/stage-shogi/ui/use-stage-battle-screen';
 import {
   InspectingPieceState,
@@ -674,8 +677,9 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
       .execute()
       .then((items) => {
         if (active) {
-          setPieceCatalog(items);
-          setLocalBattlePieceCatalog(items);
+          const catalog = preparePieceCatalogForBattleAndDisplay(items);
+          setPieceCatalog(catalog);
+          setLocalBattlePieceCatalog(catalog);
         }
       })
       .catch((error: unknown) => {
@@ -1917,7 +1921,7 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
           };
           const { legalMoves } = generateLegalMoves({
             position: inspectPosition as unknown as AiBattlePosition,
-            pieceCatalog: normalizePieceCatalog(pieceCatalog),
+            pieceCatalog: normalizePieceCatalog(pieceCatalogNormalized),
           });
           previewTargets = uniqueTargetsFromMoves(
             legalMoves.filter(
@@ -1951,7 +1955,8 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
           })),
         );
         const immobilizedByAura =
-          latestImmobilizedByCellRef.current.has(immobilizedKey) || auraImmobilized.has(immobilizedKey);
+          latestImmobilizedByCellRef.current.has(immobilizedKey) ||
+          auraImmobilized.has(immobilizedKey);
         if (!immobilizedByAura) {
           const enemyPieceDef =
             piece.promoted && piece.pieceCode
@@ -2270,10 +2275,7 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
     hasEnteredBattleRef.current = true;
   }
 
-  const boardDisplayPieces = useMemo(
-    () => applyKirinImmunityShieldMarkToPieces(pieces),
-    [pieces],
-  );
+  const boardDisplayPieces = useMemo(() => applyKirinImmunityShieldMarkToPieces(pieces), [pieces]);
 
   return {
     snapshot,

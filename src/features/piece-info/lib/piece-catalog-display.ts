@@ -40,6 +40,12 @@ import {
   TANE_MOVE_DESCRIPTION_JA,
   TANE_SILVER_MOVE_VECTORS,
 } from '@/ai/engine/shop-piece-moves';
+import {
+  applyGachaPieceCatalogOverrides,
+  gachaCollectibleMoveText,
+  gachaCollectibleSkillText,
+  isGachaCollectibleChar,
+} from '@/constants/gacha-piece-metadata';
 
 /** `legal-moves.ts` の CONCAVE_SLIDE_VECTORS と同一（図鑑グリッド用）。 */
 const CONCAVE_CATALOG_MOVE_VECTORS: PieceCatalogItem['moveVectors'] = [
@@ -55,8 +61,7 @@ const CONCAVE_CATALOG_MOVE_VECTORS: PieceCatalogItem['moveVectors'] = [
 const CONCAVE_CATALOG_MOVE_TEXT =
   '斜め前・左右・後ろ・斜め後の各筋に何マスでも進める。盤の端が空マスで、進路上に敵駒がいないとき、味方駒を飛び越えてその端まで進める（前方への直進の筋を除く）。貫通で端へ入る着手では敵駒を取れない。';
 
-const RUN_CATALOG_MOVE_TEXT =
-  '前方に最大2マス進める。1マス目に駒がある場合は2マス目には進めない。';
+const RUN_CATALOG_MOVE_TEXT = '前方に最大2マス進める。1マス目に駒がある場合は2マス目には進めない。';
 
 const TANE_CATALOG_SKILL_TEXT =
   '移動時20%の確率で、周囲8マスのランダムな空きマス1マスに「葉」駒を召喚する。';
@@ -128,20 +133,12 @@ function isMaiCatalogPiece(piece: PieceCatalogItem): boolean {
 
 function isBakuCatalogPiece(piece: PieceCatalogItem): boolean {
   const code = (piece.pieceCode ?? '').toUpperCase();
-  return (
-    piece.char === '爆' ||
-    code.includes('GACHA_BAKU') ||
-    code.includes('PIECE_GACHA_BAKU')
-  );
+  return piece.char === '爆' || code.includes('GACHA_BAKU') || code.includes('PIECE_GACHA_BAKU');
 }
 
 function isAoriCatalogPiece(piece: PieceCatalogItem): boolean {
   const code = (piece.pieceCode ?? '').toUpperCase();
-  return (
-    piece.char === '煽' ||
-    code.includes('GACHA_AORI') ||
-    code.includes('PIECE_GACHA_AORI')
-  );
+  return piece.char === '煽' || code.includes('GACHA_AORI') || code.includes('PIECE_GACHA_AORI');
 }
 
 function isShitsuCatalogPiece(piece: PieceCatalogItem): boolean {
@@ -157,19 +154,13 @@ function isShitsuCatalogPiece(piece: PieceCatalogItem): boolean {
 function isSadameCatalogPiece(piece: PieceCatalogItem): boolean {
   const code = (piece.pieceCode ?? '').toUpperCase();
   return (
-    piece.char === '定' ||
-    code.includes('GACHA_SADAME') ||
-    code.includes('PIECE_GACHA_SADAME')
+    piece.char === '定' || code.includes('GACHA_SADAME') || code.includes('PIECE_GACHA_SADAME')
   );
 }
 
 function isAnCatalogPiece(piece: PieceCatalogItem): boolean {
   const code = (piece.pieceCode ?? '').toUpperCase();
-  return (
-    piece.char === '安' ||
-    code.includes('GACHA_AN') ||
-    code.includes('PIECE_GACHA_AN')
-  );
+  return piece.char === '安' || code.includes('GACHA_AN') || code.includes('PIECE_GACHA_AN');
 }
 
 function isSoCatalogPiece(piece: PieceCatalogItem): boolean {
@@ -231,11 +222,7 @@ function isEnCatalogPiece(piece: PieceCatalogItem): boolean {
 
 function isKouCatalogPiece(piece: PieceCatalogItem): boolean {
   const code = (piece.pieceCode ?? '').toUpperCase();
-  return (
-    piece.char === '膠' ||
-    code.includes('GACHA_KOU') ||
-    code.includes('PIECE_GACHA_KOU')
-  );
+  return piece.char === '膠' || code.includes('GACHA_KOU') || code.includes('PIECE_GACHA_KOU');
 }
 
 function isShopPCatalogPiece(piece: PieceCatalogItem): boolean {
@@ -253,7 +240,20 @@ function isNakuCatalogPiece(piece: PieceCatalogItem): boolean {
   );
 }
 
+/** API カタログを図鑑表示・ローカル対戦の合法手生成向けに正規化する。 */
+export function preparePieceCatalogForBattleAndDisplay(
+  items: readonly PieceCatalogItem[],
+): PieceCatalogItem[] {
+  return items.map((item) =>
+    normalizePieceCatalogItemForDisplay(applyGachaPieceCatalogOverrides(item)),
+  );
+}
+
 export function normalizeCatalogSkillText(piece: PieceCatalogItem): string {
+  if (isGachaCollectibleChar(piece.char)) {
+    const gachaSkill = gachaCollectibleSkillText(piece.char);
+    if (gachaSkill) return gachaSkill;
+  }
   if (isKirinCatalogPiece(piece)) {
     return KIRIN_SKILL_DESCRIPTION_JA;
   }
@@ -317,6 +317,10 @@ export function normalizeCatalogSkillText(piece: PieceCatalogItem): string {
 }
 
 export function normalizeCatalogMoveText(piece: PieceCatalogItem): string {
+  if (isGachaCollectibleChar(piece.char)) {
+    const gachaMove = gachaCollectibleMoveText(piece.char);
+    if (gachaMove) return gachaMove;
+  }
   if (isKirinCatalogPiece(piece)) {
     return KIRIN_MOVE_DESCRIPTION_JA;
   }

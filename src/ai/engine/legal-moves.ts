@@ -1880,10 +1880,7 @@ function buildShinMimicPool(
       row: probeRow,
       col: probeCol,
       char: def.char,
-      pieceCode:
-        def.pieceCode ??
-        CHAR_TO_CODE[ch as keyof typeof CHAR_TO_CODE] ??
-        def.char,
+      pieceCode: def.pieceCode ?? CHAR_TO_CODE[ch as keyof typeof CHAR_TO_CODE] ?? def.char,
       promoted: false,
     };
     let pieceDef = resolvePieceDef(synthetic, lookups);
@@ -2511,11 +2508,7 @@ function generateBoardPieceMoves(input: {
             return false;
           })
         : movementRule === 'diagonal_forward_step_only'
-          ? diagonalForwardStepCells(
-              input.piece.side,
-              input.piece.row,
-              input.piece.col,
-            )
+          ? diagonalForwardStepCells(input.piece.side, input.piece.row, input.piece.col)
           : targets;
 
   // 銃の前方2マス貫通・斜め後ろ2マス／牛の前方チャージは 2 マス以上のため、縦1マス／直交1マス制限だけだと誤って除外される。復元する。

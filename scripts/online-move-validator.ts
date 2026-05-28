@@ -6,7 +6,11 @@
 import { applyMove, generateLegalMoves } from '@/ai/engine';
 import { assembleSkillDefinitionsV2ForSession } from '@/ai/engine/session-skill-definitions-v2';
 import type { MovePayload, PlayerSide } from '@/domain/matching-server/protocol';
-import { normalizeBattleGameStatus, normalizeBattlePosition, normalizePieceCatalog } from '@/ai/model';
+import {
+  normalizeBattleGameStatus,
+  normalizeBattlePosition,
+  normalizePieceCatalog,
+} from '@/ai/model';
 import type { AiBattlePosition } from '@/ai/model';
 import { toBasePieceCode } from '@/ai/model/move';
 import { matchingWireToCanonicalPosition } from '@/lib/matching-server/canonical-game';
@@ -91,7 +95,10 @@ function catalogDefsByCode(catalog: PieceCatalogItem[]): Record<string, PieceCat
   return out;
 }
 
-function ensureSkillDefinitions(position: AiBattlePosition, catalog: PieceCatalogItem[]): AiBattlePosition {
+function ensureSkillDefinitions(
+  position: AiBattlePosition,
+  catalog: PieceCatalogItem[],
+): AiBattlePosition {
   const assembled = assembleSkillDefinitionsV2ForSession(catalogDefsByCode(catalog));
   const boardState = { ...(position.boardState as Record<string, unknown>) };
   boardState.skill_definitions_v2 = assembled;
@@ -136,7 +143,11 @@ function runValidate(input: ValidatorInput): ValidatorOutput {
       candidate.promote === move.promote,
   );
   if (!matched) {
-    return { ok: false, code: 'ILLEGAL_MOVE', message: 'Move is not legal in the current position.' };
+    return {
+      ok: false,
+      code: 'ILLEGAL_MOVE',
+      message: 'Move is not legal in the current position.',
+    };
   }
 
   const committed = applyMove({ position, pieceCatalog: catalog, move });

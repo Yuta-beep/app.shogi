@@ -63,9 +63,7 @@ describe('膠 横移動追従', () => {
     };
     const legal = generateLegalMoves({ position, pieceCatalog });
     const fromKo = legal.legalMoves.filter((m) => m.fromRow === 5 && m.fromCol === 4);
-    expect(fromKo.map((m) => `${m.toRow}:${m.toCol}`).sort()).toEqual(
-      ['4:3', '4:5', '6:4'].sort(),
-    );
+    expect(fromKo.map((m) => `${m.toRow}:${m.toCol}`).sort()).toEqual(['4:3', '4:5', '6:4'].sort());
   });
 
   it('follows when adjacent ally moves horizontally', () => {

@@ -49,7 +49,9 @@ export function MatchingScreen() {
                 <Text className="text-sm font-black text-[#1f2937]">
                   {snapshot.self.displayName}
                 </Text>
-                <Text className="text-xs font-bold text-[#4b5563]">レート {snapshot.self.rating}</Text>
+                <Text className="text-xs font-bold text-[#4b5563]">
+                  レート {snapshot.self.rating}
+                </Text>
               </View>
             ) : null}
 

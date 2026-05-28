@@ -56,16 +56,7 @@ describe('逃 王追従', () => {
     const legal = generateLegalMoves({ position, pieceCatalog });
     const fromNige = legal.legalMoves.filter((m) => m.fromRow === 4 && m.fromCol === 4);
     expect(fromNige.map((m) => `${m.toRow}:${m.toCol}`).sort()).toEqual(
-      [
-        '3:3',
-        '3:4',
-        '3:5',
-        '4:3',
-        '4:5',
-        '5:3',
-        '5:4',
-        '5:5',
-      ].sort(),
+      ['3:3', '3:4', '3:5', '4:3', '4:5', '5:3', '5:4', '5:5'].sort(),
     );
   });
 

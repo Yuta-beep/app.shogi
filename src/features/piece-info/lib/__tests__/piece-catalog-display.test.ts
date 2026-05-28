@@ -112,13 +112,17 @@ describe('piece-catalog-display', () => {
     ]);
   });
 
-  it('艸は移動説明を「前最大2マス左右後ろ1マス」に差し替える', () => {
+  it('艸は移動説明を「前最大2マス左右後ろ1マス」に差し替え、スキル説明をクライアント定義に揃える', () => {
     const piece = catalogItem({
       char: '艸',
       pieceCode: 'piece_gacha_sou',
+      skill: '草の力を操り盤面を支配する自然の駒。',
       move: '草原の主の移動ルール',
     });
     const display = normalizePieceCatalogItemForDisplay(piece);
+    expect(display.skill).toBe(
+      '移動時周囲のランダムで最大3マスを×マスにする。この×マスは1ターンで消滅する。',
+    );
     expect(display.move).toBe('前最大2マス左右後ろ1マス');
     expect(display.moveVectors).toHaveLength(4);
   });
@@ -226,13 +230,15 @@ describe('piece-catalog-display', () => {
     expect(display.moveVectors).toHaveLength(4);
   });
 
-  it('閹は移動説明を「前後左右1マス」に差し替える', () => {
+  it('閹は移動説明を「前後左右1マス」に差し替え、スキル説明をクライアント定義に揃える', () => {
     const piece = catalogItem({
       char: '閹',
       pieceCode: 'piece_gacha_en',
+      skill: '敵の動きを封じる封印の駒。',
       move: '前後左右に各1マス進める。味方の「王」の前1マスへも移動できる。',
     });
     const display = normalizePieceCatalogItemForDisplay(piece);
+    expect(display.skill).toBe('味方の「王」駒の前1マスに移動することができる');
     expect(display.move).toBe('前後左右1マス');
     expect(display.moveVectors).toHaveLength(4);
   });
@@ -295,6 +301,24 @@ describe('piece-catalog-display', () => {
     expect(display.move).toBe('前・前斜め左右・左右・後に各1マス進める。');
     expect(display.move).not.toContain('制限');
     expect(display.moveVectors).toHaveLength(6);
+  });
+
+  it('安はAPIの古いスキル文言よりクライアント定義を優先する', () => {
+    const piece = catalogItem({
+      char: '安',
+      skill: '敵の駒を安くする。',
+    });
+    expect(normalizeCatalogSkillText(piece)).toBe(
+      '移動時10%の確率で、相手の特殊駒を1体「歩」に変える。',
+    );
+  });
+
+  it('煽はスキルなしの説明に差し替える', () => {
+    const piece = catalogItem({
+      char: '煽',
+      skill: '相手を煽りたい人の為に。',
+    });
+    expect(normalizeCatalogSkillText(piece)).toBe('スキルなし。');
   });
 
   it('凹は図鑑用の移動説明に差し替える', () => {

@@ -18,6 +18,7 @@ import {
 } from '@/ai/model';
 import { mergeStageFixedArrowTilesIntoPosition } from '@/ai/engine/stage-fixed-arrow-tiles';
 import { mergeStageFixedPitHazardsIntoPosition } from '@/ai/engine/stage-fixed-hazards';
+import { preparePieceCatalogForBattleAndDisplay } from '@/features/piece-info/lib/piece-catalog-display';
 
 export type LocalBattleGameRecord = {
   gameId: string;
@@ -35,7 +36,7 @@ const localGames = new Map<string, LocalBattleGameRecord>();
 let localGameSequence = 1;
 
 export function setLocalBattlePieceCatalog(items: PieceCatalogItem[]) {
-  pieceCatalog = normalizePieceCatalog(items);
+  pieceCatalog = normalizePieceCatalog(preparePieceCatalogForBattleAndDisplay(items));
 }
 
 export function getLocalBattlePieceCatalog(): AiPieceDefinition[] {

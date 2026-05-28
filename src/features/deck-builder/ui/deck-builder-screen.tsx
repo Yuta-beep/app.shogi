@@ -250,6 +250,18 @@ export function DeckBuilderScreen({ mode = 'default' }: DeckBuilderScreenProps) 
                     }),
                   ).flat()
                 : null}
+              {vm.isDeckFormationIncomplete
+                ? vm.emptyRequiredDeckCells.map((cell) => (
+                    <Rect
+                      key={`required-empty-${cell.row}-${cell.col}`}
+                      x={cell.col * BOARD_CELL}
+                      y={cell.row * BOARD_CELL}
+                      width={BOARD_CELL}
+                      height={BOARD_CELL}
+                      fill="rgba(239, 68, 68, 0.42)"
+                    />
+                  ))
+                : null}
               {activeCell ? (
                 <Rect
                   x={activeCell.col * BOARD_CELL}
@@ -309,7 +321,22 @@ export function DeckBuilderScreen({ mode = 'default' }: DeckBuilderScreenProps) 
           </View>
         </View>
         <View className="mt-2 items-end">
-          <Text className="text-right text-xs font-black text-white">{`合計コスト ${formattedDeckTotalCost} / ${vm.deckCostLimit}`}</Text>
+          {vm.isDeckFormationIncomplete ? (
+            <Text className="mb-1 text-right text-xs font-black text-[#fecaca]">
+              {vm.deckRequiredCellMessage}
+            </Text>
+          ) : null}
+          <Text className="text-right text-xs font-black text-white">
+            合計コスト{' '}
+            <Text
+              className={
+                vm.isDeckCostOverLimit ? 'font-black text-[#ff4444]' : 'font-black text-white'
+              }
+            >
+              {formattedDeckTotalCost}
+            </Text>
+            {` / ${vm.deckCostLimit}`}
+          </Text>
           <Text className="mt-0.5 text-right text-xs font-black text-white">
             {`特殊駒 ${vm.deckSpecialPieceCount}個`}
           </Text>
@@ -391,18 +418,38 @@ export function DeckBuilderScreen({ mode = 'default' }: DeckBuilderScreenProps) 
         </Pressable>
         <Pressable
           onPress={() => {
+            if (vm.isDeckFormationIncomplete) {
+              void playSe('cancel');
+              Alert.alert('保存できません', vm.deckRequiredCellMessage);
+              return;
+            }
+            if (vm.isDeckCostOverLimit) {
+              void playSe('cancel');
+              Alert.alert(
+                '保存できません',
+                `合計コストが上限（${vm.deckCostLimit}）を超えています。配置を調整してください。`,
+              );
+              return;
+            }
             void playSe('confirm');
             vm.openSaveModal();
           }}
-          className="h-20 flex-1 items-center justify-center rounded-xl bg-[#8b0000] px-3 active:scale-95"
+          className={`h-20 flex-1 items-center justify-center rounded-xl px-3 active:scale-95 ${
+            vm.cannotApplyOrSaveDeck ? 'bg-neutral-400' : 'bg-[#8b0000]'
+          }`}
         >
           <Text className="text-center text-base font-black text-[#ffe6a5]">保存</Text>
         </Pressable>
       </View>
 
       <Pressable
-        disabled={vm.isDeckCostOverLimit || applyBattleBusy}
+        disabled={vm.cannotApplyOrSaveDeck || applyBattleBusy}
         onPress={() => {
+          if (vm.isDeckFormationIncomplete) {
+            void playSe('cancel');
+            Alert.alert('反映できません', vm.deckRequiredCellMessage);
+            return;
+          }
           if (vm.isDeckCostOverLimit) {
             void playSe('cancel');
             Alert.alert(
@@ -437,7 +484,7 @@ export function DeckBuilderScreen({ mode = 'default' }: DeckBuilderScreenProps) 
             });
         }}
         className={`mt-2 h-14 items-center justify-center rounded-xl px-3 active:scale-95 ${
-          vm.isDeckCostOverLimit || applyBattleBusy ? 'bg-neutral-400' : 'bg-[#166534]'
+          vm.cannotApplyOrSaveDeck || applyBattleBusy ? 'bg-neutral-400' : 'bg-[#166534]'
         }`}
       >
         {applyBattleBusy ? (
@@ -454,8 +501,13 @@ export function DeckBuilderScreen({ mode = 'default' }: DeckBuilderScreenProps) 
 
       {isOnlineMatchSetup ? (
         <Pressable
-          disabled={vm.isDeckCostOverLimit || applyBattleBusy}
+          disabled={vm.cannotApplyOrSaveDeck || applyBattleBusy}
           onPress={() => {
+            if (vm.isDeckFormationIncomplete) {
+              void playSe('cancel');
+              Alert.alert('マッチングできません', vm.deckRequiredCellMessage);
+              return;
+            }
             if (vm.isDeckCostOverLimit) {
               void playSe('cancel');
               Alert.alert(
@@ -472,9 +524,7 @@ export function DeckBuilderScreen({ mode = 'default' }: DeckBuilderScreenProps) 
               })
               .catch((error: unknown) => {
                 const message =
-                  error instanceof Error
-                    ? error.message
-                    : '通信または保存処理を確認してください。';
+                  error instanceof Error ? error.message : '通信または保存処理を確認してください。';
                 Alert.alert('マッチングを開始できません', message);
               })
               .finally(() => {
@@ -482,7 +532,7 @@ export function DeckBuilderScreen({ mode = 'default' }: DeckBuilderScreenProps) 
               });
           }}
           className={`mt-2 h-14 items-center justify-center rounded-xl px-3 active:scale-95 ${
-            vm.isDeckCostOverLimit || applyBattleBusy ? 'bg-neutral-400' : 'bg-[#1d4ed8]'
+            vm.cannotApplyOrSaveDeck || applyBattleBusy ? 'bg-neutral-400' : 'bg-[#1d4ed8]'
           }`}
         >
           {applyBattleBusy ? (
@@ -574,6 +624,19 @@ export function DeckBuilderScreen({ mode = 'default' }: DeckBuilderScreenProps) 
             <View className="mt-4 flex-row gap-2">
               <Pressable
                 onPress={() => {
+                  if (vm.isDeckFormationIncomplete) {
+                    void playSe('cancel');
+                    Alert.alert('保存できません', vm.deckRequiredCellMessage);
+                    return;
+                  }
+                  if (vm.isDeckCostOverLimit) {
+                    void playSe('cancel');
+                    Alert.alert(
+                      '保存できません',
+                      `合計コストが上限（${vm.deckCostLimit}）を超えています。配置を調整してください。`,
+                    );
+                    return;
+                  }
                   void playSe('confirm');
                   vm.saveDeck();
                 }}

@@ -39,7 +39,14 @@ function basePosition(skillDefs?: Record<string, unknown>): AiBattlePosition {
     boardState: {
       pieces: [
         { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
-        { side: 'player', row: 5, col: 3, pieceCode: 'piece_gacha_shitsu', char: '室', promoted: false },
+        {
+          side: 'player',
+          row: 5,
+          col: 3,
+          pieceCode: 'piece_gacha_shitsu',
+          char: '室',
+          promoted: false,
+        },
         { side: 'player', row: 7, col: 4, pieceCode: 'OU', char: '王', promoted: false },
       ],
       skill_definitions_v2: skillDefs ?? skillDefinitionsV2ForGachaChar('室'),
@@ -62,7 +69,14 @@ describe('室 セーフルーム', () => {
       boardState: {
         pieces: [
           { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
-          { side: 'player', row: 5, col: 3, pieceCode: 'piece_gacha_shitsu', char: '室', promoted: false },
+          {
+            side: 'player',
+            row: 5,
+            col: 3,
+            pieceCode: 'piece_gacha_shitsu',
+            char: '室',
+            promoted: false,
+          },
           { side: 'player', row: 7, col: 4, pieceCode: 'OU', char: '王', promoted: false },
         ],
         skill_state: {

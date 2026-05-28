@@ -6,12 +6,15 @@ import {
   throwIfInsufficientStageStamina,
   trySpendNormalStageStamina,
 } from '@/lib/stamina/spend-stage-stamina';
+import { computeStageClearCurrencyGrant } from '@/lib/stage/stage-clear-currency-reward';
 import {
   PrepareStageBattleUseCase,
   StageBattleSnapshot,
 } from '@/usecases/stage-battle/prepare-stage-battle-usecase';
 
 let mockPreparedStageId: string | null = null;
+/** stageId 文字列ごとのクリア回数（モック報酬用） */
+const mockStageClearCounts = new Map<string, number>();
 
 const mockSnapshot = (stageLabel: string): StageBattleSnapshot => ({
   stageLabel,
@@ -43,6 +46,10 @@ export function resetMockPreparedStageId(): void {
   mockPreparedStageId = null;
 }
 
+export function resetMockStageClearRewards(): void {
+  mockStageClearCounts.clear();
+}
+
 export class MockClaimStageClearRewardUseCase implements ClaimStageClearRewardUseCase {
   async execute(input: {
     stageId?: string;
@@ -53,18 +60,26 @@ export class MockClaimStageClearRewardUseCase implements ClaimStageClearRewardUs
     const stageNo = Number(input.stageId);
     if (!Number.isInteger(stageNo) || stageNo <= 0) return null;
 
+    const stageKey = input.stageId;
+    const prevClears = mockStageClearCounts.get(stageKey) ?? 0;
+    const firstClear = prevClears === 0;
+    const clearCount = prevClears + 1;
+    mockStageClearCounts.set(stageKey, clearCount);
+
+    const granted = computeStageClearCurrencyGrant(stageNo, firstClear);
+
     return {
       stageNo,
-      firstClear: true,
-      clearCount: 1,
+      firstClear,
+      clearCount,
       granted: {
-        pawn: 12,
-        gold: 2,
+        pawn: granted.pawn,
+        gold: granted.gold,
         pieces: [],
       },
       wallet: {
-        pawnCurrency: 12,
-        goldCurrency: 2,
+        pawnCurrency: granted.pawn,
+        goldCurrency: granted.gold,
       },
     };
   }

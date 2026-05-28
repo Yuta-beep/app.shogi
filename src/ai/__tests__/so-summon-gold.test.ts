@@ -43,7 +43,14 @@ describe('宋 金召喚', () => {
       stateHash: 'seed',
       boardState: {
         pieces: [
-          { side: 'player', row: 5, col: 4, pieceCode: 'piece_gacha_so', char: '宋', promoted: false },
+          {
+            side: 'player',
+            row: 5,
+            col: 4,
+            pieceCode: 'piece_gacha_so',
+            char: '宋',
+            promoted: false,
+          },
           { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
         ],
         skill_definitions_v2: skillDefinitionsV2ForGachaChar('宋'),
@@ -71,7 +78,14 @@ describe('宋 金召喚', () => {
       boardState: {
         pieces: [
           { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
-          { side: 'player', row: 5, col: 4, pieceCode: 'piece_gacha_so', char: '宋', promoted: false },
+          {
+            side: 'player',
+            row: 5,
+            col: 4,
+            pieceCode: 'piece_gacha_so',
+            char: '宋',
+            promoted: false,
+          },
           { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
         ],
         skill_definitions_v2: skillDefinitionsV2ForGachaChar('宋'),
@@ -123,7 +137,14 @@ describe('宋 金召喚', () => {
       boardState: {
         pieces: [
           { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
-          { side: 'player', row: 5, col: 4, pieceCode: 'piece_gacha_so', char: '宋', promoted: false },
+          {
+            side: 'player',
+            row: 5,
+            col: 4,
+            pieceCode: 'piece_gacha_so',
+            char: '宋',
+            promoted: false,
+          },
           { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
         ],
         skill_definitions_v2: skillDefinitionsV2ForGachaChar('宋'),

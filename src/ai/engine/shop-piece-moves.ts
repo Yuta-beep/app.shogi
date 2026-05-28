@@ -13,8 +13,7 @@ export const TANE_MOVE_DESCRIPTION_JA = '前斜め4方向に1マス移動でき�
 
 export const KIRIN_SKILL_DESCRIPTION_JA = '「金」「銀」「歩」駒から取られない。';
 
-export const KIRIN_MOVE_DESCRIPTION_JA =
-  '前後左右に何マスでも進める。斜め4方向に1マス進める。';
+export const KIRIN_MOVE_DESCRIPTION_JA = '前後左右に何マスでも進める。斜め4方向に1マス進める。';
 
 /** 麒（HTML: kirinMoves）— 前後左右スライド + 斜め4方向1マス。 */
 export const KIRIN_MOVE_VECTORS: AiPieceDefinition['moveVectors'] = [
@@ -83,7 +82,7 @@ export const P_MOVE_VECTORS: AiPieceDefinition['moveVectors'] = [
 export const SADAME_MOVE_DESCRIPTION_JA = '前後左右1マス';
 export const SADAME_MOVE_VECTORS: AiPieceDefinition['moveVectors'] = [...P_MOVE_VECTORS];
 
-export const EN_SKILL_DESCRIPTION_JA = '味方の「王」の前1マスへも移動できる。';
+export const EN_SKILL_DESCRIPTION_JA = '味方の「王」駒の前1マスに移動することができる';
 
 /** 閹（ガチャ）— 前後左右に各1マス（王前1マスは合法手生成で追加）。 */
 export const EN_MOVE_DESCRIPTION_JA = '前後左右1マス';
@@ -92,6 +91,8 @@ export const EN_MOVE_DESCRIPTION_JA = '前後左右1マス';
 export const EN_MOVE_VECTORS: AiPieceDefinition['moveVectors'] = [...P_MOVE_VECTORS];
 
 export const AN_MOVE_DESCRIPTION_JA = '前後左右1マス+桂馬飛び';
+
+export const AN_SKILL_DESCRIPTION_JA = '移動時10%の確率で、相手の特殊駒を1体「歩」に変える。';
 
 /** 安（ガチャ）— 縦横1マス + 桂馬跳び。 */
 export const AN_MOVE_VECTORS: AiPieceDefinition['moveVectors'] = [
@@ -111,6 +112,9 @@ export const SOU_MOVE_VECTORS: AiPieceDefinition['moveVectors'] = [
   { dx: 1, dy: 0, maxStep: 1 },
   { dx: 0, dy: 1, maxStep: 1 },
 ];
+
+export const SOU_SKILL_DESCRIPTION_JA =
+  '移動時周囲のランダムで最大3マスを×マスにする。この×マスは1ターンで消滅する。';
 
 export const KOU_SKILL_DESCRIPTION_JA =
   '隣接する味方が横移動したとき、同じ向きに追従する（空マスのみ）。';

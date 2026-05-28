@@ -1,6 +1,11 @@
 import { formatPieceRateTextFromLineup } from '@/features/gacha-room/lib/gacha-lineup-rates';
 import { resolveGachaBannerKey } from '@/constants/gacha-room-assets';
+import { getGachaPieceMeta } from '@/constants/gacha-piece-metadata';
 import type { GachaBanner, GachaLineupEntry } from '@/usecases/gacha-room/load-gacha-lobby-usecase';
+
+function gachaLineupDescription(char: string): string {
+  return getGachaPieceMeta(char)?.desc ?? char;
+}
 
 /** うかんむりガチャ：室7%・定10%・安10%・宋3%・歩45%・金25% */
 export const UKANMURI_GACHA_LINEUP: GachaLineupEntry[] = [
@@ -9,22 +14,16 @@ export const UKANMURI_GACHA_LINEUP: GachaLineupEntry[] = [
     name: '室',
     rarity: 'SR',
     weight: 7,
-    description: 'セーフルームを用意して「王」を守る。',
+    description: gachaLineupDescription('室'),
   },
-  { char: '定', name: '定', rarity: 'R', weight: 10, description: '相手の戦略を固定しろ。' },
-  {
-    char: '安',
-    name: '安',
-    rarity: 'R',
-    weight: 10,
-    description: '移動時10%の確率で、相手の特殊駒を1体「歩」に変える。',
-  },
+  { char: '定', name: '定', rarity: 'R', weight: 10, description: gachaLineupDescription('定') },
+  { char: '安', name: '安', rarity: 'R', weight: 10, description: gachaLineupDescription('安') },
   {
     char: '宋',
     name: '宋',
     rarity: 'UR',
     weight: 3,
-    description: '移動時20%の確率で、周囲8マスのランダムな空きマス1マスに「金」を召喚する。',
+    description: gachaLineupDescription('宋'),
   },
   { char: '歩', name: '歩', rarity: 'N', weight: 45, description: '歩通貨が1増える。' },
   { char: '金', name: '金', rarity: 'N', weight: 25, description: '金通貨が1増える。' },
@@ -38,16 +37,10 @@ export const HI_HEN_GACHA_LINEUP: GachaLineupEntry[] = [
     name: '爆',
     rarity: 'UR',
     weight: 5,
-    description: '爆発で周囲の敵駒を吹き飛ばす破壊的な駒。',
+    description: gachaLineupDescription('爆'),
   },
-  { char: '煽', name: '煽', rarity: 'SR', weight: 10, description: '相手を煽りたい人の為に。' },
-  {
-    char: '灯',
-    name: '灯',
-    rarity: 'R',
-    weight: 15,
-    description: '移動時20%の確率で、味方の「歩」をランダムに1体「火」駒に変化させる。',
-  },
+  { char: '煽', name: '煽', rarity: 'SR', weight: 10, description: gachaLineupDescription('煽') },
+  { char: '灯', name: '灯', rarity: 'R', weight: 15, description: gachaLineupDescription('灯') },
 ];
 
 export const SHINNYO_GACHA_LINEUP: GachaLineupEntry[] = [
@@ -58,23 +51,11 @@ export const SHINNYO_GACHA_LINEUP: GachaLineupEntry[] = [
     name: '辺',
     rarity: 'SR',
     weight: 7,
-    description: '移動時、ランダムに選んだ1辺上のすべての駒を2ターン移動不能にする。',
+    description: gachaLineupDescription('辺'),
   },
-  {
-    char: '逸',
-    name: '逸',
-    rarity: 'R',
-    weight: 10,
-    description: '移動時30%の確率で、相手の駒（王を除く）を1体ランダムに相手の手持ち駒に送る。',
-  },
-  { char: '進', name: '進', rarity: 'R', weight: 10, description: '次はどこに進んでいくのか。' },
-  {
-    char: '逃',
-    name: '逃',
-    rarity: 'UR',
-    weight: 3,
-    description: '移動すると味方の王も同じ方向へ逃がす緊急離脱の駒。',
-  },
+  { char: '逸', name: '逸', rarity: 'R', weight: 10, description: gachaLineupDescription('逸') },
+  { char: '進', name: '進', rarity: 'R', weight: 10, description: gachaLineupDescription('進') },
+  { char: '逃', name: '逃', rarity: 'UR', weight: 3, description: gachaLineupDescription('逃') },
 ];
 
 export const KANKEN1_GACHA_LINEUP: GachaLineupEntry[] = [
@@ -85,16 +66,10 @@ export const KANKEN1_GACHA_LINEUP: GachaLineupEntry[] = [
     name: '艸',
     rarity: 'UR',
     weight: 3,
-    description: '草の力を操り盤面を支配する自然の駒。',
+    description: gachaLineupDescription('艸'),
   },
-  { char: '閹', name: '閹', rarity: 'UR', weight: 3, description: '敵の動きを封じる封印の駒。' },
-  {
-    char: '膠',
-    name: '膠',
-    rarity: 'SSR',
-    weight: 3,
-    description: '盤面を膠着させ敵の動きを止める粘着の駒。',
-  },
+  { char: '閹', name: '閹', rarity: 'UR', weight: 3, description: gachaLineupDescription('閹') },
+  { char: '膠', name: '膠', rarity: 'SSR', weight: 3, description: gachaLineupDescription('膠') },
 ];
 
 type GachaLineupCatalogEntry = {
@@ -137,10 +112,9 @@ export function enrichGachaBanner(banner: GachaBanner): GachaBanner {
     lineup: catalog.lineup,
     description: banner.description?.trim() ? banner.description : catalog.description,
     rareRateText: banner.rareRateText?.trim() ? banner.rareRateText : catalog.rareRateText,
-    pieceRateText:
-      banner.pieceRateText?.trim()
-        ? banner.pieceRateText
-        : formatPieceRateTextFromLineup(catalog.lineup),
+    pieceRateText: banner.pieceRateText?.trim()
+      ? banner.pieceRateText
+      : formatPieceRateTextFromLineup(catalog.lineup),
   };
 }
 
