@@ -1,6 +1,5 @@
 import type { HomeSnapshot } from '@/domain/models/home';
 import { ApiClientError } from '@/infra/http/api-client';
-import { getHomeSnapshotState, patchHomeSnapshotStamina } from '@/hooks/common/home-snapshot-store';
 import { isApiDataSource } from '@/lib/config/data-source';
 import {
   calculateStaminaWithRecovery,
@@ -10,6 +9,7 @@ import {
 
 let mockStaminaUpdatedAtMs = Date.now();
 let mockStaminaStored = 50;
+let mockMaxStaminaStored = 50;
 
 /** BFF 未反映のクライアント側スタミナ消費（ステージ1の stamina_cost=0 など） */
 let pendingClientOnlyStaminaDeduction = 0;
@@ -17,6 +17,7 @@ let staminaBaselineWhenPendingSet: number | null = null;
 
 export function resetMockStaminaState(stamina = 50): void {
   mockStaminaStored = stamina;
+  mockMaxStaminaStored = Math.max(stamina, 1);
   mockStaminaUpdatedAtMs = Date.now();
   resetPendingClientStaminaDeduction();
 }
@@ -50,8 +51,17 @@ function recordPendingClientStaminaDeduction(amount: number, baseline: number): 
   staminaBaselineWhenPendingSet = baseline;
 }
 
-function spendStaminaOnHomeSnapshot(cost: number): SpendStageStaminaResult {
-  const { snapshot } = getHomeSnapshotState();
+export type HomeStaminaSnapshot = Pick<HomeSnapshot, 'stamina' | 'maxStamina' | 'nextRecoveryAt'>;
+export type ApplyHomeSnapshotStamina = (next: {
+  stamina: number;
+  nextRecoveryAt: string | null;
+}) => void;
+
+function spendStaminaOnHomeSnapshot(
+  snapshot: HomeStaminaSnapshot,
+  cost: number,
+  apply?: ApplyHomeSnapshotStamina,
+): SpendStageStaminaResult {
   const stamina = snapshot.stamina;
   if (stamina < cost) {
     return { ok: false, current: stamina, required: cost };
@@ -63,22 +73,23 @@ function spendStaminaOnHomeSnapshot(cost: number): SpendStageStaminaResult {
       ? (snapshot.nextRecoveryAt ?? new Date(Date.now() + STAMINA_RECOVERY_MS).toISOString())
       : null;
 
-  patchHomeSnapshotStamina({ stamina: newStamina, nextRecoveryAt });
+  apply?.({ stamina: newStamina, nextRecoveryAt });
   return { ok: true, stamina: newStamina, nextRecoveryAt };
 }
 
 /** モック用: ホーム読み込み時にスタミナ基準時刻をリセットしないよう内部状態を同期 */
 export function syncMockStaminaFromSnapshot(stamina: number, maxStamina: number): void {
+  mockMaxStaminaStored = Math.max(1, maxStamina);
   // ホーム再読み込みで消費済みスタミナが巻き戻らないよう、同期値は下げる方向のみ
   mockStaminaStored = Math.min(mockStaminaStored, stamina);
-  if (stamina >= maxStamina) {
-    mockStaminaStored = maxStamina;
+  if (stamina >= mockMaxStaminaStored) {
+    mockStaminaStored = mockMaxStaminaStored;
     mockStaminaUpdatedAtMs = Date.now();
     return;
   }
   const { stamina: recovered } = calculateStaminaWithRecovery({
     stored: mockStaminaStored,
-    max: maxStamina,
+    max: mockMaxStaminaStored,
     updatedAtMs: mockStaminaUpdatedAtMs,
   });
   mockStaminaStored = Math.min(recovered, stamina);
@@ -97,7 +108,7 @@ function currentMockStamina(): {
   maxStamina: number;
   nextRecoveryAt: string | null;
 } {
-  const max = getHomeSnapshotState().snapshot.maxStamina;
+  const max = mockMaxStaminaStored;
   const { stamina, nextRecoveryAt } = calculateStaminaWithRecovery({
     stored: mockStaminaStored,
     max,
@@ -110,7 +121,9 @@ export type SpendStageStaminaResult =
   | { ok: true; stamina: number; nextRecoveryAt: string | null }
   | { ok: false; current: number; required: number };
 
-export function trySpendNormalStageStamina(): SpendStageStaminaResult {
+export function trySpendNormalStageStamina(
+  apply?: ApplyHomeSnapshotStamina,
+): SpendStageStaminaResult {
   const cost = NORMAL_STAGE_STAMINA_COST;
   const { stamina, maxStamina } = currentMockStamina();
   if (stamina < cost) {
@@ -128,7 +141,7 @@ export function trySpendNormalStageStamina(): SpendStageStaminaResult {
       ? new Date(mockStaminaUpdatedAtMs + STAMINA_RECOVERY_MS).toISOString()
       : null;
 
-  patchHomeSnapshotStamina({ stamina: newStamina, nextRecoveryAt: next });
+  apply?.({ stamina: newStamina, nextRecoveryAt: next });
   return { ok: true, stamina: newStamina, nextRecoveryAt: next };
 }
 
@@ -147,15 +160,19 @@ export function throwIfInsufficientStageStamina(result: SpendStageStaminaResult)
  * API 開始後: BFF が `stamina_cost` 未設定（ステージ1など）で減らなかった分をクライアントで補う。
  * 既に NORMAL_STAGE_STAMINA_COST 以上減っていれば何もしない（二重消費防止）。
  */
-export function ensureNormalStageStaminaCharged(staminaBeforeBattleStart: number): void {
+export function ensureNormalStageStaminaCharged(
+  staminaBeforeBattleStart: number,
+  snapshot: HomeStaminaSnapshot,
+  apply: ApplyHomeSnapshotStamina,
+): void {
   if (!isApiDataSource()) return;
 
-  const current = getHomeSnapshotState().snapshot.stamina;
+  const current = snapshot.stamina;
   const deducted = staminaBeforeBattleStart - current;
   const need = NORMAL_STAGE_STAMINA_COST - deducted;
   if (need <= 0) return;
 
-  const spend = spendStaminaOnHomeSnapshot(need);
+  const spend = spendStaminaOnHomeSnapshot(snapshot, need, apply);
   throwIfInsufficientStageStamina(spend);
   recordPendingClientStaminaDeduction(need, staminaBeforeBattleStart);
 }

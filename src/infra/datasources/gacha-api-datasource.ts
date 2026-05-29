@@ -1,8 +1,7 @@
 import { toGachaRollCode } from '@/constants/gacha-room-assets';
+import type { GachaLobbySnapshot, RollGachaResult } from '@/domain/models/gacha';
 import { getJson, postJson } from '@/infra/http/api-client';
 import { supabase } from '@/lib/supabase/supabase-client';
-import { GachaLobbySnapshot } from '@/usecases/gacha-room/load-gacha-lobby-usecase';
-import { RollGachaResult } from '@/usecases/gacha-room/roll-gacha-usecase';
 
 export class GachaApiDataSource {
   private async getToken(): Promise<string> {

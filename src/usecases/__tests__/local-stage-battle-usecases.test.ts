@@ -1,11 +1,9 @@
 import { resetLocalBattleRegistry } from '@/ai/local-battle-registry';
-import {
-  ensureNormalStageStaminaCharged,
-  resetMockStaminaState,
-} from '@/lib/stamina/spend-stage-stamina';
+import { resetMockStaminaState } from '@/lib/stamina/spend-stage-stamina';
 import {
   LocalClaimStageClearRewardUseCase,
   LocalPrepareStageBattleUseCase,
+  type StageBattleHomeSnapshotPort,
 } from '@/usecases/stage-battle/local-stage-battle-usecases';
 
 const mockSnapshot = {
@@ -24,25 +22,6 @@ jest.mock('@/lib/config/data-source', () => ({
   isApiDataSource: jest.fn(() => true),
 }));
 
-jest.mock('@/hooks/common/home-snapshot-store', () => ({
-  getHomeSnapshotState: () => ({ snapshot: mockSnapshot, isLoading: false, error: null }),
-  loadHomeSnapshot: jest.fn(async () => mockSnapshot),
-  patchHomeSnapshotStamina: (next: { stamina: number; nextRecoveryAt: string | null }) => {
-    mockSnapshot.stamina = next.stamina;
-    mockSnapshot.nextRecoveryAt = next.nextRecoveryAt;
-  },
-}));
-
-jest.mock('@/lib/stamina/spend-stage-stamina', () => {
-  const actual = jest.requireActual<typeof import('@/lib/stamina/spend-stage-stamina')>(
-    '@/lib/stamina/spend-stage-stamina',
-  );
-  return {
-    ...actual,
-    ensureNormalStageStaminaCharged: jest.fn(actual.ensureNormalStageStaminaCharged),
-  };
-});
-
 jest.mock('@/lib/supabase/supabase-client', () => ({
   supabase: {
     auth: {
@@ -51,18 +30,35 @@ jest.mock('@/lib/supabase/supabase-client', () => ({
   },
 }));
 
+function createHomeSnapshotPort(): jest.Mocked<StageBattleHomeSnapshotPort> {
+  return {
+    getSnapshot: jest.fn(() => mockSnapshot),
+    reload: jest.fn(async () => undefined),
+    applyStamina: jest.fn((next) => {
+      mockSnapshot.stamina = next.stamina;
+      mockSnapshot.nextRecoveryAt = next.nextRecoveryAt;
+    }),
+    chargeNormalStageStamina: jest.fn(),
+  };
+}
+
 describe('local stage battle usecases', () => {
+  let homeSnapshotPort: jest.Mocked<StageBattleHomeSnapshotPort>;
+
   beforeEach(() => {
     resetLocalBattleRegistry();
     resetMockStaminaState(50);
     mockSnapshot.stamina = 50;
-    jest.mocked(ensureNormalStageStaminaCharged).mockClear();
+    homeSnapshotPort = createHomeSnapshotPort();
   });
 
   it('returns fallback snapshot when stage id is missing', async () => {
-    const usecase = new LocalPrepareStageBattleUseCase({
-      execute: jest.fn(),
-    } as never);
+    const usecase = new LocalPrepareStageBattleUseCase(
+      {
+        execute: jest.fn(),
+      } as never,
+      homeSnapshotPort,
+    );
 
     const snapshot = await usecase.execute({});
 
@@ -71,39 +67,43 @@ describe('local stage battle usecases', () => {
   });
 
   it('starts a stage session and maps placements', async () => {
-    const usecase = new LocalPrepareStageBattleUseCase({
-      execute: jest.fn().mockResolvedValue({
-        battleSessionId: 'session-1',
-        expiresAt: '2026-04-24T00:00:00Z',
-        stage: {
-          stageNo: 1,
-          stageName: 'Stage 1',
-          clearConditionType: 'defeat_boss',
-          clearConditionParams: {},
-          stageCategory: 'normal',
-        },
-        labels: { stageLabel: 'S1', turnLabel: 'TURN 1', handLabel: '持ち駒' },
-        board: {
-          size: 9,
-          placements: [
-            {
-              side: 'player',
-              row: 8,
-              col: 4,
-              piece: { id: 1, code: 'OU', char: '王', imageBucket: null, imageKey: null },
-            },
-          ],
-        },
-        enemyRoster: [],
-        rewards: [],
-      }),
-    } as never);
+    const usecase = new LocalPrepareStageBattleUseCase(
+      {
+        execute: jest.fn().mockResolvedValue({
+          battleSessionId: 'session-1',
+          expiresAt: '2026-04-24T00:00:00Z',
+          stage: {
+            stageNo: 1,
+            stageName: 'Stage 1',
+            clearConditionType: 'defeat_boss',
+            clearConditionParams: {},
+            stageCategory: 'normal',
+          },
+          labels: { stageLabel: 'S1', turnLabel: 'TURN 1', handLabel: '持ち駒' },
+          board: {
+            size: 9,
+            placements: [
+              {
+                side: 'player',
+                row: 8,
+                col: 4,
+                piece: { id: 1, code: 'OU', char: '王', imageBucket: null, imageKey: null },
+              },
+            ],
+          },
+          enemyRoster: [],
+          rewards: [],
+        }),
+      } as never,
+      homeSnapshotPort,
+    );
 
     const snapshot = await usecase.execute({ stageId: '1' });
 
     expect(snapshot.stageLabel).toBe('Stage 1');
     expect(snapshot.placements[0]?.pieceCode).toBe('OU');
-    expect(ensureNormalStageStaminaCharged).toHaveBeenCalledWith(50);
+    expect(homeSnapshotPort.reload).toHaveBeenCalledWith(true);
+    expect(homeSnapshotPort.chargeNormalStageStamina).toHaveBeenCalledWith(50);
   });
 
   it('reuses an active session for the same stage without starting again', async () => {
@@ -122,33 +122,39 @@ describe('local stage battle usecases', () => {
       enemyRoster: [],
       rewards: [],
     });
-    const usecase = new LocalPrepareStageBattleUseCase({ execute: start } as never);
+    const usecase = new LocalPrepareStageBattleUseCase(
+      { execute: start } as never,
+      homeSnapshotPort,
+    );
 
     await usecase.execute({ stageId: '5' });
     await usecase.execute({ stageId: '5' });
 
     expect(start).toHaveBeenCalledTimes(1);
-    expect(ensureNormalStageStaminaCharged).toHaveBeenCalledTimes(1);
+    expect(homeSnapshotPort.chargeNormalStageStamina).toHaveBeenCalledTimes(1);
   });
 
   it('finishes a cleared session and returns rewards', async () => {
-    const prepare = new LocalPrepareStageBattleUseCase({
-      execute: jest.fn().mockResolvedValue({
-        battleSessionId: 'session-2',
-        expiresAt: '2026-04-24T00:00:00Z',
-        stage: {
-          stageNo: 2,
-          stageName: 'Stage 2',
-          clearConditionType: 'defeat_boss',
-          clearConditionParams: {},
-          stageCategory: 'normal',
-        },
-        labels: { stageLabel: 'S2', turnLabel: 'TURN 1', handLabel: '持ち駒' },
-        board: { size: 9, placements: [] },
-        enemyRoster: [],
-        rewards: [],
-      }),
-    } as never);
+    const prepare = new LocalPrepareStageBattleUseCase(
+      {
+        execute: jest.fn().mockResolvedValue({
+          battleSessionId: 'session-2',
+          expiresAt: '2026-04-24T00:00:00Z',
+          stage: {
+            stageNo: 2,
+            stageName: 'Stage 2',
+            clearConditionType: 'defeat_boss',
+            clearConditionParams: {},
+            stageCategory: 'normal',
+          },
+          labels: { stageLabel: 'S2', turnLabel: 'TURN 1', handLabel: '持ち駒' },
+          board: { size: 9, placements: [] },
+          enemyRoster: [],
+          rewards: [],
+        }),
+      } as never,
+      homeSnapshotPort,
+    );
     await prepare.execute({ stageId: '2' });
 
     const claim = new LocalClaimStageClearRewardUseCase({
@@ -172,23 +178,26 @@ describe('local stage battle usecases', () => {
   });
 
   it('returns null for failed result and clears the session', async () => {
-    const prepare = new LocalPrepareStageBattleUseCase({
-      execute: jest.fn().mockResolvedValue({
-        battleSessionId: 'session-3',
-        expiresAt: '2026-04-24T00:00:00Z',
-        stage: {
-          stageNo: 3,
-          stageName: 'Stage 3',
-          clearConditionType: 'defeat_boss',
-          clearConditionParams: {},
-          stageCategory: 'normal',
-        },
-        labels: { stageLabel: 'S3', turnLabel: 'TURN 1', handLabel: '持ち駒' },
-        board: { size: 9, placements: [] },
-        enemyRoster: [],
-        rewards: [],
-      }),
-    } as never);
+    const prepare = new LocalPrepareStageBattleUseCase(
+      {
+        execute: jest.fn().mockResolvedValue({
+          battleSessionId: 'session-3',
+          expiresAt: '2026-04-24T00:00:00Z',
+          stage: {
+            stageNo: 3,
+            stageName: 'Stage 3',
+            clearConditionType: 'defeat_boss',
+            clearConditionParams: {},
+            stageCategory: 'normal',
+          },
+          labels: { stageLabel: 'S3', turnLabel: 'TURN 1', handLabel: '持ち駒' },
+          board: { size: 9, placements: [] },
+          enemyRoster: [],
+          rewards: [],
+        }),
+      } as never,
+      homeSnapshotPort,
+    );
     await prepare.execute({ stageId: '3' });
 
     const claim = new LocalClaimStageClearRewardUseCase({

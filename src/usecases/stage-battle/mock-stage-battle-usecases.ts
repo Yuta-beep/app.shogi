@@ -6,6 +6,7 @@ import {
   throwIfInsufficientStageStamina,
   trySpendNormalStageStamina,
 } from '@/lib/stamina/spend-stage-stamina';
+import { patchHomeSnapshotStamina } from '@/hooks/common/home-snapshot-store';
 import { computeStageClearCurrencyGrant } from '@/lib/stage/stage-clear-currency-reward';
 import {
   PrepareStageBattleUseCase,
@@ -34,7 +35,7 @@ export class MockPrepareStageBattleUseCase implements PrepareStageBattleUseCase 
       return mockSnapshot(`STAGE ${input.stageId}`);
     }
 
-    const spend = trySpendNormalStageStamina();
+    const spend = trySpendNormalStageStamina(patchHomeSnapshotStamina);
     throwIfInsufficientStageStamina(spend);
     mockPreparedStageId = input.stageId;
 

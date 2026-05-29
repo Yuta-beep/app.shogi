@@ -5,8 +5,6 @@ import {
   registerActiveStageSession,
 } from '@/ai/local-battle-registry';
 import { resolveStagePlacementIdentity } from '@/features/stage-shogi/domain/board-piece-identity';
-import { getHomeSnapshotState, loadHomeSnapshot } from '@/hooks/common/home-snapshot-store';
-import { ensureNormalStageStaminaCharged } from '@/lib/stamina/spend-stage-stamina';
 import { FinishStageBattleSessionUseCase } from '@/usecases/stage-battle/finish-stage-battle-session-usecase';
 import {
   PrepareStageBattleUseCase,
@@ -18,6 +16,17 @@ import {
   StageClearRewardResult,
 } from '@/usecases/stage-battle/claim-stage-clear-reward-usecase';
 import type { StageBattleSessionStart } from '@/usecases/stage-battle/stage-battle-session-contract';
+import type {
+  ApplyHomeSnapshotStamina,
+  HomeStaminaSnapshot,
+} from '@/lib/stamina/spend-stage-stamina';
+
+export interface StageBattleHomeSnapshotPort {
+  getSnapshot(): HomeStaminaSnapshot;
+  reload(force?: boolean): Promise<void>;
+  applyStamina(next: Parameters<ApplyHomeSnapshotStamina>[0]): void;
+  chargeNormalStageStamina(staminaBeforeBattleStart: number): void;
+}
 
 function mapSessionToSnapshot(session: StageBattleSessionStart): StageBattleSnapshot {
   return {
@@ -61,6 +70,7 @@ function mapSessionToSnapshot(session: StageBattleSessionStart): StageBattleSnap
 export class LocalPrepareStageBattleUseCase implements PrepareStageBattleUseCase {
   constructor(
     private readonly startUseCase: StartStageBattleSessionUseCase = new StartStageBattleSessionUseCase(),
+    private readonly homeSnapshotPort: StageBattleHomeSnapshotPort,
   ) {}
 
   async execute(input: { stageId?: string }): Promise<StageBattleSnapshot> {
@@ -90,14 +100,14 @@ export class LocalPrepareStageBattleUseCase implements PrepareStageBattleUseCase
       return mapSessionToSnapshot(existing);
     }
 
-    const staminaBeforeStart = getHomeSnapshotState().snapshot.stamina;
+    const staminaBeforeStart = this.homeSnapshotPort.getSnapshot().stamina;
 
     clearLocalBattleGames();
     clearActiveStageSession();
     const session = await this.startUseCase.execute({ stageNo });
     registerActiveStageSession(session);
-    await loadHomeSnapshot(true);
-    ensureNormalStageStaminaCharged(staminaBeforeStart);
+    await this.homeSnapshotPort.reload(true);
+    this.homeSnapshotPort.chargeNormalStageStamina(staminaBeforeStart);
 
     return mapSessionToSnapshot(session);
   }

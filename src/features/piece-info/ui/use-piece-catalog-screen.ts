@@ -50,7 +50,9 @@ export function usePieceCatalogScreen() {
     setIsLoading(true);
 
     async function load() {
-      const catalog = await loadUseCase.execute();
+      const catalog = (await loadUseCase.execute()).map((piece) =>
+        normalizePieceCatalogItemForDisplay(piece),
+      );
 
       if (!isApiMode) {
         await hydrateGachaMockOwnedChars();

@@ -1,5 +1,4 @@
-import type { AiBoardPiece } from '@/ai/model';
-import { toBasePieceCode } from '@/ai/model';
+import { toBasePieceCode } from '@/ai/model/move';
 
 function normChar(ch: string): string {
   try {
@@ -55,11 +54,9 @@ export function isGiantPieceCodeUpper(pieceCodeUpper: string): boolean {
   return u === 'GIANT' || u.includes('C4AEB81F3634');
 }
 
-export function pieceTouchesGiantFootprint(
-  piece: AiBoardPiece,
-  cellRow: number,
-  cellCol: number,
-): boolean {
+export function pieceTouchesGiantFootprint<
+  T extends { char: string; pieceCode?: string | null; row: number; col: number },
+>(piece: T, cellRow: number, cellCol: number): boolean {
   if (!isGiantPieceForEngine(piece)) return piece.row === cellRow && piece.col === cellCol;
   return giantAnchorFootprint(piece.row, piece.col).some(
     (c) => c.row === cellRow && c.col === cellCol,

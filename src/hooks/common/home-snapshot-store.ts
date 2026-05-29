@@ -3,6 +3,8 @@ import { isApiDataSource } from '@/lib/config/data-source';
 import {
   mergeServerHomeStamina,
   syncMockStaminaFromSnapshot,
+  trySpendNormalStageStamina,
+  type ApplyHomeSnapshotStamina,
 } from '@/lib/stamina/spend-stage-stamina';
 import { createLoadHomeSnapshotUseCase } from '@/usecases/home/create-home-usecases';
 
@@ -75,6 +77,14 @@ export function patchHomeSnapshotStamina(next: {
   snapshot = { ...snapshot, stamina: next.stamina, nextRecoveryAt: next.nextRecoveryAt };
   syncState();
   notify();
+}
+
+export const applyHomeSnapshotStamina: ApplyHomeSnapshotStamina = (next) => {
+  patchHomeSnapshotStamina(next);
+};
+
+export function spendMockStageStamina() {
+  return trySpendNormalStageStamina(applyHomeSnapshotStamina);
 }
 
 export function loadHomeSnapshot(force = false): Promise<HomeSnapshot> {

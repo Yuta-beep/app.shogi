@@ -1,35 +1,12 @@
+import type { RollGachaResult } from '@/domain/models/gacha';
+
 export type RollGachaInput = {
   gachaId: string;
   /** 0=白, 1=青, 2=赤, 3=金, 4=黒 */
   gachaBallColorIndex?: number;
 };
 
-export type GachaPiece = {
-  char: string;
-  name: string;
-  rarity: string;
-  description: string;
-  imageSignedUrl?: string | null;
-};
-
-export type RollGachaResult =
-  | {
-      type: 'hit';
-      piece: GachaPiece;
-      alreadyOwned: boolean;
-      /** 既所持の当たり駒が出たときに付与された金通貨（mock / API） */
-      duplicateGoldGranted?: number;
-      duplicateLabel?: string;
-      pawnCurrency: number;
-      goldCurrency: number;
-    }
-  | {
-      type: 'miss';
-      currency: 'pawn' | 'gold';
-      amount: number;
-      pawnCurrency: number;
-      goldCurrency: number;
-    };
+export type { GachaPiece, RollGachaResult } from '@/domain/models/gacha';
 
 export interface RollGachaUseCase {
   execute(input: RollGachaInput): Promise<RollGachaResult>;
