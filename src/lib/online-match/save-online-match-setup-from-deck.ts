@@ -1,4 +1,4 @@
-import { CHAR_TO_CODE } from '@/features/stage-shogi/domain/piece-conversion';
+import { resolveOnlineMatchPieceCode } from '@/lib/online-match/resolve-online-match-piece-code';
 import { createSaveOnlineMatchSetupUseCase } from '@/usecases/online-match/create-online-match-usecases';
 
 export type OnlineMatchDeckPlacement = {
@@ -21,7 +21,7 @@ export async function saveOnlineMatchSetupFromDeck(
       row: placement.row,
       col: placement.col,
       pieceId: placement.piece.pieceId!,
-      pieceCode: (CHAR_TO_CODE[placement.piece.char] ?? placement.piece.char).toUpperCase(),
+      pieceCode: resolveOnlineMatchPieceCode(placement.piece.char),
     }));
   const selectedPieceIds = boardLayout.map((placement) => placement.pieceId);
 

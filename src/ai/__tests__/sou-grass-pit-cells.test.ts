@@ -2,7 +2,7 @@ import { applyMove } from '@/ai/engine/apply-move';
 import { generateLegalMoves } from '@/ai/engine/legal-moves';
 import { tickSkillStateDurations } from '@/ai/engine/skill-runtime';
 import { skillDefinitionsV2ForGachaChar } from '@/ai/engine/gacha-piece-skill-definitions';
-import type { AiBattlePosition, AiPieceDefinition } from '@/ai/model';
+import { normalizeBattlePosition, type AiBattlePosition, type AiPieceDefinition } from '@/ai/model';
 
 const pieceCatalog: AiPieceDefinition[] = [
   {
@@ -119,7 +119,7 @@ describe('艸 ×マス', () => {
       },
     });
 
-    const pits = pitCellsFromPosition(committed.position);
+    const pits = pitCellsFromPosition(normalizeBattlePosition(committed.position));
     expect(pits.length).toBeGreaterThan(0);
     expect(pits.length).toBeLessThanOrEqual(3);
     for (const pit of pits) {

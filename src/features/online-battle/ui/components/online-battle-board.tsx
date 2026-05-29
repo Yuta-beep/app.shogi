@@ -83,6 +83,7 @@ export function OnlineBattleBoard(props: {
         const source = getPieceImageSource({
           pieceCode: piece.pieceCode,
           char: piece.char,
+          imageSignedUrl: null,
         });
         return (
           <View

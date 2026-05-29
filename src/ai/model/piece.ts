@@ -1,3 +1,4 @@
+import { applyGachaPieceCatalogOverrides } from '@/constants/gacha-piece-metadata';
 import type { PieceCatalogItem } from '@/usecases/piece-info/load-piece-catalog-usecase';
 import { normalizePieceCode, toBasePieceCode } from '@/ai/model/move';
 
@@ -122,7 +123,7 @@ export type AiPieceLookups = {
 };
 
 export function normalizePieceDefinition(item: PieceCatalogItem): AiPieceDefinition {
-  const overridden = applyClientEnginePieceCatalogOverrides(item);
+  const overridden = applyClientEnginePieceCatalogOverrides(applyGachaPieceCatalogOverrides(item));
   return {
     ...overridden,
     pieceCode: normalizePieceCode(overridden.pieceCode),

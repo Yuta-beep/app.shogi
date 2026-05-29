@@ -29,7 +29,12 @@ type HomeSnapshotStoreState = {
 
 const FRESH_MS = 5_000;
 const listeners = new Set<Listener>();
-const loadUseCase = createLoadHomeSnapshotUseCase();
+let loadUseCase: ReturnType<typeof createLoadHomeSnapshotUseCase> | null = null;
+
+function getLoadHomeSnapshotUseCase() {
+  loadUseCase ??= createLoadHomeSnapshotUseCase();
+  return loadUseCase;
+}
 
 let snapshot: HomeSnapshot = emptySnapshot;
 let lastLoadedAt = 0;
@@ -94,7 +99,7 @@ export function loadHomeSnapshot(force = false): Promise<HomeSnapshot> {
   }
   if (inFlight) return inFlight;
 
-  inFlight = loadUseCase
+  inFlight = getLoadHomeSnapshotUseCase()
     .execute()
     .then((next) => {
       snapshot = mergeServerHomeStamina(next);

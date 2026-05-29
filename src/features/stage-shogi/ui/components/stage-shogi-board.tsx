@@ -13,6 +13,9 @@ import Animated, {
 } from 'react-native-reanimated';
 import Svg, { Line, Polygon, Rect } from 'react-native-svg';
 
+import type { SkillVisualEffect } from '@/domain/battle/skill-visual-effect';
+import { BoardCell } from '@/features/stage-shogi/domain/game-rules';
+import { StageShogiSkillParticleLayer } from '@/features/stage-shogi/ui/components/stage-shogi-skill-particle-layer';
 import {
   BOARD_CELL,
   BOARD_CELL_INNER_RATIO,
@@ -22,7 +25,8 @@ import {
   BOARD_PIECE_SIZE_OVERRIDES,
   BOARD_SIZE,
   BOARD_VIEWBOX,
-  BoardPiece,
+  type ArrowCellDisplay,
+  type BoardPiece,
   KING_PIECE_SIZE_PERCENT,
   NORMAL_PIECE_SIZE_PERCENT,
   ARROW_DOWN_CELL_IMAGE_SOURCE,
@@ -32,7 +36,6 @@ import {
   BATSU_CELL_IMAGE_SOURCE,
   CHRYSANTHEMUM_REVIVAL_IMAGE_SOURCE,
   POISON_CELL_IMAGE_SOURCE,
-  type ArrowCellDisplay,
   SAFE_ROOM_CELL_IMAGE_SOURCE,
   PRISON_CHAIN_IMAGE_SOURCE,
   ROCK_OBSTACLE_IMAGE_SOURCE,
@@ -44,13 +47,12 @@ import {
   isEnemySide,
   isGiantTwoByTwoBoardPiece,
   isKingChar,
+  kirinShowsImmunityShieldMark,
   isPromotedVisualPiece,
   localPromotedModuleFromBaseCodeCandidates,
   normalizeCellIndex,
   resolvePromotedImageSource,
-  kirinShowsImmunityShieldMark,
 } from '@/features/stage-shogi/ui/stage-shogi-screen.helpers';
-import { BoardCell } from '@/features/stage-shogi/domain/game-rules';
 
 export type PromotionImageFlash = {
   row: number;
@@ -134,7 +136,7 @@ const KirinImmunityShieldBadge = memo(function KirinImmunityShieldBadge() {
 const MaiDanceRestrictionXMark = memo(function MaiDanceRestrictionXMark() {
   const barStyle: ViewStyle = {
     position: 'absolute' as const,
-    width: '86%',
+    width: '86%' as const,
     height: 3,
     backgroundColor: 'rgba(250, 204, 21, 0.96)',
     borderRadius: 2,
@@ -970,6 +972,8 @@ export function StageShogiBoard(props: {
   thornHazardCells: BoardCell[];
   safeRoomHazardCells: BoardCell[];
   henEdgeHighlightCells: BoardCell[];
+  skillVisualEffects?: SkillVisualEffect[];
+  onSkillVisualEffectFinished?: (effect: SkillVisualEffect) => void;
   onCellPress: (row: number, col: number) => void;
   onCellLongPress: (row: number, col: number) => void;
 }) {
@@ -990,6 +994,8 @@ export function StageShogiBoard(props: {
     thornHazardCells,
     safeRoomHazardCells,
     henEdgeHighlightCells,
+    skillVisualEffects = [],
+    onSkillVisualEffectFinished,
     onCellPress,
     onCellLongPress,
   } = props;
@@ -1028,6 +1034,12 @@ export function StageShogiBoard(props: {
           <BatsuHazardLayer batsuHazards={batsuHazardCells} />
           <ThornHazardLayer thornHazards={thornHazardCells} />
           <SafeRoomHazardLayer safeRoomHazards={safeRoomHazardCells} />
+          {onSkillVisualEffectFinished ? (
+            <StageShogiSkillParticleLayer
+              effects={skillVisualEffects}
+              onEffectFinished={onSkillVisualEffectFinished}
+            />
+          ) : null}
           <BoardTouchLayer onCellPress={onCellPress} onCellLongPress={onCellLongPress} />
         </View>
       </View>

@@ -66,6 +66,7 @@ export function matchingGameToBoardPieces(
       pieceCode: code,
       char: pieceCharFromCode(code, side, promoted),
       promoted,
+      imageSignedUrl: null,
     });
   }
   return pieces;
@@ -156,8 +157,8 @@ export function fromViewCoord(
 export function catalogDefsByCode(catalog: PieceCatalogItem[]): Record<string, PieceCatalogItem> {
   const out: Record<string, PieceCatalogItem> = {};
   for (const item of catalog) {
-    const pieceCode = item.pieceCode?.toUpperCase();
-    if (pieceCode) out[pieceCode] = item;
+    const code = item.pieceCode?.toUpperCase();
+    if (code) out[code] = item;
   }
   return out;
 }

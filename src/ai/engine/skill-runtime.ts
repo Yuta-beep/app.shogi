@@ -1,3 +1,4 @@
+import type { SkillVisualEffect } from '@/domain/battle/skill-visual-effect';
 import type { ArrowDirection } from '@/constants/stage-fixed-arrow-cells';
 import type { Side } from '@/features/stage-shogi/domain/game-rules';
 import { capturedToHandPieceCode } from '@/features/stage-shogi/domain/game-rules';
@@ -145,7 +146,7 @@ function removeRandomAdjacentEnemyPiece(input: {
   pieces: AiBoardPiece[];
   center: AiBoardPiece;
   actorSide: Side;
-}): boolean {
+}): { removed: boolean; row: number; col: number } | null {
   const candidates = input.pieces
     .map((piece, idx) => ({ piece, idx }))
     .filter(({ piece }) => {
@@ -160,10 +161,11 @@ function removeRandomAdjacentEnemyPiece(input: {
         !(piece.row === input.center.row && piece.col === input.center.col)
       );
     });
-  if (candidates.length === 0) return false;
+  if (candidates.length === 0) return null;
   const selected = candidates[Math.floor(Math.random() * candidates.length)]!;
+  const { row, col } = selected.piece;
   input.pieces.splice(selected.idx, 1);
-  return true;
+  return { removed: true, row, col };
 }
 
 function removeUpToRandomAdjacentEnemyPieces(input: {
@@ -1727,7 +1729,8 @@ export function applyMoveSkillEffects(input: {
   movedPiece: AiBoardPiece | null;
   pieces: AiBoardPiece[];
   didCapture: boolean;
-}): { moveSkillEffectTriggered: boolean } {
+}): { moveSkillEffectTriggered: boolean; skillVisualEffects: SkillVisualEffect[] } {
+  const skillVisualEffects: SkillVisualEffect[] = [];
   const movedCodeRaw = toBasePieceCode(input.move.pieceCode);
   const movedCode = normalizeSkillPieceCode(movedCodeRaw);
   const movedPiece = input.movedPiece;
@@ -1746,7 +1749,7 @@ export function applyMoveSkillEffects(input: {
     const eff = applyYangAllySkillProcMultiplier(p, yangSkillProcFactor);
     return Math.random() <= eff;
   };
-  if (!movedCode) return { moveSkillEffectTriggered: false };
+  if (!movedCode) return { moveSkillEffectTriggered: false, skillVisualEffects };
   let moveSkillEffectTriggered = false;
   const markMoveSkillFx = (): void => {
     moveSkillEffectTriggered = true;
@@ -1846,14 +1849,18 @@ export function applyMoveSkillEffects(input: {
     const procChance = 0.2;
     const triggered = skillProcRoll(procChance);
     if (triggered) {
-      if (
-        removeRandomAdjacentEnemyPiece({
-          pieces: input.pieces,
-          center: input.movedPiece,
-          actorSide: input.actorSide,
-        })
-      ) {
+      const burned = removeRandomAdjacentEnemyPiece({
+        pieces: input.pieces,
+        center: input.movedPiece,
+        actorSide: input.actorSide,
+      });
+      if (burned) {
         markMoveSkillFx();
+        skillVisualEffects.push({
+          kind: 'flame_burn',
+          row: burned.row,
+          col: burned.col,
+        });
       }
     }
   }
@@ -3147,7 +3154,7 @@ export function applyMoveSkillEffects(input: {
   if (defs.length === 0) {
     stripSkillStateForGiantImmunity(state, input.pieces);
     writeSkillState(input.position, state);
-    return { moveSkillEffectTriggered };
+    return { moveSkillEffectTriggered, skillVisualEffects };
   }
 
   const matchedDefs = defs.filter((raw) => {
@@ -4539,5 +4546,5 @@ export function applyMoveSkillEffects(input: {
   );
   stripSkillStateForGiantImmunity(state, input.pieces);
   writeSkillState(input.position, state);
-  return { moveSkillEffectTriggered };
+  return { moveSkillEffectTriggered, skillVisualEffects };
 }

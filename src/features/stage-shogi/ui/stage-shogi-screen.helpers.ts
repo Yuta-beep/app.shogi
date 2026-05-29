@@ -2640,7 +2640,7 @@ export function buildPreservedMovedPieceForPlayer(
   const imageSignedUrl = preferBundledPromotedImageOverRemoteUrl(
     resolvedPieceCode ?? moved.pieceCode ?? null,
     promoted,
-    promotedDef?.imageSignedUrl ?? moved.imageSignedUrl,
+    promotedDef?.imageSignedUrl ?? moved.imageSignedUrl ?? null,
   );
   const resolvedChar = resolvedPieceCode
     ? pieceCharFromCode(resolvedPieceCode, moved.side, promoted)

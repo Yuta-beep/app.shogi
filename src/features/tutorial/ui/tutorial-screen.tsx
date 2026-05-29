@@ -16,10 +16,14 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { tutorialAssets } from '@/constants/tutorial-assets';
+import { tutorialDialogues } from '@/features/tutorial/data/tutorial-dialogues';
 import {
   getTutorialOverlayForIndex,
-  tutorialDialogues,
-} from '@/features/tutorial/data/tutorial-dialogues';
+  resolveTutorialOverlaySize,
+  TUTORIAL_BUBBLE_LAYOUT,
+  TUTORIAL_CHARACTER_LAYOUT,
+  TUTORIAL_NAV_BUTTON_LAYOUT,
+} from '@/features/tutorial/data/tutorial-layout';
 import { useScreenBgm } from '@/hooks/common/use-screen-bgm';
 import { playSe } from '@/lib/audio/audio-manager';
 
@@ -106,7 +110,11 @@ export function TutorialScreen() {
     setCurrentIndex((i) => Math.max(i - 1, 0));
   }, [isFirst]);
 
-  const charSize = Math.min(winW * 1.6, 920);
+  const charSize = Math.min(
+    winW * TUTORIAL_CHARACTER_LAYOUT.widthMultiplier,
+    TUTORIAL_CHARACTER_LAYOUT.maxSize,
+  );
+  const overlaySize = overlay ? resolveTutorialOverlaySize(overlay, winW) : null;
 
   return (
     <ImageBackground
@@ -124,30 +132,6 @@ export function TutorialScreen() {
           style={{ top: insets.top + 12, left: 16 }}
         >
           <MaterialIcons name="arrow-back" size={28} color="#fff" />
-        </Pressable>
-
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="前の説明へ戻る"
-          disabled={isFirst}
-          onPress={prevDialogue}
-          className="absolute z-[9998] active:opacity-90"
-          style={{
-            top: insets.top + 420,
-            left: 150,
-            opacity: isFirst ? 0.4 : 1,
-          }}
-        >
-          <Image
-            source={tutorialAssets.buttons.prev}
-            accessibilityIgnoresInvertColors
-            style={{
-              height: 300,
-              width: 520,
-              maxWidth: winW * 0.72,
-            }}
-            resizeMode="contain"
-          />
         </Pressable>
 
         <ScrollView
@@ -175,9 +159,9 @@ export function TutorialScreen() {
                   source={overlay.source}
                   accessibilityIgnoresInvertColors
                   style={{
-                    height: overlay.height,
-                    width: overlay.height * 1.2,
-                    maxWidth: winW * 0.55,
+                    height: overlaySize!.height,
+                    width: overlaySize!.width,
+                    maxWidth: overlaySize!.maxWidth,
                   }}
                   resizeMode="contain"
                 />
@@ -189,8 +173,8 @@ export function TutorialScreen() {
               className="absolute z-[1]"
               style={{
                 transform: [{ translateY: bounce }],
-                bottom: 120,
-                right: -winW * 0.65,
+                bottom: TUTORIAL_CHARACTER_LAYOUT.bottom,
+                right: -winW * TUTORIAL_CHARACTER_LAYOUT.rightOverflowRatio,
               }}
             >
               <Image
@@ -201,7 +185,15 @@ export function TutorialScreen() {
               />
             </Animated.View>
 
-            <View className="w-full" style={{ height: winW < 768 ? 240 : 320 }} />
+            <View
+              className="w-full"
+              style={{
+                height:
+                  winW < TUTORIAL_BUBBLE_LAYOUT.tabletBreakpoint
+                    ? TUTORIAL_BUBBLE_LAYOUT.spacerHeightMobile
+                    : TUTORIAL_BUBBLE_LAYOUT.spacerHeightTablet,
+              }}
+            />
 
             <Pressable
               accessibilityRole="button"
@@ -212,10 +204,19 @@ export function TutorialScreen() {
               <ImageBackground
                 source={tutorialAssets.bubble}
                 resizeMode="stretch"
-                className="w-full px-10 py-16"
+                className="w-full"
+                style={{
+                  paddingHorizontal: TUTORIAL_BUBBLE_LAYOUT.paddingHorizontal,
+                  paddingVertical: TUTORIAL_BUBBLE_LAYOUT.paddingVertical,
+                }}
                 imageStyle={{ borderRadius: 0 }}
               >
-                <Animated.View style={{ opacity: dialogueOpacity, minHeight: 120 }}>
+                <Animated.View
+                  style={{
+                    opacity: dialogueOpacity,
+                    minHeight: TUTORIAL_BUBBLE_LAYOUT.minTextHeight,
+                  }}
+                >
                   <Text
                     className="text-[18px] font-black leading-[32px] text-white"
                     style={{
@@ -231,33 +232,56 @@ export function TutorialScreen() {
             </Pressable>
 
             <View
-              className="flex-row items-end justify-center gap-4 pb-2"
-              style={{ marginTop: -80, paddingTop: 4 }}
+              className="z-[9998] w-full flex-row items-end justify-between pb-2"
+              style={{
+                marginTop: TUTORIAL_BUBBLE_LAYOUT.nextButtonOverlap,
+                paddingTop: 4,
+                paddingHorizontal: TUTORIAL_NAV_BUTTON_LAYOUT.row.paddingHorizontal,
+                gap: TUTORIAL_NAV_BUTTON_LAYOUT.row.gap,
+              }}
             >
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="前の説明へ戻る"
+                disabled={isFirst}
+                onPress={prevDialogue}
+                className="shrink active:opacity-90"
+                style={{
+                  opacity: isFirst ? 0.4 : 1,
+                  maxWidth: '48%',
+                  marginBottom: TUTORIAL_NAV_BUTTON_LAYOUT.prev.offsetUp,
+                }}
+              >
+                <Image
+                  source={tutorialAssets.buttons.prev}
+                  accessibilityIgnoresInvertColors
+                  style={{
+                    height: TUTORIAL_NAV_BUTTON_LAYOUT.height,
+                    width: TUTORIAL_NAV_BUTTON_LAYOUT.width,
+                    maxWidth: winW * TUTORIAL_NAV_BUTTON_LAYOUT.prev.maxWidthRatio,
+                  }}
+                  resizeMode="contain"
+                />
+              </Pressable>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="次へ"
                 disabled={isLast}
                 onPress={nextDialogue}
-                className="active:opacity-90"
-                style={{ opacity: isLast ? 0.4 : 1, marginLeft: 150 }}
+                className="shrink active:opacity-90"
+                style={{ opacity: isLast ? 0.4 : 1, maxWidth: '48%' }}
               >
                 <Image
                   source={tutorialAssets.buttons.next}
                   accessibilityIgnoresInvertColors
-                  style={{ height: 320, width: 520, maxWidth: winW * 0.9 }}
+                  style={{
+                    height: TUTORIAL_NAV_BUTTON_LAYOUT.height,
+                    width: TUTORIAL_NAV_BUTTON_LAYOUT.width,
+                    maxWidth: winW * TUTORIAL_NAV_BUTTON_LAYOUT.next.maxWidthRatio,
+                  }}
                   resizeMode="contain"
                 />
               </Pressable>
-              <View
-                pointerEvents="none"
-                importantForAccessibility="no-hide-descendants"
-                style={{
-                  width: Math.min(480, winW * 0.8),
-                  height: 300,
-                  opacity: 0,
-                }}
-              />
             </View>
           </View>
         </ScrollView>

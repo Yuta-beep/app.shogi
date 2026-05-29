@@ -148,6 +148,8 @@ export function StageShogiScreen() {
               thornHazardCells={vm.thornHazardCells}
               safeRoomHazardCells={vm.safeRoomHazardCells}
               henEdgeHighlightCells={vm.henEdgeHighlightCells}
+              skillVisualEffects={vm.skillVisualEffects}
+              onSkillVisualEffectFinished={vm.handleSkillVisualEffectFinished}
               onCellPress={vm.handleBoardCellPress}
               onCellLongPress={vm.handleCellLongPress}
             />

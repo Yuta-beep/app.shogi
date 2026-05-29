@@ -18,6 +18,7 @@ import { canonicalToMatchingWire } from '@/lib/matching-server/canonical-game';
 import type { MatchingGameState } from '@/domain/matching-server/protocol';
 import { parseMatchingSquare } from '@/lib/matching-server/square';
 import type { BattleMove } from '@/usecases/stage-battle/game-move-contract';
+import { preparePieceCatalogForBattleAndDisplay } from '@/features/piece-info/lib/piece-catalog-display';
 import type { PieceCatalogItem } from '@/usecases/piece-info/load-piece-catalog-usecase';
 
 type ValidatorInput = {
@@ -34,7 +35,12 @@ type SyncInput = {
   pieceCatalog: PieceCatalogItem[];
 };
 
-type ValidatorRequest = ValidatorInput | SyncInput;
+type NormalizeCatalogInput = {
+  op: 'normalizeCatalog';
+  pieceCatalog: PieceCatalogItem[];
+};
+
+type ValidatorRequest = ValidatorInput | SyncInput | NormalizeCatalogInput;
 
 type ValidatorOutput =
   | {
@@ -105,8 +111,20 @@ function ensureSkillDefinitions(
   return { ...position, boardState };
 }
 
+function preparePvpPieceCatalog(catalog: PieceCatalogItem[]): PieceCatalogItem[] {
+  return preparePieceCatalogForBattleAndDisplay(catalog);
+}
+
+function runNormalizeCatalog(input: NormalizeCatalogInput): {
+  ok: true;
+  pieceCatalog: PieceCatalogItem[];
+} {
+  return { ok: true, pieceCatalog: preparePvpPieceCatalog(input.pieceCatalog) };
+}
+
 function runSync(input: SyncInput): ValidatorOutput {
-  const position = matchingWireToCanonicalPosition(input.wire, input.pieceCatalog);
+  const catalog = preparePvpPieceCatalog(input.pieceCatalog);
+  const position = matchingWireToCanonicalPosition(input.wire, catalog);
   const wire = canonicalToMatchingWire(position);
   wire.canonicalState = {
     sideToMove: position.sideToMove,
@@ -121,10 +139,11 @@ function runSync(input: SyncInput): ValidatorOutput {
 }
 
 function runValidate(input: ValidatorInput): ValidatorOutput {
-  const catalog = normalizePieceCatalog(input.pieceCatalog);
+  const preparedCatalog = preparePvpPieceCatalog(input.pieceCatalog);
+  const catalog = normalizePieceCatalog(preparedCatalog);
   const actorSide = actorRoleToSide(input.actorRole);
   let position = normalizeBattlePosition(input.position);
-  position = ensureSkillDefinitions(position, input.pieceCatalog);
+  position = ensureSkillDefinitions(position, preparedCatalog);
 
   if (position.sideToMove !== actorSide) {
     return { ok: false, code: 'NOT_YOUR_TURN', message: 'It is not your turn.' };
@@ -153,7 +172,7 @@ function runValidate(input: ValidatorInput): ValidatorOutput {
   const committed = applyMove({ position, pieceCatalog: catalog, move });
   const nextPosition = ensureSkillDefinitions(
     normalizeBattlePosition(committed.position),
-    input.pieceCatalog,
+    preparedCatalog,
   );
   const game = normalizeBattleGameStatus(committed.game);
 
@@ -177,7 +196,12 @@ function runValidate(input: ValidatorInput): ValidatorOutput {
   };
 }
 
-function run(input: ValidatorRequest): ValidatorOutput {
+function run(
+  input: ValidatorRequest,
+): ValidatorOutput | { ok: true; pieceCatalog: PieceCatalogItem[] } {
+  if ('op' in input && input.op === 'normalizeCatalog') {
+    return runNormalizeCatalog(input);
+  }
   if ('op' in input && input.op === 'sync') {
     return runSync(input);
   }

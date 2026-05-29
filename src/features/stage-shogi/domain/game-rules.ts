@@ -25,6 +25,7 @@ export type BoardPiece = {
   pieceCode: string | null;
   char: string;
   promoted?: boolean;
+  imageSignedUrl?: string | null;
   /** K 博士: 2 で初回捕獲を耐える。1 のとき 2 回目の捕獲で消える。 */
   kbossLivesRemaining?: number;
   /** 「実」スキルで異化した駒を元に戻すためのスナップショット（未設定なら生来の「異」） */

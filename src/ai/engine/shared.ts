@@ -1,4 +1,5 @@
 import type { BoardCell } from '@/features/stage-shogi/domain/game-rules';
+import { CHAR_TO_CODE } from '@/features/stage-shogi/domain/char-to-piece-code-map';
 import {
   CODE_TO_CHAR,
   PROMOTED_CODE_TO_CHAR,
@@ -83,9 +84,23 @@ export function createMove(base: {
   };
 }
 
-function normalizedMovePieceCode(code: string | null | undefined): string | null {
+/** テスト・旧データの pieceCode とエンジン正規コード（FIR 等）の突合せ用。 */
+const LEGACY_MOVE_CODE_ALIASES: Record<string, string> = {
+  FIRE: 'FIR',
+  DARK: 'YAM',
+  WATER: 'SUI',
+};
+
+export function normalizedMovePieceCode(code: string | null | undefined): string | null {
   if (!code) return null;
-  return toBasePieceCode(code) ?? normalizePieceCode(code);
+  const base = toBasePieceCode(code) ?? normalizePieceCode(code);
+  if (!base) return null;
+  if (LEGACY_MOVE_CODE_ALIASES[base]) return LEGACY_MOVE_CODE_ALIASES[base];
+  const char = CODE_TO_CHAR[base];
+  if (char && CHAR_TO_CODE[char]) {
+    return toBasePieceCode(CHAR_TO_CODE[char]) ?? CHAR_TO_CODE[char];
+  }
+  return base;
 }
 
 export function moveEquals(lhs: AiBattleMove, rhs: AiBattleMove) {

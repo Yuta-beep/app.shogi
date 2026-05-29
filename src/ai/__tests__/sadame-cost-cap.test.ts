@@ -3,7 +3,7 @@ import { generateLegalMoves } from '@/ai/engine/legal-moves';
 import { skillDefinitionsV2ForGachaChar } from '@/ai/engine/gacha-piece-skill-definitions';
 import { activeOpponentTurnMaxPieceCostCap } from '@/ai/engine/skill-runtime';
 import { KIRIN_MOVE_VECTORS } from '@/ai/engine/shop-piece-moves';
-import type { AiBattlePosition, AiPieceDefinition } from '@/ai/model';
+import { normalizeBattlePosition, type AiBattlePosition, type AiPieceDefinition } from '@/ai/model';
 
 const pieceCatalog: AiPieceDefinition[] = [
   {
@@ -135,9 +135,14 @@ describe('定 コスト上限スキル', () => {
     });
 
     expect(afterSadame.position.sideToMove).toBe('enemy');
-    expect(activeOpponentTurnMaxPieceCostCap(afterSadame.position, 'enemy')).toBe(5);
+    expect(
+      activeOpponentTurnMaxPieceCostCap(normalizeBattlePosition(afterSadame.position), 'enemy'),
+    ).toBe(5);
 
-    const enemyLegal = generateLegalMoves({ position: afterSadame.position, pieceCatalog });
+    const enemyLegal = generateLegalMoves({
+      position: normalizeBattlePosition(afterSadame.position),
+      pieceCatalog,
+    });
     expect(enemyLegal.legalMoves.some((m) => m.fromRow === 2 && m.fromCol === 6)).toBe(true);
     expect(enemyLegal.legalMoves.some((m) => m.fromRow === 2 && m.fromCol === 2)).toBe(false);
   });
@@ -203,12 +208,14 @@ describe('定 コスト上限スキル', () => {
       },
     });
 
-    expect(activeOpponentTurnMaxPieceCostCap(afterEnemy.position, 'player')).toBeNull();
+    expect(
+      activeOpponentTurnMaxPieceCostCap(normalizeBattlePosition(afterEnemy.position), 'player'),
+    ).toBeNull();
 
-    const nextEnemyTurn: AiBattlePosition = {
+    const nextEnemyTurn = normalizeBattlePosition({
       ...afterEnemy.position,
       sideToMove: 'enemy',
-    };
+    });
     expect(activeOpponentTurnMaxPieceCostCap(nextEnemyTurn, 'enemy')).toBeNull();
     const kirinCanMove = generateLegalMoves({
       position: nextEnemyTurn,

@@ -1,8 +1,3 @@
-import type { ImageSourcePropType } from 'react-native';
-
-import { tutorialAssets } from '@/constants/tutorial-assets';
-
-/** tutorial.html の tutorialDialogues と同一 */
 export type TutorialDialogue = {
   name: string;
   text: string;
@@ -88,30 +83,5 @@ export const tutorialDialogues: TutorialDialogue[] = [
   },
 ];
 
-/** tutorial.html の updateDialogue と同じインデックスで表示する左側オーバーレイ画像 */
-export type TutorialOverlayLayout = {
-  source: ImageSourcePropType;
-  top: number;
-  left: number;
-  height: number;
-};
-
-export function getTutorialOverlayForIndex(index: number): TutorialOverlayLayout | null {
-  const map: Record<number, TutorialOverlayLayout> = {
-    1: { source: tutorialAssets.overlays.board, top: 120, left: 12, height: 180 },
-    3: { source: tutorialAssets.overlays.stage, top: 50, left: 18, height: 250 },
-    4: { source: tutorialAssets.overlays.light, top: 70, left: 18, height: 230 },
-    5: { source: tutorialAssets.overlays.specialSquare, top: 70, left: 18, height: 220 },
-    6: { source: tutorialAssets.overlays.ukanmuri, top: 60, left: 18, height: 250 },
-    7: { source: tutorialAssets.overlays.gacha, top: 80, left: 18, height: 200 },
-    8: { source: tutorialAssets.overlays.gachaBall, top: 40, left: 18, height: 260 },
-    9: { source: tutorialAssets.overlays.shop, top: 40, left: 18, height: 260 },
-    10: { source: tutorialAssets.overlays.currency, top: 140, left: 30, height: 150 },
-    11: { source: tutorialAssets.overlays.deckbuilder, top: 70, left: 14, height: 220 },
-    12: { source: tutorialAssets.overlays.cost, top: 70, left: 6, height: 220 },
-    14: { source: tutorialAssets.overlays.book, top: 40, left: 2, height: 260 },
-    15: { source: tutorialAssets.overlays.versus, top: 130, left: 18, height: 140 },
-    16: { source: tutorialAssets.overlays.versus, top: 130, left: 18, height: 140 },
-  };
-  return map[index] ?? null;
-}
+export type { TutorialOverlayLayout } from '@/features/tutorial/data/tutorial-layout';
+export { getTutorialOverlayForIndex } from '@/features/tutorial/data/tutorial-layout';

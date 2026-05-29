@@ -1,3 +1,6 @@
+import type { SkillVisualEffect } from '@/domain/battle/skill-visual-effect';
+import { parseSkillVisualEffects } from '@/domain/battle/skill-visual-effect';
+
 export type BattleMove = {
   fromRow: number | null;
   fromCol: number | null;
@@ -34,6 +37,8 @@ export type BattleCommittedMove = {
   actorSide: 'player' | 'enemy';
   move: BattleMove;
   skillTriggered: boolean;
+  /** 盤面に重ねるスキル演出（炎の燃焼など） */
+  skillVisualEffects?: SkillVisualEffect[];
   /** false のとき着手後も手数・手番が進んでいない。クライアントエンジンでは通常 true（盾で取りが無効化されても攻撃側の手番は終了する）。 */
   turnConsumed: boolean;
   position: BattleCanonicalPosition;
@@ -43,6 +48,7 @@ export type BattleCommittedMove = {
 export type BattleAiTurn = {
   selectedMove: BattleMove | null;
   skillTriggered: boolean;
+  skillVisualEffects?: SkillVisualEffect[];
   turnConsumed: boolean;
   meta: {
     engineVersion: string;
@@ -202,6 +208,7 @@ export function parseBattleCommittedMove(raw: unknown): BattleCommittedMove {
     actorSide,
     move: parseMove(obj.move),
     skillTriggered: parseSkillTriggered(obj.skillTriggered ?? obj.skill_triggered, obj.move),
+    skillVisualEffects: parseSkillVisualEffects(obj.skillVisualEffects ?? obj.skill_visual_effects),
     turnConsumed: turnConsumedRaw !== false,
     position: parsePosition(obj.position),
     game: parseGame(obj.game),
@@ -220,6 +227,7 @@ export function parseBattleAiTurn(raw: unknown): BattleAiTurn {
   return {
     selectedMove: rawMove != null ? parseMove(rawMove) : null,
     skillTriggered: parseSkillTriggered(obj.skillTriggered ?? obj.skill_triggered, rawMove),
+    skillVisualEffects: parseSkillVisualEffects(obj.skillVisualEffects ?? obj.skill_visual_effects),
     turnConsumed: turnConsumedRaw !== false,
     meta: meta
       ? {

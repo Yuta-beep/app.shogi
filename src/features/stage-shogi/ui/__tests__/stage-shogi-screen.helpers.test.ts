@@ -1,3 +1,4 @@
+import type { Side } from '@/features/stage-shogi/domain/game-rules';
 import type { BoardPiece } from '@/features/stage-shogi/ui/stage-shogi-screen.helpers';
 import {
   alignLegalMovesToBoardPieces,
@@ -486,7 +487,7 @@ describe('applyKirinImmunityShieldMarkToPieces', () => {
     const adjacent: BoardPiece[] = [
       kirin,
       {
-        side: 'enemy',
+        side: 'enemy' as Side,
         row: 4,
         col: 5,
         pieceCode: 'FU',
@@ -499,7 +500,7 @@ describe('applyKirinImmunityShieldMarkToPieces', () => {
     const far: BoardPiece[] = [
       kirin,
       {
-        side: 'enemy',
+        side: 'enemy' as Side,
         row: 2,
         col: 2,
         pieceCode: 'FU',

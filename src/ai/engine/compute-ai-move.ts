@@ -160,6 +160,7 @@ export function computeAiMove(input: {
   return {
     selectedMove: committed.move,
     skillTriggered: committed.skillTriggered,
+    skillVisualEffects: committed.skillVisualEffects,
     turnConsumed: committed.turnConsumed,
     meta: {
       engineVersion: 'local-ts',

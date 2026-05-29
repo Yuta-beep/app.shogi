@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 
+import type { SkillVisualEffect } from '@/domain/battle/skill-visual-effect';
 import { generateLegalMoves } from '@/ai/engine';
 import { passiveAuraImmobilizedCellKeys } from '@/ai/engine/skill-runtime';
 import type { AiBattlePosition } from '@/ai/model';
@@ -327,6 +328,7 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
   const [pieceCatalog, setPieceCatalog] = useState<PieceCatalogItem[]>([]);
   const [winner, setWinner] = useState<Side | null>(null);
   const [skillActivationText, setSkillActivationText] = useState<string | null>(null);
+  const [skillVisualEffects, setSkillVisualEffects] = useState<SkillVisualEffect[]>([]);
   const [inspectingPiece, setInspectingPiece] = useState<InspectingPieceState>(null);
   const debugLogPieceMoveRanges = (
     label: string,
@@ -538,6 +540,24 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
 
     return keys;
   }
+
+  const queueSkillVisualEffects = useCallback((effects: SkillVisualEffect[] | undefined) => {
+    if (!effects?.length) return;
+    setSkillVisualEffects(effects);
+  }, []);
+
+  const handleSkillVisualEffectFinished = useCallback((finished: SkillVisualEffect) => {
+    setSkillVisualEffects((current) =>
+      current.filter(
+        (effect) =>
+          !(
+            effect.kind === finished.kind &&
+            effect.row === finished.row &&
+            effect.col === finished.col
+          ),
+      ),
+    );
+  }, []);
 
   function showSkillActivation(actor: Side, move: BattleMove, board: BoardPiece[]) {
     const keys = buildSkillActivationEffectSoundKeys(move, actor, board);
@@ -977,6 +997,9 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
         if (attempt === 0 && response.skillTriggered && response.selectedMove) {
           showSkillActivation('enemy', response.selectedMove, piecesRef.current);
         }
+        if (attempt === 0) {
+          queueSkillVisualEffects(response.skillVisualEffects);
+        }
         const patchedAiPosition = patchHandsForStarReturnSkill(
           response.position,
           'enemy',
@@ -1298,6 +1321,7 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
       if (result.skillTriggered) {
         showSkillActivation('player', result.move, optimisticBaseline);
       }
+      queueSkillVisualEffects(result.skillVisualEffects);
       let patchedPlayerPosition = patchHandsForStarReturnSkill(
         result.position,
         'player',
@@ -2314,6 +2338,8 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
     pieceSfenMapping,
     winner,
     skillActivationText,
+    skillVisualEffects,
+    handleSkillVisualEffectFinished,
     inspectingPiece,
     handleBoardCellPress,
     handleCellLongPress,

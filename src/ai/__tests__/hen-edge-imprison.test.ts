@@ -2,7 +2,7 @@ import { applyMove } from '@/ai/engine/apply-move';
 import { skillDefinitionsV2ForGachaChar } from '@/ai/engine/gacha-piece-skill-definitions';
 import { henBoardEdgeCells } from '@/ai/engine/hen-board-edge';
 import { generateLegalMoves } from '@/ai/engine/legal-moves';
-import type { AiBattlePosition, AiPieceDefinition } from '@/ai/model';
+import { normalizeBattlePosition, type AiBattlePosition, type AiPieceDefinition } from '@/ai/model';
 
 const pieceCatalog: AiPieceDefinition[] = [
   {
@@ -145,7 +145,7 @@ describe('辺 辺封印', () => {
     expect(stunnedOnTop.length).toBeGreaterThanOrEqual(3);
 
     const enemyOnTop = generateLegalMoves({
-      position: { ...committed.position, sideToMove: 'enemy' },
+      position: normalizeBattlePosition({ ...committed.position, sideToMove: 'enemy' }),
       pieceCatalog,
     });
     expect(enemyOnTop.legalMoves.some((m) => m.fromRow === 0 && m.fromCol === 2)).toBe(false);

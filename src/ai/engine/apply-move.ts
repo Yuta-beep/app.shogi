@@ -11,6 +11,7 @@ import type {
   AiPieceDefinition,
   Side,
 } from '@/ai/model';
+import type { SkillVisualEffect } from '@/domain/battle/skill-visual-effect';
 import type {
   BattleCanonicalPosition,
   BattleCommittedMove,
@@ -2118,12 +2119,13 @@ export function applyMove(input: {
   };
 
   let moveSkillEffectTriggeredFromMoveEffects = false;
+  let skillVisualEffectsFromMoveEffects: SkillVisualEffect[] = [];
   if (turnAdvanced) {
     // 既存ハザードの残りターンを進める。
     tickSkillStateDurations(nextPosition);
     if (applyLandingDerivedEffects) {
       // 着手によるスキル効果（移動制限・毒マスなど）を反映（実際にマスへ入ったときのみ）。
-      const { moveSkillEffectTriggered } = applyMoveSkillEffects({
+      const { moveSkillEffectTriggered, skillVisualEffects } = applyMoveSkillEffects({
         position: nextPosition,
         move,
         actorSide,
@@ -2132,6 +2134,7 @@ export function applyMove(input: {
         didCapture,
       });
       moveSkillEffectTriggeredFromMoveEffects = moveSkillEffectTriggered;
+      skillVisualEffectsFromMoveEffects = skillVisualEffects;
     }
     hands = nextPosition.hands;
   }
@@ -2475,5 +2478,6 @@ export function applyMove(input: {
     turnConsumed: turnAdvanced,
     position: nextPosition,
     game,
+    skillVisualEffects: skillVisualEffectsFromMoveEffects,
   };
 }
