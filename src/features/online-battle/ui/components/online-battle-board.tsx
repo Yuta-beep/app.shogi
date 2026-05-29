@@ -3,6 +3,8 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { BoardCell, BoardPiece } from '@/features/stage-shogi/domain/game-rules';
 import { getPieceImageSource } from '@/features/stage-shogi/ui/stage-shogi-screen.helpers';
+import { OnlineBattleSkillParticleLayer } from '@/features/online-battle/ui/components/online-battle-skill-particle-layer';
+import type { SkillVisualEffect } from '@/domain/battle/skill-visual-effect';
 import { toViewCoord } from '@/lib/matching-server/game-bridge';
 import type { PlayerSide } from '@/domain/matching-server/protocol';
 import type { PieceCatalogItem } from '@/usecases/piece-info/load-piece-catalog-usecase';
@@ -23,6 +25,8 @@ export function OnlineBattleBoard(props: {
   enemyPreviewTargets?: BoardCell[];
   pieceDefsByCode: Record<string, PieceCatalogItem>;
   canInteract: boolean;
+  skillVisualEffects?: SkillVisualEffect[];
+  onSkillVisualEffectFinished?: (effect: SkillVisualEffect) => void;
   onCellPress: (viewRow: number, viewCol: number) => void;
 }) {
   const {
@@ -34,6 +38,8 @@ export function OnlineBattleBoard(props: {
     legalTargets,
     enemyPreviewTargets = [],
     canInteract,
+    skillVisualEffects = [],
+    onSkillVisualEffectFinished,
     onCellPress,
   } = props;
   const cellSize = boardSize / BOARD_SIZE;
@@ -107,6 +113,14 @@ export function OnlineBattleBoard(props: {
           </View>
         );
       })}
+      {onSkillVisualEffectFinished ? (
+        <OnlineBattleSkillParticleLayer
+          effects={skillVisualEffects}
+          boardSize={boardSize}
+          myRole={myRole}
+          onEffectFinished={onSkillVisualEffectFinished}
+        />
+      ) : null}
     </View>
   );
 }

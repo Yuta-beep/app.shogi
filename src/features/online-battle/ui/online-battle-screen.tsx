@@ -18,7 +18,9 @@ import {
   onlineBattleHtmlAssets,
   onlineBattleHtmlPreloadTargets,
 } from '@/constants/online-battle-html-assets';
+import { skillParticleAssetPreloadTargets } from '@/constants/skill-particle-assets';
 import { stageShogiBattleAssetPreloadTargets } from '@/constants/stage-shogi-battle-assets';
+import { StageShogiHandSkillParticleLayer } from '@/features/stage-shogi/ui/components/stage-shogi-hand-skill-particle-layer';
 import { BattleEndResultOverlay } from '@/features/stage-shogi/ui/components/battle-end-result-overlay';
 import { homeAssets } from '@/constants/home-assets';
 import { OnlineBattleBoard } from '@/features/online-battle/ui/components/online-battle-board';
@@ -71,10 +73,13 @@ export function OnlineBattleScreen() {
     cancelTimeAction,
     confirmHouseSkill,
     cancelHouseSkill,
+    skillVisualEffects,
+    handleSkillVisualEffectFinished,
   } = vm;
   const { isReady: areAssetsReady } = useAssetPreload([
     ...onlineBattleHtmlPreloadTargets,
     ...stageShogiBattleAssetPreloadTargets,
+    ...skillParticleAssetPreloadTargets,
   ]);
   useScreenBgm('onlineBattle');
 
@@ -208,6 +213,8 @@ export function OnlineBattleScreen() {
                       Boolean(pendingHeartAllyPick?.length)
                     }
                     onCellPress={handleCellPress}
+                    skillVisualEffects={skillVisualEffects}
+                    onSkillVisualEffectFinished={handleSkillVisualEffectFinished}
                   />
                 ) : null}
                 {pendingSatoriEnemyPick && pendingSatoriEnemyPick.length > 1 ? (
@@ -240,42 +247,60 @@ export function OnlineBattleScreen() {
 
                 <Text style={[styles.sideHeading, { marginTop: 12 }]}>あなたの持ち駒</Text>
                 {pieceSfenMapping ? (
-                  <StageShogiHandsRow
-                    side="player"
-                    hands={hands}
-                    pieceSfenMapping={pieceSfenMapping}
-                    pieceDefsByCode={pieceDefsByCode}
-                    selectedDropPieceCode={selectedDropPieceCode}
-                    sideToMove="player"
-                    isAiThinking={false}
-                    isCreatingGame={false}
-                    isFinished={Boolean(session.winnerSide)}
-                    hasPendingPromotion={Boolean(pendingPromotion)}
-                    pieceCatalog={pieceCatalog}
-                    compact
-                    onPressPiece={handleHandPiecePress}
-                  />
+                  <View style={styles.handParticleWrap}>
+                    <StageShogiHandsRow
+                      side="player"
+                      hands={hands}
+                      pieceSfenMapping={pieceSfenMapping}
+                      pieceDefsByCode={pieceDefsByCode}
+                      selectedDropPieceCode={selectedDropPieceCode}
+                      sideToMove="player"
+                      isAiThinking={false}
+                      isCreatingGame={false}
+                      isFinished={Boolean(session.winnerSide)}
+                      hasPendingPromotion={Boolean(pendingPromotion)}
+                      pieceCatalog={pieceCatalog}
+                      compact
+                      onPressPiece={handleHandPiecePress}
+                    />
+                    <StageShogiHandSkillParticleLayer
+                      effects={skillVisualEffects}
+                      side="player"
+                      hands={hands}
+                      pieceCatalog={pieceCatalog}
+                      onEffectFinished={handleSkillVisualEffectFinished}
+                    />
+                  </View>
                 ) : (
                   <Text style={styles.handSummaryText}>{session.playerHandSummary}</Text>
                 )}
 
                 <Text style={[styles.sideHeading, { marginTop: 12 }]}>敵の持ち駒</Text>
                 {pieceSfenMapping ? (
-                  <StageShogiHandsRow
-                    side="enemy"
-                    hands={hands}
-                    pieceSfenMapping={pieceSfenMapping}
-                    pieceDefsByCode={pieceDefsByCode}
-                    selectedDropPieceCode={null}
-                    sideToMove="player"
-                    isAiThinking={false}
-                    isCreatingGame={false}
-                    isFinished={Boolean(session.winnerSide)}
-                    hasPendingPromotion={false}
-                    pieceCatalog={pieceCatalog}
-                    compact
-                    onPressPiece={() => undefined}
-                  />
+                  <View style={styles.handParticleWrap}>
+                    <StageShogiHandsRow
+                      side="enemy"
+                      hands={hands}
+                      pieceSfenMapping={pieceSfenMapping}
+                      pieceDefsByCode={pieceDefsByCode}
+                      selectedDropPieceCode={null}
+                      sideToMove="player"
+                      isAiThinking={false}
+                      isCreatingGame={false}
+                      isFinished={Boolean(session.winnerSide)}
+                      hasPendingPromotion={false}
+                      pieceCatalog={pieceCatalog}
+                      compact
+                      onPressPiece={() => undefined}
+                    />
+                    <StageShogiHandSkillParticleLayer
+                      effects={skillVisualEffects}
+                      side="enemy"
+                      hands={hands}
+                      pieceCatalog={pieceCatalog}
+                      onEffectFinished={handleSkillVisualEffectFinished}
+                    />
+                  </View>
                 ) : (
                   <Text style={styles.handSummaryText}>{session.opponentHandSummary}</Text>
                 )}
@@ -519,6 +544,10 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#334155',
     lineHeight: 20,
+  },
+  handParticleWrap: {
+    position: 'relative',
+    minHeight: 40,
   },
   rowColumn: {
     flexDirection: 'column',

@@ -1,6 +1,7 @@
 /** 着手後スキルで盤面・持ち駒に出すビジュアルエフェクト（エンジン → UI） */
 export type SkillVisualEffectPlacement =
   | { type: 'board'; row: number; col: number }
+  | { type: 'board_center' }
   | { type: 'hand'; side: 'player' | 'enemy'; pieceCode: string; slotIndex?: number };
 
 export type SkillVisualEffect = {
@@ -23,6 +24,9 @@ function parsePlacement(raw: unknown): SkillVisualEffectPlacement | null {
     const col = Number((raw as { col?: unknown }).col);
     if (!isValidBoardCell(row, col)) return null;
     return { type: 'board', row, col };
+  }
+  if (type === 'board_center') {
+    return { type: 'board_center' };
   }
   if (type === 'hand') {
     const side = (raw as { side?: unknown }).side;

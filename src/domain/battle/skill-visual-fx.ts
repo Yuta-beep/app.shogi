@@ -7,6 +7,28 @@ export function boardSkillFxPlacement(row: number, col: number): SkillVisualEffe
   return { type: 'board', row, col };
 }
 
+export function boardCenterSkillFxPlacement(): SkillVisualEffectPlacement {
+  return { type: 'board_center' };
+}
+
+export function appendBoardCenterSkillVisualEffect(
+  bucket: SkillVisualEffect[],
+  input: {
+    idPrefix: string;
+    seq: number;
+    pieceChar: string;
+  },
+): number {
+  bucket.push(
+    createSkillVisualEffect({
+      id: `${input.idPrefix}-c${input.seq}`,
+      pieceChar: input.pieceChar,
+      placements: [boardCenterSkillFxPlacement()],
+    }),
+  );
+  return input.seq + 1;
+}
+
 export function handSkillFxPlacement(
   side: 'player' | 'enemy',
   pieceCode: string,
@@ -104,13 +126,17 @@ export function createSkillVisualEffect(input: {
 
 export function splitSkillVisualPlacements(effect: SkillVisualEffect): {
   board: { row: number; col: number }[];
+  boardCenter: boolean;
   hand: { side: 'player' | 'enemy'; pieceCode: string; slotIndex?: number }[];
 } {
   const board: { row: number; col: number }[] = [];
+  let boardCenter = false;
   const hand: { side: 'player' | 'enemy'; pieceCode: string; slotIndex?: number }[] = [];
   for (const placement of effect.placements) {
     if (placement.type === 'board') {
       board.push({ row: placement.row, col: placement.col });
+    } else if (placement.type === 'board_center') {
+      boardCenter = true;
     } else {
       hand.push({
         side: placement.side,
@@ -119,5 +145,5 @@ export function splitSkillVisualPlacements(effect: SkillVisualEffect): {
       });
     }
   }
-  return { board, hand };
+  return { board, boardCenter, hand };
 }

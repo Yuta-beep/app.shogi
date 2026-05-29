@@ -4,20 +4,24 @@ import { View } from 'react-native';
 import type { SkillVisualEffect } from '@/domain/battle/skill-visual-effect';
 import { splitSkillVisualPlacements } from '@/domain/battle/skill-visual-fx';
 import { SkillParticleBurst } from '@/features/stage-shogi/ui/components/skill-particle-burst';
-import { BOARD_CELL_INNER_RATIO } from '@/features/stage-shogi/ui/stage-shogi-screen.helpers';
+import { toViewCoord } from '@/lib/matching-server/game-bridge';
+import type { PlayerSide } from '@/domain/matching-server/protocol';
 
-/** 盤面内側エリアに対する中央オーバーレイの一辺比率（煽など） */
 const BOARD_CENTER_OVERLAY_RATIO = 0.78;
 const BOARD_CENTER_OFFSET_RATIO = (1 - BOARD_CENTER_OVERLAY_RATIO) / 2;
 
 function BoardCenterSkillEffectGroup({
   effect,
+  boardSize,
   onEffectFinished,
 }: {
   effect: SkillVisualEffect;
+  boardSize: number;
   onEffectFinished: (effect: SkillVisualEffect) => void;
 }) {
   const { boardCenter } = splitSkillVisualPlacements(effect);
+  const overlaySize = boardSize * BOARD_CENTER_OVERLAY_RATIO;
+  const offset = boardSize * BOARD_CENTER_OFFSET_RATIO;
 
   useEffect(() => {
     if (!boardCenter) {
@@ -33,10 +37,10 @@ function BoardCenterSkillEffectGroup({
       onFinished={() => onEffectFinished(effect)}
       style={{
         position: 'absolute',
-        left: `${BOARD_CENTER_OFFSET_RATIO * 100}%`,
-        top: `${BOARD_CENTER_OFFSET_RATIO * 100}%`,
-        width: `${BOARD_CENTER_OVERLAY_RATIO * 100}%`,
-        height: `${BOARD_CENTER_OVERLAY_RATIO * 100}%`,
+        left: offset,
+        top: offset,
+        width: overlaySize,
+        height: overlaySize,
         zIndex: 32,
       }}
     />
@@ -45,11 +49,16 @@ function BoardCenterSkillEffectGroup({
 
 function BoardSkillEffectGroup({
   effect,
+  boardSize,
+  myRole,
   onEffectFinished,
 }: {
   effect: SkillVisualEffect;
+  boardSize: number;
+  myRole: PlayerSide;
   onEffectFinished: (effect: SkillVisualEffect) => void;
 }) {
+  const cellSize = boardSize / 9;
   const { board } = splitSkillVisualPlacements(effect);
   const remainingRef = useRef(board.length);
 
@@ -66,27 +75,28 @@ function BoardSkillEffectGroup({
     }
   }, [board.length, effect, onEffectFinished]);
 
-  if (board.length === 0) {
-    return null;
-  }
+  if (board.length === 0) return null;
 
   return (
     <>
-      {board.map((cell, index) => (
-        <SkillParticleBurst
-          key={`${effect.id}-board-${cell.row}-${cell.col}-${index}`}
-          pieceChar={effect.pieceChar}
-          onFinished={onBurstFinished}
-          style={{
-            position: 'absolute',
-            top: `${cell.row * BOARD_CELL_INNER_RATIO * 100}%`,
-            left: `${cell.col * BOARD_CELL_INNER_RATIO * 100}%`,
-            width: `${BOARD_CELL_INNER_RATIO * 100}%`,
-            height: `${BOARD_CELL_INNER_RATIO * 100}%`,
-            zIndex: 28,
-          }}
-        />
-      ))}
+      {board.map((cell, index) => {
+        const view = toViewCoord(cell.row, cell.col, myRole);
+        return (
+          <SkillParticleBurst
+            key={`${effect.id}-board-${cell.row}-${cell.col}-${index}`}
+            pieceChar={effect.pieceChar}
+            onFinished={onBurstFinished}
+            style={{
+              position: 'absolute',
+              left: view.col * cellSize,
+              top: view.row * cellSize,
+              width: cellSize,
+              height: cellSize,
+              zIndex: 28,
+            }}
+          />
+        );
+      })}
     </>
   );
 }
@@ -97,11 +107,15 @@ function hasBoardLayerPlacement(effect: SkillVisualEffect): boolean {
   );
 }
 
-export const StageShogiSkillParticleLayer = memo(function StageShogiSkillParticleLayer({
+export const OnlineBattleSkillParticleLayer = memo(function OnlineBattleSkillParticleLayer({
   effects,
+  boardSize,
+  myRole,
   onEffectFinished,
 }: {
   effects: SkillVisualEffect[];
+  boardSize: number;
+  myRole: PlayerSide;
   onEffectFinished: (effect: SkillVisualEffect) => void;
 }) {
   const boardEffects = effects.filter(hasBoardLayerPlacement);
@@ -114,10 +128,19 @@ export const StageShogiSkillParticleLayer = memo(function StageShogiSkillParticl
         return (
           <View key={effect.id} pointerEvents="none" style={{ position: 'absolute', inset: 0 }}>
             {boardCenter ? (
-              <BoardCenterSkillEffectGroup effect={effect} onEffectFinished={onEffectFinished} />
+              <BoardCenterSkillEffectGroup
+                effect={effect}
+                boardSize={boardSize}
+                onEffectFinished={onEffectFinished}
+              />
             ) : null}
             {board.length > 0 ? (
-              <BoardSkillEffectGroup effect={effect} onEffectFinished={onEffectFinished} />
+              <BoardSkillEffectGroup
+                effect={effect}
+                boardSize={boardSize}
+                myRole={myRole}
+                onEffectFinished={onEffectFinished}
+              />
             ) : null}
           </View>
         );

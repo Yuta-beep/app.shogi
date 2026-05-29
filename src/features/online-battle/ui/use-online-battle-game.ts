@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { applyMove } from '@/ai/engine';
+import type { SkillVisualEffect } from '@/domain/battle/skill-visual-effect';
 import type {
   MatchingGameState,
   PlayerSide,
@@ -152,6 +154,16 @@ export function useOnlineBattleGame(matchId?: string) {
   const [enemyPreviewTargets, setEnemyPreviewTargets] = useState<BoardCell[]>([]);
   const [timeActionMode, setTimeActionMode] = useState<TimeActionMode | null>(null);
   const [moveError, setMoveError] = useState<string | null>(null);
+  const [skillVisualEffects, setSkillVisualEffects] = useState<SkillVisualEffect[]>([]);
+
+  const queueSkillVisualEffects = useCallback((effects: SkillVisualEffect[] | undefined) => {
+    if (!effects?.length) return;
+    setSkillVisualEffects(effects);
+  }, []);
+
+  const handleSkillVisualEffectFinished = useCallback((finished: SkillVisualEffect) => {
+    setSkillVisualEffects((current) => current.filter((effect) => effect.id !== finished.id));
+  }, []);
 
   const client = useMemo(() => getMatchingServerClient(), []);
   const loadCatalogUseCase = useMemo(() => createLoadPieceCatalogUseCase(), []);
@@ -357,6 +369,19 @@ export function useOnlineBattleGame(matchId?: string) {
             ? `着手: ${payload.lastMove.piece} ${payload.lastMove.from ?? '打'}→${payload.lastMove.to}`
             : '盤面が更新されました';
           setMoveError(null);
+          const skipRemoteFx = locallyAuditedVersionsRef.current.delete(payload.version);
+          if (!skipRemoteFx && payload.lastMove) {
+            const record = getOnlineBattleGame(payload.matchId);
+            if (record) {
+              const move = movePayloadToBattleMove(payload.lastMove);
+              const preview = applyMove({
+                position: record.position,
+                pieceCatalog: record.pieceCatalog,
+                move,
+              });
+              queueSkillVisualEffects(preview.skillVisualEffects);
+            }
+          }
           applyServerGame(payload.matchId, nextRole, nextGame, moveText);
           if (nextRole && payload.lastMove) {
             const board = getDisplayBoardPieces(payload.matchId);
@@ -451,6 +476,7 @@ export function useOnlineBattleGame(matchId?: string) {
     isReady,
     matchId,
     playRemoteLastMoveAudio,
+    queueSkillVisualEffects,
     role,
     userId,
   ]);
@@ -479,6 +505,7 @@ export function useOnlineBattleGame(matchId?: string) {
         if (committed.skillTriggered) {
           playSkillAudio(move, 'player', boardAfter);
         }
+        queueSkillVisualEffects(committed.skillVisualEffects);
         locallyAuditedVersionsRef.current.add(expectedVersion);
         client.makeMove({
           userId,
@@ -507,6 +534,7 @@ export function useOnlineBattleGame(matchId?: string) {
       matchId,
       playMoveAudio,
       playSkillAudio,
+      queueSkillVisualEffects,
       refreshLocalFromRegistry,
       role,
       userId,
@@ -852,5 +880,7 @@ export function useOnlineBattleGame(matchId?: string) {
     cancelTimeAction,
     confirmHouseSkill,
     cancelHouseSkill,
+    skillVisualEffects,
+    handleSkillVisualEffectFinished,
   };
 }

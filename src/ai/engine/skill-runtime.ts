@@ -1,5 +1,6 @@
 import type { SkillVisualEffect } from '@/domain/battle/skill-visual-effect';
 import {
+  appendBoardCenterSkillVisualEffect,
   appendBoardSkillVisualEffects,
   appendHandSkillVisualEffects,
   handSlotIndexBeforeRemoval,
@@ -13,6 +14,7 @@ import type { AiBattleMove, AiBattlePosition, AiBoardPiece } from '@/ai/model';
 import { piecesFromBoardState, toBasePieceCode } from '@/ai/model';
 import {
   buildSkillMoverFlags,
+  isAoriPiece,
   isAPieceInstance,
   isDeckBuilderStyleSpecialBoardPiece,
   isKingPiece,
@@ -1852,6 +1854,21 @@ export function applyMoveSkillEffects(input: {
     movePieceCode: input.move.pieceCode,
     movedPiece,
   });
+
+  // 煽: 移動時に盤面中央へスキル画像を大きく表示（演出のみ）。
+  if (
+    input.movedPiece &&
+    isAoriPiece(input.movedPiece) &&
+    input.move.fromRow != null &&
+    input.move.fromCol != null &&
+    !input.move.dropPieceCode
+  ) {
+    skillFxSeq = appendBoardCenterSkillVisualEffect(skillVisualEffects, {
+      idPrefix: skillFxIdPrefix,
+      seq: skillFxSeq,
+      pieceChar: '煽',
+    });
+  }
 
   // ai.shogi の explicit override 相当: 定義読み込み失敗時でも炎スキルは発動可能にする。
   if (
