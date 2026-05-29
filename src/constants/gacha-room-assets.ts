@@ -52,7 +52,7 @@ export function toGachaRollCode(key: string): string {
  */
 export function resolveGachaRollCode(
   displayKey: string,
-  apiBanners: ReadonlyArray<{ key: string }>,
+  apiBanners: readonly { key: string }[],
 ): string | null {
   const intro = resolveGachaBannerKey(displayKey);
   const fromApi = apiBanners.find((b) => resolveGachaBannerKey(b.key) === intro);

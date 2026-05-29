@@ -12,12 +12,12 @@ import { normalizePieceCatalogItemForDisplay } from '@/features/piece-info/lib/p
 
 function mergeOwnedPiecesIntoCatalog(
   catalog: PieceCatalogItem[],
-  ownedPieces: Array<{
+  ownedPieces: {
     char: string;
     pieceId?: number;
     imageSignedUrl?: string | null;
     quantity?: number;
-  }>,
+  }[],
 ): PieceCatalogItem[] {
   const byChar = new Map(catalog.map((piece) => [piece.char, piece]));
 

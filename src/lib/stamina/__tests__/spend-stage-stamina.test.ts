@@ -1,4 +1,10 @@
 import { ApiClientError } from '@/infra/http/api-client';
+import {
+  ensureNormalStageStaminaCharged,
+  mergeServerHomeStamina,
+  resetMockStaminaState,
+  resetPendingClientStaminaDeduction,
+} from '@/lib/stamina/spend-stage-stamina';
 
 const mockSnapshot = {
   playerName: 'Test',
@@ -23,13 +29,6 @@ jest.mock('@/hooks/common/home-snapshot-store', () => ({
     mockSnapshot.nextRecoveryAt = next.nextRecoveryAt;
   },
 }));
-
-import {
-  ensureNormalStageStaminaCharged,
-  mergeServerHomeStamina,
-  resetMockStaminaState,
-  resetPendingClientStaminaDeduction,
-} from '@/lib/stamina/spend-stage-stamina';
 
 describe('ensureNormalStageStaminaCharged', () => {
   beforeEach(() => {

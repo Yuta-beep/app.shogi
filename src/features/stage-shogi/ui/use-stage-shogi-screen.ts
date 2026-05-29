@@ -1019,7 +1019,7 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
             const promotedDef = selectedMoveForApply.promote
               ? promotedPieceDefsByCode[codeKey]
               : null;
-            const imageSignedUrl = promotedDef?.imageSignedUrl ?? moved.imageSignedUrl;
+            const imageSignedUrl = promotedDef?.imageSignedUrl ?? moved.imageSignedUrl ?? null;
             const resolvedChar = resolvedPieceCode
               ? pieceCharFromCode(resolvedPieceCode, moved.side, promoted)
               : moved.char;

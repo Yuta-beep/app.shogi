@@ -11,7 +11,10 @@ import {
 import { createLoadPieceCatalogUseCase } from '@/usecases/piece-info/create-piece-info-usecases';
 import { isApiDataSource } from '@/lib/config/data-source';
 import { supabase } from '@/lib/supabase/supabase-client';
-import { filterOwnedPiecesForDeckBuilder } from '@/features/deck-builder/lib/deck-builder-excluded-pieces';
+import {
+  filterOwnedPiecesForDeckBuilder,
+  isPieceExcludedFromDeckBuilder,
+} from '@/features/deck-builder/lib/deck-builder-excluded-pieces';
 import { getDeckBuilderPieceCost } from '@/features/deck-builder/lib/deck-builder-piece-cost';
 import { sortOwnedPiecesForDeckBuilder } from '@/features/piece-shop/lib/sort-owned-pieces-for-deck-builder';
 import { normalizeDeckBuilderPieceChar } from '@/features/deck-builder/lib/deck-builder-piece-char';

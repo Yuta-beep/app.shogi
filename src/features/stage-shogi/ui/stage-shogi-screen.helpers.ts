@@ -193,8 +193,7 @@ export type BoardPiece = {
   pieceCode: string | null;
   char: string;
   promoted?: boolean;
-  imageSignedUrl: string | null;
-  kbossLivesRemaining?: number;
+  imageSignedUrl?: string | null;
   darkVeiled?: boolean;
   aTransformed?: boolean;
   /** 牢・柵スキル由来の行動不能（鎖.png） */
@@ -248,14 +247,14 @@ export type TrustedBoardEndpoints = {
 function preferBundledPromotedImageOverRemoteUrl(
   pieceCode: string | null,
   promoted: boolean,
-  remoteOrFallback: string | null,
+  remoteOrFallback: string | null | undefined,
 ): string | null {
-  if (!promoted || !pieceCode) return remoteOrFallback;
+  if (!promoted || !pieceCode) return remoteOrFallback ?? null;
   const base = (toBasePieceCode(pieceCode) ?? pieceCode).toUpperCase();
   if (LOCAL_PROMOTED_PIECE_IMAGE_BY_CODE[base] != null) {
     return null;
   }
-  return remoteOrFallback;
+  return remoteOrFallback ?? null;
 }
 
 export function toBasePieceCode(pieceCode: string | null | undefined): string | null {
@@ -524,8 +523,8 @@ export function rewriteMoveCoordsToBoardCell(
     ...move,
     fromRow: boardRow,
     fromCol: boardCol,
-    toRow: move.toRow !== null ? move.toRow - dRow : null,
-    toCol: move.toCol !== null ? move.toCol - dCol : null,
+    toRow: move.toRow - dRow,
+    toCol: move.toCol - dCol,
   };
 }
 

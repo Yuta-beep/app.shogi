@@ -483,7 +483,7 @@ describe('applyKirinImmunityShieldMarkToPieces', () => {
       promoted: false,
       imageSignedUrl: null,
     };
-    const adjacent = [
+    const adjacent: BoardPiece[] = [
       kirin,
       {
         side: 'enemy',
@@ -496,7 +496,7 @@ describe('applyKirinImmunityShieldMarkToPieces', () => {
       },
     ];
     expect(kirinShowsImmunityShieldMark(adjacent, kirin)).toBe(true);
-    const far = [
+    const far: BoardPiece[] = [
       kirin,
       {
         side: 'enemy',

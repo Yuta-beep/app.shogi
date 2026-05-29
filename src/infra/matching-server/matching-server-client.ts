@@ -1,5 +1,4 @@
 import type {
-  MatchingGameState,
   PlayerSide,
   WebSocketClientMessage,
   WebSocketServerMessage,

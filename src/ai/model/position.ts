@@ -14,6 +14,7 @@ export type AiBattlePosition = Omit<BattleCanonicalPosition, 'hands'> & {
 };
 export type AiBoardPiece = BoardPiece & {
   imageSignedUrl?: string | null;
+  copiedMoveVectors?: unknown[];
 };
 
 function cloneRecord(value: Record<string, unknown>): Record<string, unknown> {

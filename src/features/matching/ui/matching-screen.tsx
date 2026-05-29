@@ -34,7 +34,11 @@ export function MatchingScreen() {
       <GlobalHomeHud />
       <View className="flex-1">
         <View className="absolute inset-0">
-          <Image source={matchingBg} contentFit="cover" style={{ width: '100%', height: '100%' }} />
+          <Image
+            source={onlineMatchAssets.matchingBackground}
+            contentFit="cover"
+            style={{ width: '100%', height: '100%' }}
+          />
           <View className="absolute inset-0 bg-black/40" />
         </View>
 

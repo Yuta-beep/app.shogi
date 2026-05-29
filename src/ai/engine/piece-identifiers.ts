@@ -88,7 +88,6 @@ const DANCE_PIECE_CODES = ['MAI', 'SHOP_MAI', '舞'] as const;
 const SWAMP_PIECE_CODES = ['SWAMP', '沼'] as const;
 const POISON_PIECE_CODES = ['POISON', '毒'] as const;
 const WATERFALL_PIECE_CODES = ['WATERFALL', '滝', '8CC9287B7E93'] as const;
-const A_PIECE_CODES = ['A', 'あ'] as const;
 const WOOD_PIECE_CODES = ['WOOD', 'MOK', '木'] as const;
 const LEAF_PIECE_CODES = ['LEAF', 'HAA', '葉'] as const;
 const BULL_PIECE_CODES = ['BULL', '犇', '1275B5728D1C'] as const;

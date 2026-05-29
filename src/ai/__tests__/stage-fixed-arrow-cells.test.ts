@@ -23,14 +23,14 @@ const pieceCatalog: AiPieceDefinition[] = [
     skill: '',
     move: '',
     moveVectors: [
-      { dr: -1, dc: 0 },
-      { dr: 1, dc: 0 },
-      { dr: 0, dc: -1 },
-      { dr: 0, dc: 1 },
-      { dr: -1, dc: -1 },
-      { dr: -1, dc: 1 },
-      { dr: 1, dc: -1 },
-      { dr: 1, dc: 1 },
+      { dx: 0, dy: -1, maxStep: 1 },
+      { dx: 0, dy: 1, maxStep: 1 },
+      { dx: -1, dy: 0, maxStep: 1 },
+      { dx: 1, dy: 0, maxStep: 1 },
+      { dx: -1, dy: -1, maxStep: 1 },
+      { dx: 1, dy: -1, maxStep: 1 },
+      { dx: -1, dy: 1, maxStep: 1 },
+      { dx: 1, dy: 1, maxStep: 1 },
     ],
     isRepeatable: false,
     pieceCode: 'OU',
@@ -102,7 +102,9 @@ describe('ステージ23 矢印マス', () => {
   });
 
   it('左矢印に入ると1マス左へスライドする', () => {
-    jest.spyOn(guardrails, 'assertMoveAllowedBySessionCatalog').mockImplementation(() => {});
+    jest
+      .spyOn(guardrails, 'assertMoveAllowedBySessionCatalog')
+      .mockImplementation((input) => input.move);
     const position = mergeStageFixedArrowTilesIntoPosition(
       {
         sideToMove: 'player',
@@ -141,8 +143,11 @@ describe('ステージ23 矢印マス', () => {
         pieceCode: 'OU',
       },
     });
-    const pieces = (committed.position.boardState as { pieces: { row: number; col: number }[] })
-      .pieces;
+    const pieces = (
+      committed.position.boardState as {
+        pieces: { side: 'player' | 'enemy'; row: number; col: number }[];
+      }
+    ).pieces;
     const king = pieces.find((p) => p.side === 'player' && p.row === 3 && p.col === 4);
     expect(king).toBeDefined();
   });
@@ -241,7 +246,9 @@ describe('ステージ28 矢印マス', () => {
   });
 
   it('下矢印に入ると1マス下へスライドする', () => {
-    jest.spyOn(guardrails, 'assertMoveAllowedBySessionCatalog').mockImplementation(() => {});
+    jest
+      .spyOn(guardrails, 'assertMoveAllowedBySessionCatalog')
+      .mockImplementation((input) => input.move);
     const position = mergeStageFixedArrowTilesIntoPosition(
       {
         sideToMove: 'player',
@@ -280,8 +287,11 @@ describe('ステージ28 矢印マス', () => {
         pieceCode: 'OU',
       },
     });
-    const pieces = (committed.position.boardState as { pieces: { row: number; col: number }[] })
-      .pieces;
+    const pieces = (
+      committed.position.boardState as {
+        pieces: { side: 'player' | 'enemy'; row: number; col: number }[];
+      }
+    ).pieces;
     const king = pieces.find((p) => p.side === 'player' && p.row === 5 && p.col === 3);
     expect(king).toBeDefined();
   });
@@ -341,7 +351,9 @@ describe('ステージ29 矢印マス', () => {
   });
 
   it('右矢印に入ると1マス右へスライドする', () => {
-    jest.spyOn(guardrails, 'assertMoveAllowedBySessionCatalog').mockImplementation(() => {});
+    jest
+      .spyOn(guardrails, 'assertMoveAllowedBySessionCatalog')
+      .mockImplementation((input) => input.move);
     const position = mergeStageFixedArrowTilesIntoPosition(
       {
         sideToMove: 'player',
@@ -380,8 +392,11 @@ describe('ステージ29 矢印マス', () => {
         pieceCode: 'OU',
       },
     });
-    const pieces = (committed.position.boardState as { pieces: { row: number; col: number }[] })
-      .pieces;
+    const pieces = (
+      committed.position.boardState as {
+        pieces: { side: 'player' | 'enemy'; row: number; col: number }[];
+      }
+    ).pieces;
     const king = pieces.find((p) => p.side === 'player' && p.row === 4 && p.col === 3);
     expect(king).toBeDefined();
   });
@@ -446,7 +461,9 @@ describe('ステージ34 矢印マス', () => {
   });
 
   it('下矢印に入ると1マス下へスライドする', () => {
-    jest.spyOn(guardrails, 'assertMoveAllowedBySessionCatalog').mockImplementation(() => {});
+    jest
+      .spyOn(guardrails, 'assertMoveAllowedBySessionCatalog')
+      .mockImplementation((input) => input.move);
     const position = mergeStageFixedArrowTilesIntoPosition(
       {
         sideToMove: 'player',
@@ -485,8 +502,11 @@ describe('ステージ34 矢印マス', () => {
         pieceCode: 'OU',
       },
     });
-    const pieces = (committed.position.boardState as { pieces: { row: number; col: number }[] })
-      .pieces;
+    const pieces = (
+      committed.position.boardState as {
+        pieces: { side: 'player' | 'enemy'; row: number; col: number }[];
+      }
+    ).pieces;
     const king = pieces.find((p) => p.side === 'player' && p.row === 4 && p.col === 2);
     expect(king).toBeDefined();
   });
@@ -546,7 +566,9 @@ describe('ステージ38 矢印マス', () => {
   });
 
   it('右矢印に入ると1マス右へスライドする', () => {
-    jest.spyOn(guardrails, 'assertMoveAllowedBySessionCatalog').mockImplementation(() => {});
+    jest
+      .spyOn(guardrails, 'assertMoveAllowedBySessionCatalog')
+      .mockImplementation((input) => input.move);
     const position = mergeStageFixedArrowTilesIntoPosition(
       {
         sideToMove: 'player',
@@ -585,8 +607,11 @@ describe('ステージ38 矢印マス', () => {
         pieceCode: 'OU',
       },
     });
-    const pieces = (committed.position.boardState as { pieces: { row: number; col: number }[] })
-      .pieces;
+    const pieces = (
+      committed.position.boardState as {
+        pieces: { side: 'player' | 'enemy'; row: number; col: number }[];
+      }
+    ).pieces;
     const king = pieces.find((p) => p.side === 'player' && p.row === 4 && p.col === 3);
     expect(king).toBeDefined();
   });
@@ -646,7 +671,9 @@ describe('ステージ41 矢印マス', () => {
   });
 
   it('上矢印に入ると1マス上へスライドする', () => {
-    jest.spyOn(guardrails, 'assertMoveAllowedBySessionCatalog').mockImplementation(() => {});
+    jest
+      .spyOn(guardrails, 'assertMoveAllowedBySessionCatalog')
+      .mockImplementation((input) => input.move);
     const position = mergeStageFixedArrowTilesIntoPosition(
       {
         sideToMove: 'player',
@@ -685,14 +712,19 @@ describe('ステージ41 矢印マス', () => {
         pieceCode: 'OU',
       },
     });
-    const pieces = (committed.position.boardState as { pieces: { row: number; col: number }[] })
-      .pieces;
+    const pieces = (
+      committed.position.boardState as {
+        pieces: { side: 'player' | 'enemy'; row: number; col: number }[];
+      }
+    ).pieces;
     const king = pieces.find((p) => p.side === 'player' && p.row === 3 && p.col === 2);
     expect(king).toBeDefined();
   });
 
   it('下矢印に入ると1マス下へスライドする', () => {
-    jest.spyOn(guardrails, 'assertMoveAllowedBySessionCatalog').mockImplementation(() => {});
+    jest
+      .spyOn(guardrails, 'assertMoveAllowedBySessionCatalog')
+      .mockImplementation((input) => input.move);
     const position = mergeStageFixedArrowTilesIntoPosition(
       {
         sideToMove: 'player',
@@ -731,8 +763,11 @@ describe('ステージ41 矢印マス', () => {
         pieceCode: 'OU',
       },
     });
-    const pieces = (committed.position.boardState as { pieces: { row: number; col: number }[] })
-      .pieces;
+    const pieces = (
+      committed.position.boardState as {
+        pieces: { side: 'player' | 'enemy'; row: number; col: number }[];
+      }
+    ).pieces;
     const king = pieces.find((p) => p.side === 'player' && p.row === 5 && p.col === 6);
     expect(king).toBeDefined();
   });
@@ -804,7 +839,9 @@ describe('ステージ45 矢印マス', () => {
   });
 
   it('上矢印に入ると1マス上へスライドする', () => {
-    jest.spyOn(guardrails, 'assertMoveAllowedBySessionCatalog').mockImplementation(() => {});
+    jest
+      .spyOn(guardrails, 'assertMoveAllowedBySessionCatalog')
+      .mockImplementation((input) => input.move);
     const position = mergeStageFixedArrowTilesIntoPosition(
       {
         sideToMove: 'player',
@@ -843,14 +880,19 @@ describe('ステージ45 矢印マス', () => {
         pieceCode: 'OU',
       },
     });
-    const pieces = (committed.position.boardState as { pieces: { row: number; col: number }[] })
-      .pieces;
+    const pieces = (
+      committed.position.boardState as {
+        pieces: { side: 'player' | 'enemy'; row: number; col: number }[];
+      }
+    ).pieces;
     const king = pieces.find((p) => p.side === 'player' && p.row === 3 && p.col === 0);
     expect(king).toBeDefined();
   });
 
   it('下矢印に入ると1マス下へスライドする', () => {
-    jest.spyOn(guardrails, 'assertMoveAllowedBySessionCatalog').mockImplementation(() => {});
+    jest
+      .spyOn(guardrails, 'assertMoveAllowedBySessionCatalog')
+      .mockImplementation((input) => input.move);
     const position = mergeStageFixedArrowTilesIntoPosition(
       {
         sideToMove: 'player',
@@ -889,8 +931,11 @@ describe('ステージ45 矢印マス', () => {
         pieceCode: 'OU',
       },
     });
-    const pieces = (committed.position.boardState as { pieces: { row: number; col: number }[] })
-      .pieces;
+    const pieces = (
+      committed.position.boardState as {
+        pieces: { side: 'player' | 'enemy'; row: number; col: number }[];
+      }
+    ).pieces;
     const king = pieces.find((p) => p.side === 'player' && p.row === 5 && p.col === 1);
     expect(king).toBeDefined();
   });
@@ -961,7 +1006,9 @@ describe('ステージ49 矢印マス', () => {
   });
 
   it('下矢印に入ると1マス下へスライドする', () => {
-    jest.spyOn(guardrails, 'assertMoveAllowedBySessionCatalog').mockImplementation(() => {});
+    jest
+      .spyOn(guardrails, 'assertMoveAllowedBySessionCatalog')
+      .mockImplementation((input) => input.move);
     const position = mergeStageFixedArrowTilesIntoPosition(
       {
         sideToMove: 'player',
@@ -1000,14 +1047,19 @@ describe('ステージ49 矢印マス', () => {
         pieceCode: 'OU',
       },
     });
-    const pieces = (committed.position.boardState as { pieces: { row: number; col: number }[] })
-      .pieces;
+    const pieces = (
+      committed.position.boardState as {
+        pieces: { side: 'player' | 'enemy'; row: number; col: number }[];
+      }
+    ).pieces;
     const king = pieces.find((p) => p.side === 'player' && p.row === 4 && p.col === 1);
     expect(king).toBeDefined();
   });
 
   it('上矢印に入ると1マス上へスライドする', () => {
-    jest.spyOn(guardrails, 'assertMoveAllowedBySessionCatalog').mockImplementation(() => {});
+    jest
+      .spyOn(guardrails, 'assertMoveAllowedBySessionCatalog')
+      .mockImplementation((input) => input.move);
     const position = mergeStageFixedArrowTilesIntoPosition(
       {
         sideToMove: 'player',
@@ -1046,8 +1098,11 @@ describe('ステージ49 矢印マス', () => {
         pieceCode: 'OU',
       },
     });
-    const pieces = (committed.position.boardState as { pieces: { row: number; col: number }[] })
-      .pieces;
+    const pieces = (
+      committed.position.boardState as {
+        pieces: { side: 'player' | 'enemy'; row: number; col: number }[];
+      }
+    ).pieces;
     const king = pieces.find((p) => p.side === 'player' && p.row === 4 && p.col === 1);
     expect(king).toBeDefined();
   });

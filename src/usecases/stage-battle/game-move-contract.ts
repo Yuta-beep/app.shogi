@@ -18,8 +18,8 @@ export type BattleCanonicalPosition = {
   stateHash: string | null;
   boardState: Record<string, unknown>;
   hands: {
-    player: Partial<Record<string, number>>;
-    enemy: Partial<Record<string, number>>;
+    player: Record<string, number>;
+    enemy: Record<string, number>;
   };
 };
 
@@ -120,11 +120,22 @@ function parseMove(raw: unknown): BattleMove {
   };
 }
 
+function sanitizeHandsRecord(raw: unknown): Record<string, number> {
+  const obj = asRecord(raw) ?? {};
+  const hands: Record<string, number> = {};
+  for (const [pieceCode, count] of Object.entries(obj)) {
+    if (typeof count === 'number' && Number.isFinite(count)) {
+      hands[pieceCode] = count;
+    }
+  }
+  return hands;
+}
+
 function parseHands(raw: unknown): BattleCanonicalPosition['hands'] {
   const obj = asRecord(raw) ?? {};
   return {
-    player: (asRecord(obj.player) ?? {}) as Partial<Record<string, number>>,
-    enemy: (asRecord(obj.enemy) ?? {}) as Partial<Record<string, number>>,
+    player: sanitizeHandsRecord(obj.player),
+    enemy: sanitizeHandsRecord(obj.enemy),
   };
 }
 

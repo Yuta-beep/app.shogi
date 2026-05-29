@@ -52,7 +52,7 @@ export function applyPieceShopMockPurchase(item: ShopItem): PieceShopMockState {
 }
 
 export function getPieceShopMockOwnedPiecesForDeckBuilder() {
-  const catalogItems: Array<{ key: ShopItem['key']; desc: string; move: string }> = [
+  const catalogItems: { key: ShopItem['key']; desc: string; move: string }[] = [
     {
       key: '走',
       desc: 'なし',

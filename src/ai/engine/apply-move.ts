@@ -934,7 +934,7 @@ function applyHostileCaptureAtCell(input: {
   }
 
   let phantomEvaded = false;
-  let adjacentEmpty: Array<{ row: number; col: number }> = [];
+  let adjacentEmpty: { row: number; col: number }[] = [];
   const evadeChance = input.skipProcCaptureEvasions
     ? null
     : resolveEvadeCaptureProcChanceForPiece(input.boardState, captured);
@@ -1605,7 +1605,7 @@ export function applyMove(input: {
         }
 
         let phantomEvaded = false;
-        let adjacentEmpty: Array<{ row: number; col: number }> = [];
+        let adjacentEmpty: { row: number; col: number }[] = [];
         let kenSwordEvadeTo: { row: number; col: number } | null = null;
         if (!shieldAbortedMove && !captureOwnPiece && isKenSwordPieceForApply(captured)) {
           const horizKen = collectHorizontalAdjacentEmptyCells(nextPieces, move.toRow, move.toCol);

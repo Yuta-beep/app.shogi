@@ -1,11 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import type { MatchingGameState, PlayerSide } from '@/domain/matching-server/protocol';
+import type {
+  MatchingGameState,
+  PlayerSide,
+  WebSocketServerMessage,
+} from '@/domain/matching-server/protocol';
 import { useAuthSession } from '@/hooks/common/auth-session-context';
 import { OnlineMatchApiDataSource } from '@/infra/datasources/online-match-datasource';
 import { getMatchingServerClient } from '@/infra/matching-server/matching-server-client';
 import { boardPiecesFromState, handSummary } from '@/lib/matching-server/board-view';
-import { battleMoveToServerPayload, fromViewCoord } from '@/lib/matching-server/game-bridge';
+import { catalogDefsByCode, fromViewCoord } from '@/lib/matching-server/game-bridge';
 import { canonicalToMatchingWire, isMyTurnInCanonical } from '@/lib/matching-server/canonical-game';
 import {
   formatMatchPlayerLabel,
@@ -16,7 +20,6 @@ import {
   setActiveMatchSession,
   updateActiveMatchGame,
 } from '@/lib/matching-server/session-store';
-import type { WebSocketServerMessage } from '@/domain/matching-server/protocol';
 import {
   applyOnlineBattleMove,
   createOnlineBattleGame,
@@ -32,6 +35,7 @@ import {
   BoardCell,
   type BoardPiece,
   type HandsState,
+  type Side,
 } from '@/features/stage-shogi/domain/game-rules';
 import { createPieceSfenMapping } from '@/features/stage-shogi/domain/piece-conversion';
 import {
@@ -45,7 +49,6 @@ import { createLoadPieceCatalogUseCase } from '@/usecases/piece-info/create-piec
 import type { PieceCatalogItem } from '@/usecases/piece-info/load-piece-catalog-usecase';
 import type { BattleMove } from '@/usecases/stage-battle/game-move-contract';
 import type { OnlineBattleSession } from '@/usecases/online-battle/load-online-battle-session-usecase';
-import { catalogDefsByCode } from '@/lib/matching-server/game-bridge';
 import {
   applyTimeActionNotation,
   buildHouseSkillOnlyMove,
@@ -69,7 +72,6 @@ import {
   playBattleSkillActivationSe,
   type BattleAudioCatalog,
 } from '@/lib/battle/battle-move-audio';
-import type { Side } from '@/features/stage-shogi/domain/game-rules';
 
 export type PendingOnlinePromotion = {
   promoteMove: BattleMove;
@@ -164,6 +166,36 @@ export function useOnlineBattleGame(matchId?: string) {
     [pieceDefsByChar, pieceDefsByCode, promotedPieceDefsByCode],
   );
   const locallyAuditedVersionsRef = useRef<Set<number>>(new Set());
+  const playMoveAudio = useCallback(
+    (move: BattleMove, actorSide: Side, board: BoardPiece[]) => {
+      playBattleMoveOrPromoteSe(move, actorSide, board, battleAudioCatalog);
+    },
+    [battleAudioCatalog],
+  );
+  const playSkillAudio = useCallback(
+    (move: BattleMove, actorSide: Side, board: BoardPiece[]) => {
+      playBattleSkillActivationSe(move, actorSide, board, battleAudioCatalog);
+    },
+    [battleAudioCatalog],
+  );
+  const playRemoteLastMoveAudio = useCallback(
+    (
+      nextGame: MatchingGameState,
+      myRole: PlayerSide,
+      board: BoardPiece[],
+      options: { skillTriggered: boolean },
+    ) => {
+      if (locallyAuditedVersionsRef.current.delete(nextGame.version)) return;
+      if (!nextGame.lastMove) return;
+      const actorSide: Side = nextGame.turn === myRole ? 'enemy' : 'player';
+      const move = movePayloadToBattleMove(nextGame.lastMove);
+      playMoveAudio(move, actorSide, board);
+      if (options.skillTriggered) {
+        playSkillAudio(move, actorSide, board);
+      }
+    },
+    [playMoveAudio, playSkillAudio],
+  );
 
   const clearSkillUiState = useCallback(() => {
     setPendingTimeActionCell(null);
@@ -419,6 +451,7 @@ export function useOnlineBattleGame(matchId?: string) {
     isReady,
     matchId,
     playRemoteLastMoveAudio,
+    role,
     userId,
   ]);
 
@@ -468,7 +501,6 @@ export function useOnlineBattleGame(matchId?: string) {
     },
     [
       applyServerGame,
-      battleAudioCatalog,
       clearSkillUiState,
       client,
       game,

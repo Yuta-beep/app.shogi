@@ -41,7 +41,9 @@ export function matchingWireToCanonicalPosition(
   const catalog = normalizePieceCatalog(pieceCatalog);
   const defsByCode: Record<string, (typeof catalog)[number]> = {};
   for (const item of catalog) {
-    defsByCode[item.pieceCode] = item;
+    if (item.pieceCode) {
+      defsByCode[item.pieceCode] = item;
+    }
   }
 
   const pieces: BoardPiece[] = [];

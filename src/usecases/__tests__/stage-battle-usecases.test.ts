@@ -1,5 +1,11 @@
 import { ApiClientError } from '@/infra/http/api-client';
 import { resetMockStaminaState } from '@/lib/stamina/spend-stage-stamina';
+import {
+  MockClaimStageClearRewardUseCase,
+  MockPrepareStageBattleUseCase,
+  resetMockPreparedStageId,
+  resetMockStageClearRewards,
+} from '@/usecases/stage-battle/mock-stage-battle-usecases';
 
 const mockSnapshot = {
   playerName: 'Test',

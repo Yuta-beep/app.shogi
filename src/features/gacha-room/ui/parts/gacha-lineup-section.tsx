@@ -52,7 +52,7 @@ export function GachaLineupSection({ banner }: GachaLineupSectionProps) {
       ) : (
         <View className="mt-3 gap-3">
           {lineup.map((entry, index) => {
-            const imageSource = resolvePieceImageSource({ char: entry.char, name: entry.name });
+            const imageSource = resolvePieceImageSource({ char: entry.char });
             const rateLabel = formatGachaLineupDropRateLabel(entry, totalWeight);
             return (
               <View

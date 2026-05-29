@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import { Crown, Shield } from 'lucide-react-native';
 import { memo, useEffect, useMemo } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, Text, View, type ViewStyle } from 'react-native';
 import Animated, {
   cancelAnimation,
   Easing,
@@ -132,7 +132,7 @@ const KirinImmunityShieldBadge = memo(function KirinImmunityShieldBadge() {
 });
 
 const MaiDanceRestrictionXMark = memo(function MaiDanceRestrictionXMark() {
-  const barStyle = {
+  const barStyle: ViewStyle = {
     position: 'absolute' as const,
     width: '86%',
     height: 3,

@@ -1,8 +1,7 @@
 import { Image } from 'expo-image';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import type { BoardPiece } from '@/features/stage-shogi/domain/game-rules';
-import type { BoardCell } from '@/features/stage-shogi/domain/game-rules';
+import type { BoardCell, BoardPiece } from '@/features/stage-shogi/domain/game-rules';
 import { getPieceImageSource } from '@/features/stage-shogi/ui/stage-shogi-screen.helpers';
 import { toViewCoord } from '@/lib/matching-server/game-bridge';
 import type { PlayerSide } from '@/domain/matching-server/protocol';
@@ -34,7 +33,6 @@ export function OnlineBattleBoard(props: {
     selectedCell,
     legalTargets,
     enemyPreviewTargets = [],
-    pieceDefsByCode,
     canInteract,
     onCellPress,
   } = props;
@@ -49,6 +47,7 @@ export function OnlineBattleBoard(props: {
     ? toViewCoord(selectedCell.row, selectedCell.col, myRole)
     : null;
   const targetsView = legalTargets.map((t) => toViewCoord(t.row, t.col, myRole));
+  const enemyTargetsView = enemyPreviewTargets.map((t) => toViewCoord(t.row, t.col, myRole));
 
   return (
     <View style={[styles.frame, { width: boardSize, height: boardSize }]}>
@@ -84,9 +83,6 @@ export function OnlineBattleBoard(props: {
         const source = getPieceImageSource({
           pieceCode: piece.pieceCode,
           char: piece.char,
-          side: piece.side,
-          promoted: piece.promoted,
-          pieceDefsByCode,
         });
         return (
           <View

@@ -1,4 +1,12 @@
 import { resetLocalBattleRegistry } from '@/ai/local-battle-registry';
+import {
+  ensureNormalStageStaminaCharged,
+  resetMockStaminaState,
+} from '@/lib/stamina/spend-stage-stamina';
+import {
+  LocalClaimStageClearRewardUseCase,
+  LocalPrepareStageBattleUseCase,
+} from '@/usecases/stage-battle/local-stage-battle-usecases';
 
 const mockSnapshot = {
   playerName: 'Test',
@@ -34,15 +42,6 @@ jest.mock('@/lib/stamina/spend-stage-stamina', () => {
     ensureNormalStageStaminaCharged: jest.fn(actual.ensureNormalStageStaminaCharged),
   };
 });
-
-import {
-  LocalClaimStageClearRewardUseCase,
-  LocalPrepareStageBattleUseCase,
-} from '@/usecases/stage-battle/local-stage-battle-usecases';
-import {
-  ensureNormalStageStaminaCharged,
-  resetMockStaminaState,
-} from '@/lib/stamina/spend-stage-stamina';
 
 jest.mock('@/lib/supabase/supabase-client', () => ({
   supabase: {

@@ -189,7 +189,7 @@ export class MockRollGachaUseCase implements RollGachaUseCase {
         char: picked.char,
         name: picked.name,
         rarity: picked.rarity,
-        description: picked.description,
+        description: picked.description ?? '',
       };
 
       if (isGachaCollectibleChar(picked.char)) {

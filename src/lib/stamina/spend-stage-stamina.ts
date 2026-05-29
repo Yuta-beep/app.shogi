@@ -112,7 +112,7 @@ export type SpendStageStaminaResult =
 
 export function trySpendNormalStageStamina(): SpendStageStaminaResult {
   const cost = NORMAL_STAGE_STAMINA_COST;
-  const { stamina, maxStamina, nextRecoveryAt } = currentMockStamina();
+  const { stamina, maxStamina } = currentMockStamina();
   if (stamina < cost) {
     return { ok: false, current: stamina, required: cost };
   }

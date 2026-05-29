@@ -8,8 +8,10 @@ import {
   type HandsState,
   type Side,
 } from '@/features/stage-shogi/domain/game-rules';
-import { pieceCharFromCode } from '@/features/stage-shogi/ui/stage-shogi-screen.helpers';
-import { buildBoardState } from '@/features/stage-shogi/ui/stage-shogi-screen.helpers';
+import {
+  buildBoardState,
+  pieceCharFromCode,
+} from '@/features/stage-shogi/ui/stage-shogi-screen.helpers';
 import { formatMatchingSquare, parseMatchingSquare } from '@/lib/matching-server/square';
 import { toBasePieceCode } from '@/ai/model/move';
 import type { BattleMove } from '@/usecases/stage-battle/game-move-contract';
@@ -154,7 +156,8 @@ export function fromViewCoord(
 export function catalogDefsByCode(catalog: PieceCatalogItem[]): Record<string, PieceCatalogItem> {
   const out: Record<string, PieceCatalogItem> = {};
   for (const item of catalog) {
-    out[item.pieceCode.toUpperCase()] = item;
+    const pieceCode = item.pieceCode?.toUpperCase();
+    if (pieceCode) out[pieceCode] = item;
   }
   return out;
 }

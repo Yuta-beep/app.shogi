@@ -1,7 +1,7 @@
 import { generateLegalMoves } from '@/ai/engine/legal-moves';
 import type { AiBattlePosition, AiPieceDefinition } from '@/ai/model';
 
-function catalogFor(chars: Array<{ char: string; code: string }>): AiPieceDefinition[] {
+function catalogFor(chars: { char: string; code: string }[]): AiPieceDefinition[] {
   return chars.map(({ char, code }) => ({
     char,
     name: char,

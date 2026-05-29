@@ -1,4 +1,4 @@
-import { toBasePieceCode as toAiBasePieceCode } from '@/ai/model/move';
+import { toBasePieceCode } from '@/ai/model/move';
 import { BATTLE_PIECE_EFFECT_SOUND_MODULES } from '@/constants/battle-piece-effect-sound-modules.generated';
 import type { MovePayload } from '@/domain/matching-server/protocol';
 import type { BoardPiece, Side } from '@/features/stage-shogi/domain/game-rules';
@@ -14,7 +14,6 @@ import {
 } from '@/lib/audio/audio-manager';
 import { isPhysicalBattleMove } from '@/lib/battle/battle-skill-interaction';
 import { parseMatchingSquare } from '@/lib/matching-server/square';
-import { toBasePieceCode } from '@/ai/model/move';
 import type { BattleMove } from '@/usecases/stage-battle/game-move-contract';
 import type { PieceCatalogItem } from '@/usecases/piece-info/load-piece-catalog-usecase';
 
@@ -68,7 +67,7 @@ function resolveKanjiForBattleMoveSound(
     }
   }
   const rawPc = (move.pieceCode ?? '').toUpperCase();
-  const base = (toAiBasePieceCode(move.pieceCode ?? null) ?? rawPc).toUpperCase();
+  const base = (toBasePieceCode(move.pieceCode ?? null) ?? rawPc).toUpperCase();
   const ch = pieceCharFromCode(base, actorSide, move.promote === true);
   return ch && ch !== '?' ? normalizeKanjiForBattleAudioKey(ch) : null;
 }
@@ -80,7 +79,7 @@ function pieceDefForBattleAudio(
 ): PieceCatalogItem | undefined {
   const { pieceDefsByCode, pieceDefsByChar, promotedPieceDefsByCode } = catalog;
   const rawCode = (move.pieceCode ?? '').toUpperCase();
-  const baseRaw = toAiBasePieceCode(move.pieceCode ?? null);
+  const baseRaw = toBasePieceCode(move.pieceCode ?? null);
   const base = (baseRaw ?? rawCode).toUpperCase();
   if (move.promote) {
     return (
@@ -202,7 +201,7 @@ function buildSkillActivationEffectSoundKeys(
   const rawCode = move.pieceCode ?? move.dropPieceCode;
   if (rawCode) {
     const upper = rawCode.toUpperCase();
-    const base = (toAiBasePieceCode(rawCode) ?? upper).toUpperCase();
+    const base = (toBasePieceCode(rawCode) ?? upper).toUpperCase();
     push(pieceCharFromCode(upper, actorSide, move.promote === true));
     if (base !== upper) {
       push(pieceCharFromCode(base, actorSide, move.promote === true));
