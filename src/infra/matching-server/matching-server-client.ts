@@ -69,7 +69,7 @@ export class MatchingServerClient {
     return () => this.listeners.delete(listener);
   }
 
-  connect(userId: string, options?: { matchId?: string }): Promise<void> {
+  connect(userId: string, options?: { matchId?: string; ticket?: string }): Promise<void> {
     const wsBaseUrl = getMatchingServerWsBaseUrl();
     if (!wsBaseUrl) {
       return Promise.reject(new Error('EXPO_PUBLIC_MATCHING_SERVER_WS_URL が未設定です'));
@@ -86,7 +86,11 @@ export class MatchingServerClient {
     this.lastError = null;
 
     const url = new URL(`${wsBaseUrl}/ws`);
-    url.searchParams.set('userId', userId);
+    if (options?.ticket) {
+      url.searchParams.set('ticket', options.ticket);
+    } else {
+      url.searchParams.set('userId', userId);
+    }
     if (options?.matchId) {
       url.searchParams.set('matchId', options.matchId);
     }

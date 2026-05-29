@@ -166,6 +166,22 @@ async function renderReadyHook(options: {
     status: 'in_progress',
     startedAt: '2026-04-27T00:00:00.000Z',
   });
+  const boardStatePieces = options.snapshot.placements.map((placement) => ({
+    side: placement.side === 'enemy' ? 'enemy' : 'player',
+    row: placement.row,
+    col: placement.col,
+    pieceCode: placement.pieceCode,
+    char: placement.char,
+    promoted: false,
+    imageSignedUrl: placement.imageSignedUrl,
+  }));
+  mockLoadGameStateExecute.mockResolvedValue({
+    gameId: 'game-1',
+    position: createPosition('9/9/9/9/9/9/9/9/9', {
+      boardState: { pieces: boardStatePieces },
+    }),
+    game: createGame(),
+  });
   mockLoadGameLegalMovesExecute.mockResolvedValue(options.legalMoves);
   mockRequestAiMoveExecute.mockResolvedValue({
     selectedMove: null,
@@ -256,8 +272,8 @@ describe('useStageShogiScreen', () => {
       snapshot: createSnapshot([
         {
           side: 'player',
-          row: 2,
-          col: 1,
+          row: 1,
+          col: 0,
           pieceId: 1,
           pieceCode: 'FU',
           char: '歩',
@@ -269,7 +285,6 @@ describe('useStageShogiScreen', () => {
       pieceCatalog,
       legalMoves,
     });
-
     act(() => {
       result.current.handleBoardCellPress(1, 0);
     });
@@ -352,8 +367,8 @@ describe('useStageShogiScreen', () => {
       snapshot: createSnapshot([
         {
           side: 'player',
-          row: 5,
-          col: 5,
+          row: 4,
+          col: 4,
           pieceId: 1,
           pieceCode: 'TIME',
           char: '時',
@@ -363,8 +378,8 @@ describe('useStageShogiScreen', () => {
         },
         {
           side: 'enemy',
-          row: 5,
-          col: 6,
+          row: 4,
+          col: 5,
           pieceId: 2,
           pieceCode: 'FU',
           char: '歩',
@@ -453,8 +468,8 @@ describe('useStageShogiScreen', () => {
       snapshot: createSnapshot([
         {
           side: 'player',
-          row: 5,
-          col: 5,
+          row: 4,
+          col: 4,
           pieceId: 1,
           pieceCode: 'TIME',
           char: '時',
@@ -464,8 +479,8 @@ describe('useStageShogiScreen', () => {
         },
         {
           side: 'enemy',
-          row: 5,
-          col: 6,
+          row: 4,
+          col: 5,
           pieceId: 2,
           pieceCode: 'FU',
           char: '歩',
@@ -556,8 +571,8 @@ describe('useStageShogiScreen', () => {
       snapshot: createSnapshot([
         {
           side: 'player',
-          row: 3,
-          col: 1,
+          row: 2,
+          col: 0,
           pieceId: 1,
           pieceCode: 'FU',
           char: '歩',

@@ -873,7 +873,7 @@ describe('ai engine legal moves', () => {
     expect(pawnMoves.length).toBeGreaterThan(0);
   });
 
-  it('book copies last enemy moved piece movement range', () => {
+  it('book copies adjacent ally destination cells', () => {
     const position: AiBattlePosition = {
       sideToMove: 'player',
       turnNumber: 3,
@@ -883,27 +883,17 @@ describe('ai engine legal moves', () => {
       boardState: {
         pieces: [
           { side: 'enemy', row: 0, col: 4, pieceCode: 'OU', char: '王', promoted: false },
-          { side: 'enemy', row: 4, col: 4, pieceCode: 'KE', char: '桂', promoted: false },
+          { side: 'player', row: 4, col: 4, pieceCode: 'KE', char: '桂', promoted: false },
           { side: 'player', row: 5, col: 4, pieceCode: 'BOOK', char: '書', promoted: false },
           { side: 'player', row: 8, col: 4, pieceCode: 'OU', char: '王', promoted: false },
         ],
-        skill_state: {
-          last_enemy_moved_piece: {
-            side: 'enemy',
-            row: 4,
-            col: 4,
-            pieceCode: 'KE',
-            char: '桂',
-            promoted: false,
-          },
-        },
       },
       hands: { player: {}, enemy: {} },
     };
     const legal = generateLegalMoves({ position, pieceCatalog });
     const bookMoves = legal.legalMoves.filter((m) => m.fromRow === 5 && m.fromCol === 4);
-    expect(bookMoves.some((m) => m.toRow === 3 && m.toCol === 3)).toBe(true);
-    expect(bookMoves.some((m) => m.toRow === 3 && m.toCol === 5)).toBe(true);
+    expect(bookMoves.some((m) => m.toRow === 2 && m.toCol === 3)).toBe(true);
+    expect(bookMoves.some((m) => m.toRow === 2 && m.toCol === 5)).toBe(true);
   });
 
   it('seal immobilizes enemies on diagonal adjacent cells', () => {

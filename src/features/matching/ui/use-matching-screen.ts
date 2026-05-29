@@ -5,6 +5,7 @@ import type { WebSocketServerMessage } from '@/domain/matching-server/protocol';
 import { useAuthSession } from '@/hooks/common/auth-session-context';
 import { getHomeSnapshotState, loadHomeSnapshot } from '@/hooks/common/home-snapshot-store';
 import { getMatchingServerClient } from '@/infra/matching-server/matching-server-client';
+import { OnlineMatchApiDataSource } from '@/infra/datasources/online-match-datasource';
 import { loadCurrentBattleSetupId } from '@/lib/online-match/current-battle-setup';
 import { normalizePvpRating } from '@/lib/online-match/pvp-rating-constants';
 
@@ -15,7 +16,7 @@ const emptySnapshot: MatchingSnapshot = {
 };
 
 export function useMatchingScreen() {
-  const { isReady, userId } = useAuthSession();
+  const { accessToken, isReady, userId } = useAuthSession();
   const [snapshot, setSnapshot] = useState<MatchingSnapshot>(emptySnapshot);
   const [isLoading, setIsLoading] = useState(true);
   const [startedMatchId, setStartedMatchId] = useState<string | null>(null);
@@ -50,7 +51,7 @@ export function useMatchingScreen() {
         return;
       }
 
-      if (!userId) {
+      if (!userId || !accessToken) {
         setSnapshot({
           title: 'オンライン対戦',
           status: 'ログインが必要です',
@@ -134,12 +135,13 @@ export function useMatchingScreen() {
       const unsubscribe = client.subscribe(handleMessage);
 
       try {
-        await client.connect(userId);
+        const ticket = await new OnlineMatchApiDataSource(accessToken).issueMatchmakingTicket();
+        await client.connect(userId, { ticket: ticket.ticket });
         if (!active) return;
         client.enterQueue({
           userId,
-          rating: selfRating,
-          displayName: selfName,
+          rating: ticket.user.rating || selfRating,
+          displayName: ticket.user.displayName || selfName,
           battleSetupId,
         });
       } catch {
@@ -170,7 +172,7 @@ export function useMatchingScreen() {
         client.cancelQueue(userId);
       }
     };
-  }, [client, isReady, userId]);
+  }, [accessToken, client, isReady, userId]);
 
   async function cancel() {
     if (userId) {

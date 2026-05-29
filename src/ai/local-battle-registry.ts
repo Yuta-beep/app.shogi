@@ -2,6 +2,7 @@ import type { PieceCatalogItem } from '@/usecases/piece-info/load-piece-catalog-
 import type {
   BattleCanonicalPosition,
   BattleGameStatus,
+  BattleMove,
 } from '@/usecases/stage-battle/game-move-contract';
 import type { StageBattleSessionStart } from '@/usecases/stage-battle/stage-battle-session-contract';
 import type {
@@ -27,6 +28,7 @@ export type LocalBattleGameRecord = {
   pieceCatalog: AiPieceDefinition[];
   position: AiBattlePosition;
   game: AiBattleGameStatus;
+  aiMoveHistory: BattleMove[];
   startedAt: string;
 };
 
@@ -86,6 +88,7 @@ export function createLocalBattleGame(input: {
     pieceCatalog: getLocalBattlePieceCatalog(),
     position: withStageFixedBoardTiles(input.position, input.stageNo),
     game: normalizeBattleGameStatus(input.game),
+    aiMoveHistory: [],
     startedAt: new Date().toISOString(),
   };
   localGames.set(gameId, record);
@@ -100,6 +103,7 @@ export function getLocalBattleGame(gameId: string): LocalBattleGameRecord | null
     pieceCatalog: getLocalBattlePieceCatalog(),
     position: withStageFixedBoardTiles(record.position, record.stageNo),
     game: normalizeBattleGameStatus(record.game),
+    aiMoveHistory: record.aiMoveHistory.map((move) => ({ ...move })),
   };
 }
 
@@ -116,10 +120,12 @@ export function updateLocalBattleGame(
     pieceCatalog: getLocalBattlePieceCatalog(),
     position: withStageFixedBoardTiles(current.position, current.stageNo),
     game: normalizeBattleGameStatus(current.game),
+    aiMoveHistory: current.aiMoveHistory.map((move) => ({ ...move })),
   });
   const merged: LocalBattleGameRecord = {
     ...next,
     position: withStageFixedBoardTiles(next.position, next.stageNo),
+    aiMoveHistory: next.aiMoveHistory.map((move) => ({ ...move })),
   };
   localGames.set(gameId, merged);
   return merged;

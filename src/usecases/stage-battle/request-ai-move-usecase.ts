@@ -2,12 +2,13 @@ import { normalizeBattleGameStatus, normalizeBattlePosition } from '@/ai/model';
 import { computeLocalAiTurn } from '@/ai/local-engine';
 import { getLocalBattleGame, updateLocalBattleGame } from '@/ai/local-battle-registry';
 import { BattleAiTurn } from '@/usecases/stage-battle/game-move-contract';
+import { resolveStageAiConfig, type StageAiConfig } from '@/constants/stage-ai-config';
 
 export type RequestAiMoveInput = {
   gameId: string;
   moveNo?: number;
   stateHash?: string | null;
-  engineConfig: Record<string, unknown>;
+  engineConfig: Partial<StageAiConfig>;
 };
 
 export class RequestAiMoveUseCase {
@@ -30,6 +31,8 @@ export class RequestAiMoveUseCase {
     const turn = computeLocalAiTurn({
       position: record.position,
       pieceCatalog: record.pieceCatalog,
+      config: resolveStageAiConfig(record.stageNo, input.engineConfig),
+      recentEnemyMoves: record.aiMoveHistory,
     });
 
     const normalizedGame = normalizeBattleGameStatus(turn.game);
@@ -38,6 +41,9 @@ export class RequestAiMoveUseCase {
       ...current,
       position: normalizeBattlePosition(turn.position),
       game: normalizedGame,
+      aiMoveHistory: turn.selectedMove
+        ? [...current.aiMoveHistory, turn.selectedMove].slice(-20)
+        : current.aiMoveHistory,
     }));
 
     return {

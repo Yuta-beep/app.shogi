@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { MatchingGameState, PlayerSide } from '@/domain/matching-server/protocol';
 import { useAuthSession } from '@/hooks/common/auth-session-context';
+import { OnlineMatchApiDataSource } from '@/infra/datasources/online-match-datasource';
 import { getMatchingServerClient } from '@/infra/matching-server/matching-server-client';
 import { boardPiecesFromState, handSummary } from '@/lib/matching-server/board-view';
 import { battleMoveToServerPayload, fromViewCoord } from '@/lib/matching-server/game-bridge';
@@ -15,12 +16,6 @@ import {
   setActiveMatchSession,
   updateActiveMatchGame,
 } from '@/lib/matching-server/session-store';
-import {
-  applyPvpRatingAfterMatch,
-  PVP_RATING_LOSS_DELTA,
-  PVP_RATING_WIN_DELTA,
-} from '@/lib/online-match/player-pvp-rating';
-import { loadHomeSnapshot, patchHomeSnapshotRating } from '@/hooks/common/home-snapshot-store';
 import type { WebSocketServerMessage } from '@/domain/matching-server/protocol';
 import {
   applyOnlineBattleMove,
@@ -135,7 +130,7 @@ function buildSession(
 }
 
 export function useOnlineBattleGame(matchId?: string) {
-  const { isReady, userId } = useAuthSession();
+  const { accessToken, isReady, userId } = useAuthSession();
   const [session, setSession] = useState<OnlineBattleSession>(emptySession);
   const [game, setGame] = useState<MatchingGameState | null>(null);
   const [role, setRole] = useState<PlayerSide | null>(null);
@@ -293,7 +288,7 @@ export function useOnlineBattleGame(matchId?: string) {
 
   useEffect(() => {
     let active = true;
-    if (!isReady || !userId || !matchId) {
+    if (!isReady || !userId || !accessToken || !matchId) {
       setIsLoading(true);
       return () => {
         active = false;
@@ -355,24 +350,6 @@ export function useOnlineBattleGame(matchId?: string) {
           return;
         case 'game_finished': {
           const won = payload.winnerUserId === userId;
-          const ratingDelta = won ? PVP_RATING_WIN_DELTA : -PVP_RATING_LOSS_DELTA;
-          void applyPvpRatingAfterMatch({ matchId: payload.matchId, won })
-            .then(({ rating: nextRating, delta }) => {
-              patchHomeSnapshotRating(nextRating);
-              const appliedDelta = delta !== 0 ? delta : ratingDelta;
-              setSession((current) => ({
-                ...current,
-                logLines: [
-                  ...current.logLines,
-                  `レート ${appliedDelta >= 0 ? '+' : ''}${appliedDelta}（現在 ${nextRating}）`,
-                ].slice(-20),
-              }));
-            })
-            .catch(() => {
-              void loadHomeSnapshot(true).then((snap) => {
-                patchHomeSnapshotRating(snap.rating);
-              });
-            });
           setSelectedCell(null);
           setLegalTargets([]);
           setPendingPromotion(null);
@@ -409,7 +386,8 @@ export function useOnlineBattleGame(matchId?: string) {
 
     void (async () => {
       try {
-        await client.connect(userId, { matchId });
+        const ticket = await new OnlineMatchApiDataSource(accessToken).issueMatchmakingTicket();
+        await client.connect(userId, { matchId, ticket: ticket.ticket });
         if (!active) return;
         const nextRole = client.getRole() ?? getActiveMatchSession()?.role ?? stored?.role;
         const nextGame = getActiveMatchSession()?.game ?? stored?.game;
@@ -437,6 +415,7 @@ export function useOnlineBattleGame(matchId?: string) {
     appendLog,
     clearSkillUiState,
     client,
+    accessToken,
     isReady,
     matchId,
     playRemoteLastMoveAudio,

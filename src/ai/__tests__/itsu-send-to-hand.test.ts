@@ -45,7 +45,7 @@ describe('逸 敵駒を手駒へ', () => {
     jest.restoreAllMocks();
   });
 
-  it('moves on forward and rear diagonals only', () => {
+  it('moves one step forward and on forward/rear diagonals', () => {
     const position: AiBattlePosition = {
       sideToMove: 'player',
       turnNumber: 1,
@@ -71,7 +71,7 @@ describe('逸 敵駒を手駒へ', () => {
     const legal = generateLegalMoves({ position, pieceCatalog });
     const fromItsu = legal.legalMoves.filter((m) => m.fromRow === 5 && m.fromCol === 4);
     expect(fromItsu.map((m) => `${m.toRow}:${m.toCol}`).sort()).toEqual(
-      ['4:3', '4:5', '6:3', '6:5'].sort(),
+      ['4:3', '4:4', '4:5', '6:3', '6:5'].sort(),
     );
   });
 

@@ -7,6 +7,14 @@ import { postJson } from '@/infra/http/api-client';
 export class OnlineMatchApiDataSource {
   constructor(private readonly token: string) {}
 
+  async issueMatchmakingTicket(): Promise<{
+    ticket: string;
+    expiresAt: string;
+    user: { userId: string; displayName: string; rating: number };
+  }> {
+    return postJson('/api/v1/online-match/ticket', {}, { token: this.token });
+  }
+
   async saveBattleSetup(payload: SaveOnlineMatchSetupPayload): Promise<SaveOnlineMatchSetupResult> {
     const created = await postJson<SaveOnlineMatchSetupResult>(
       '/api/v1/online-match/battle-setup',

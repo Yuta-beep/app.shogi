@@ -103,7 +103,11 @@ function moveMetaMatchesForGuardrail(candidate: AiBattleMove, move: AiBattleMove
 function isGachaPieceForCoordinateGuardrail(
   piece: NonNullable<ReturnType<typeof findPieceCoveringCell>>,
 ): boolean {
-  return isShinPiece(piece) || isItsuPiece(piece) || isHenPiece(piece);
+  const pieceLike = {
+    ...piece,
+    pieceCode: piece.pieceCode ?? null,
+  };
+  return isShinPiece(pieceLike) || isItsuPiece(pieceLike) || isHenPiece(pieceLike);
 }
 
 /**
@@ -122,10 +126,18 @@ function findCoordinateLegalMoveFallback(
     pieces.find((piece) =>
       boardCellMatchesForGuardrail(piece.row, piece.col, move.fromRow, move.fromCol),
     );
-  if (!fromPiece || !isGachaPieceForCoordinateGuardrail(fromPiece)) return undefined;
+  if (!fromPiece || move.dropPieceCode != null) {
+    return undefined;
+  }
+  const coordinateMatcher = isGachaPieceForCoordinateGuardrail(fromPiece)
+    ? moveCoordinatesMatchForGuardrail
+    : (candidate: AiBattleMove, requested: AiBattleMove) =>
+        candidate.fromRow === requested.fromRow &&
+        candidate.fromCol === requested.fromCol &&
+        candidate.toRow === requested.toRow &&
+        candidate.toCol === requested.toCol;
   return legalMoves.find(
     (candidate) =>
-      moveCoordinatesMatchForGuardrail(candidate, move) &&
-      moveMetaMatchesForGuardrail(candidate, move),
+      coordinateMatcher(candidate, move) && moveMetaMatchesForGuardrail(candidate, move),
   );
 }

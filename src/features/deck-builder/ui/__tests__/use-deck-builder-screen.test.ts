@@ -41,6 +41,13 @@ jest.mock('@/lib/supabase/supabase-client', () => ({
   },
 }));
 
+jest.mock('expo-router', () => ({
+  useFocusEffect: (effect: () => void | (() => void)) => {
+    const React = jest.requireActual<typeof import('react')>('react');
+    React.useEffect(effect, [effect]);
+  },
+}));
+
 describe('useDeckBuilderScreen', () => {
   const originalDataSource = process.env.EXPO_PUBLIC_DATA_SOURCE;
 
