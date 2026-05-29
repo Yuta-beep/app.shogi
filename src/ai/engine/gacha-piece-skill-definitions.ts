@@ -314,7 +314,7 @@ const ENGINE_READY_GACHA_SKILLS: GachaPieceSkillBinding[] = [
 ];
 
 /** 未配線（skill-runtime / 仕様確定後に追加） */
-export const GACHA_SKILL_TODO: readonly {
+export const GACHA_SKILL_TODO: ReadonlyArray<{
   char: GachaCollectibleChar;
   skillCode: string;
 }> = [{ char: '煽', skillCode: 'skill_gacha_aori' }];

@@ -26,12 +26,6 @@ jest.mock('@/hooks/common/home-snapshot-store', () => ({
     mockSnapshot.nextRecoveryAt = next.nextRecoveryAt;
   },
 }));
-import {
-  MockClaimStageClearRewardUseCase,
-  MockPrepareStageBattleUseCase,
-  resetMockPreparedStageId,
-  resetMockStageClearRewards,
-} from '@/usecases/stage-battle/mock-stage-battle-usecases';
 
 describe('MockPrepareStageBattleUseCase stamina', () => {
   beforeEach(() => {

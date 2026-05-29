@@ -27,7 +27,6 @@ import type { PieceCatalogItem } from '@/domain/models/piece';
 import { buildCatalogItemFromGachaChar } from '@/constants/gacha-piece-metadata';
 import { CHAR_TO_CODE } from '@/features/stage-shogi/domain/piece-conversion';
 import { isBossPiece } from '@/features/deck-builder/lib/boss-pieces';
-import { isPieceExcludedFromDeckBuilder } from '@/features/deck-builder/lib/deck-builder-excluded-pieces';
 import {
   DECK_REQUIRED_CELL_MESSAGE,
   isDeckRequiredFormationComplete,

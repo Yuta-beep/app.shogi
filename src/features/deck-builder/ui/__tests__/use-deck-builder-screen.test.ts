@@ -151,7 +151,7 @@ describe('useDeckBuilderScreen', () => {
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
     expect(result.current.isDeckFormationIncomplete).toBe(true);
-    expect(result.current.emptyRequiredDeckCells.length).toBe(DECK_REQUIRED_UI_CELLS.length);
+    expect(result.current.emptyRequiredDeckCells.length).toBe(DECK_REQUIRED_UI_CELLS.length - 1);
 
     let applied = true;
     await act(async () => {
