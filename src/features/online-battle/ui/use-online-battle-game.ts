@@ -165,39 +165,6 @@ export function useOnlineBattleGame(matchId?: string) {
     () => ({ pieceDefsByCode, pieceDefsByChar, promotedPieceDefsByCode }),
     [pieceDefsByChar, pieceDefsByCode, promotedPieceDefsByCode],
   );
-  const playMoveAudio = useCallback(
-    (move: BattleMove, actorSide: Side, board: BoardPiece[]) => {
-      playBattleMoveOrPromoteSe(move, actorSide, board, battleAudioCatalog);
-    },
-    [battleAudioCatalog],
-  );
-  const playSkillAudio = useCallback(
-    (move: BattleMove, actorSide: Side, board: BoardPiece[]) => {
-      playBattleSkillActivationSe(move, actorSide, board, battleAudioCatalog);
-    },
-    [battleAudioCatalog],
-  );
-  const playRemoteLastMoveAudio = useCallback(
-    (
-      nextGame: MatchingGameState,
-      myRole: PlayerSide,
-      board: BoardPiece[],
-      opts: { skillTriggered: boolean },
-    ) => {
-      if (!nextGame.lastMove) return;
-      if (locallyAuditedVersionsRef.current.has(nextGame.version)) {
-        locallyAuditedVersionsRef.current.delete(nextGame.version);
-        return;
-      }
-      const move = movePayloadToBattleMove(nextGame.lastMove);
-      const actorSide: Side = nextGame.turn === myRole ? 'enemy' : 'player';
-      playBattleMoveOrPromoteSe(move, actorSide, board, battleAudioCatalog);
-      if (opts.skillTriggered) {
-        playBattleSkillActivationSe(move, actorSide, board, battleAudioCatalog);
-      }
-    },
-    [battleAudioCatalog],
-  );
   const locallyAuditedVersionsRef = useRef<Set<number>>(new Set());
   const playMoveAudio = useCallback(
     (move: BattleMove, actorSide: Side, board: BoardPiece[]) => {
