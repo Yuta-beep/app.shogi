@@ -4321,11 +4321,7 @@ export function applyMoveSkillEffects(input: {
           };
           input.pieces.splice(selected.idx, 1);
           if (handCode) {
-            const slotIndex = handSlotIndexBeforeRemoval(
-              input.position.hands,
-              enemySide,
-              handCode,
-            );
+            const slotIndex = handSlotIndexBeforeRemoval(input.position.hands, enemySide, handCode);
             incrementHand(input.position, enemySide, handCode, 1);
             markMoveSkillFx();
             skillFxSeq = appendBoardSkillVisualEffects(skillVisualEffects, {

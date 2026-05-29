@@ -10,7 +10,9 @@ export type SkillVisualEffect = {
 };
 
 function isValidBoardCell(row: number, col: number): boolean {
-  return Number.isInteger(row) && Number.isInteger(col) && row >= 0 && row <= 8 && col >= 0 && col <= 8;
+  return (
+    Number.isInteger(row) && Number.isInteger(col) && row >= 0 && row <= 8 && col >= 0 && col <= 8
+  );
 }
 
 function parsePlacement(raw: unknown): SkillVisualEffectPlacement | null {
@@ -29,7 +31,11 @@ function parsePlacement(raw: unknown): SkillVisualEffectPlacement | null {
     if (!pieceCode) return null;
     const slotIndexRaw = (raw as { slotIndex?: unknown }).slotIndex;
     const slotIndex =
-      slotIndexRaw == null ? undefined : Number.isInteger(Number(slotIndexRaw)) ? Number(slotIndexRaw) : undefined;
+      slotIndexRaw == null
+        ? undefined
+        : Number.isInteger(Number(slotIndexRaw))
+          ? Number(slotIndexRaw)
+          : undefined;
     return {
       type: 'hand',
       side,
