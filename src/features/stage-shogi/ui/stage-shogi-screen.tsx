@@ -5,7 +5,9 @@ import { AppLoadingScreen } from '@/components/organism/app-loading-screen';
 import { UiScreenShell } from '@/components/organism/ui-screen-shell';
 import { homeAssets } from '@/constants/home-assets';
 import { getNormalDungeonStagePreviewSource } from '@/constants/normal-dungeon-stage-previews';
+import { skillParticleAssetPreloadTargets } from '@/constants/skill-particle-assets';
 import { stageShogiBattleAssetPreloadTargets } from '@/constants/stage-shogi-battle-assets';
+import { StageShogiHandSkillParticleLayer } from '@/features/stage-shogi/ui/components/stage-shogi-hand-skill-particle-layer';
 import { StageShogiBoard } from '@/features/stage-shogi/ui/components/stage-shogi-board';
 import { StageShogiHandsRow } from '@/features/stage-shogi/ui/components/stage-shogi-hands-row';
 import {
@@ -33,6 +35,7 @@ export function StageShogiScreen() {
   const { isReady: areAssetsReady } = useAssetPreload([
     ...listLocalPieceImageModules(),
     ...stageShogiBattleAssetPreloadTargets,
+    ...skillParticleAssetPreloadTargets,
   ]);
   useScreenBgm('battle');
 
@@ -85,7 +88,7 @@ export function StageShogiScreen() {
 
           <View className="relative -mx-2 mt-20 mb-20">
             <View className="absolute -top-16 left-0 right-1 z-10 flex-row items-center justify-between gap-2">
-              <View className="flex-1">
+              <View className="relative flex-1">
                 <StageShogiHandsRow
                   side="enemy"
                   hands={vm.hands}
@@ -102,13 +105,20 @@ export function StageShogiScreen() {
                   onPressPiece={vm.handleHandPiecePress}
                   onLongPressPiece={vm.handleHandPieceLongPress}
                 />
+                <StageShogiHandSkillParticleLayer
+                  effects={vm.skillVisualEffects}
+                  side="enemy"
+                  hands={vm.hands}
+                  pieceCatalog={vm.pieceCatalog}
+                  onEffectFinished={vm.handleSkillVisualEffectFinished}
+                />
               </View>
               <View className="pointer-events-none rounded-md border border-blue-700 bg-white/80 px-2 py-1">
                 <Text className="text-lg font-black text-blue-700">後手</Text>
               </View>
             </View>
             <View className="absolute -bottom-16 left-0 right-1 z-10 flex-row items-center justify-between gap-2">
-              <View className="flex-1">
+              <View className="relative flex-1">
                 <StageShogiHandsRow
                   side="player"
                   hands={vm.hands}
@@ -124,6 +134,13 @@ export function StageShogiScreen() {
                   compact
                   onPressPiece={vm.handleHandPiecePress}
                   onLongPressPiece={vm.handleHandPieceLongPress}
+                />
+                <StageShogiHandSkillParticleLayer
+                  effects={vm.skillVisualEffects}
+                  side="player"
+                  hands={vm.hands}
+                  pieceCatalog={vm.pieceCatalog}
+                  onEffectFinished={vm.handleSkillVisualEffectFinished}
                 />
               </View>
               <View className="pointer-events-none rounded-md border border-blue-700 bg-white/80 px-2 py-1">

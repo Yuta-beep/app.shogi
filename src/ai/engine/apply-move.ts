@@ -12,6 +12,7 @@ import type {
   Side,
 } from '@/ai/model';
 import type { SkillVisualEffect } from '@/domain/battle/skill-visual-effect';
+import { boardSkillFxPlacement, createSkillVisualEffect } from '@/domain/battle/skill-visual-fx';
 import type {
   BattleCanonicalPosition,
   BattleCommittedMove,
@@ -2120,6 +2121,16 @@ export function applyMove(input: {
 
   let moveSkillEffectTriggeredFromMoveEffects = false;
   let skillVisualEffectsFromMoveEffects: SkillVisualEffect[] = [];
+  const shieldSkillVisualEffects: SkillVisualEffect[] = [];
+  if (shieldAbortedMove) {
+    shieldSkillVisualEffects.push(
+      createSkillVisualEffect({
+        id: `mv${current.moveCount}-shield`,
+        pieceChar: '盾',
+        placements: [boardSkillFxPlacement(move.toRow, move.toCol)],
+      }),
+    );
+  }
   if (turnAdvanced) {
     // 既存ハザードの残りターンを進める。
     tickSkillStateDurations(nextPosition);
@@ -2478,6 +2489,6 @@ export function applyMove(input: {
     turnConsumed: turnAdvanced,
     position: nextPosition,
     game,
-    skillVisualEffects: skillVisualEffectsFromMoveEffects,
+    skillVisualEffects: [...skillVisualEffectsFromMoveEffects, ...shieldSkillVisualEffects],
   };
 }

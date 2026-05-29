@@ -547,16 +547,7 @@ export function useStageShogiScreen(stageParam: string | undefined, userId?: str
   }, []);
 
   const handleSkillVisualEffectFinished = useCallback((finished: SkillVisualEffect) => {
-    setSkillVisualEffects((current) =>
-      current.filter(
-        (effect) =>
-          !(
-            effect.kind === finished.kind &&
-            effect.row === finished.row &&
-            effect.col === finished.col
-          ),
-      ),
-    );
+    setSkillVisualEffects((current) => current.filter((effect) => effect.id !== finished.id));
   }, []);
 
   function showSkillActivation(actor: Side, move: BattleMove, board: BoardPiece[]) {

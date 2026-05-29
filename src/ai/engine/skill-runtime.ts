@@ -1,4 +1,10 @@
 import type { SkillVisualEffect } from '@/domain/battle/skill-visual-effect';
+import {
+  appendBoardSkillVisualEffects,
+  appendHandSkillVisualEffects,
+  handSlotIndexBeforeRemoval,
+  resolveSkillFxPieceChar,
+} from '@/domain/battle/skill-visual-fx';
 import type { ArrowDirection } from '@/constants/stage-fixed-arrow-cells';
 import type { Side } from '@/features/stage-shogi/domain/game-rules';
 import { capturedToHandPieceCode } from '@/features/stage-shogi/domain/game-rules';
@@ -173,7 +179,7 @@ function removeUpToRandomAdjacentEnemyPieces(input: {
   center: AiBoardPiece;
   actorSide: Side;
   maxRemove: number;
-}): number {
+}): { removed: number; cells: { row: number; col: number }[] } {
   const candidates = input.pieces
     .map((piece, idx) => ({ piece, idx }))
     .filter(({ piece }) => {
@@ -188,11 +194,13 @@ function removeUpToRandomAdjacentEnemyPieces(input: {
         !(piece.row === input.center.row && piece.col === input.center.col)
       );
     });
-  if (candidates.length === 0 || input.maxRemove <= 0) return 0;
+  if (candidates.length === 0 || input.maxRemove <= 0) return { removed: 0, cells: [] };
   let removed = 0;
+  const cells: { row: number; col: number }[] = [];
   let pool = [...candidates];
   while (pool.length > 0 && removed < input.maxRemove) {
     const selected = pool[Math.floor(Math.random() * pool.length)]!;
+    cells.push({ row: selected.piece.row, col: selected.piece.col });
     input.pieces.splice(selected.idx, 1);
     removed += 1;
     pool = pool
@@ -202,7 +210,7 @@ function removeUpToRandomAdjacentEnemyPieces(input: {
         idx: entry.idx > selected.idx ? entry.idx - 1 : entry.idx,
       }));
   }
-  return removed;
+  return { removed, cells };
 }
 
 function waterfallSkillDebugLog(payload: Record<string, unknown>): void {
@@ -268,10 +276,11 @@ function pushAdjacentEnemyPiecesOneStep(input: {
   pieces: AiBoardPiece[];
   center: AiBoardPiece;
   actorSide: Side;
-}): number {
+}): { count: number; origins: { row: number; col: number }[] } {
   const occupied = new Set(input.pieces.map((piece) => `${piece.row}:${piece.col}`));
   const planned = new Map<number, { row: number; col: number }>();
   const plannedDest = new Set<string>();
+  const origins: { row: number; col: number }[] = [];
   for (let dr = -1; dr <= 1; dr += 1) {
     for (let dc = -1; dc <= 1; dc += 1) {
       if (dr === 0 && dc === 0) continue;
@@ -292,6 +301,7 @@ function pushAdjacentEnemyPiecesOneStep(input: {
       if (occupied.has(destKey) || plannedDest.has(destKey)) continue;
       planned.set(idx, { row: nextRow, col: nextCol });
       plannedDest.add(destKey);
+      origins.push({ row: target.row, col: target.col });
     }
   }
   for (const [idx, destination] of planned.entries()) {
@@ -301,14 +311,14 @@ function pushAdjacentEnemyPiecesOneStep(input: {
       col: destination.col,
     };
   }
-  return planned.size;
+  return { count: planned.size, origins };
 }
 
 function pushOrthogonalAdjacentEnemiesToEdge(input: {
   pieces: AiBoardPiece[];
   center: AiBoardPiece;
   actorSide: Side;
-}): number {
+}): { count: number; origins: { row: number; col: number }[] } {
   const directions: { dr: number; dc: number }[] = [
     { dr: -1, dc: 0 },
     { dr: 1, dc: 0 },
@@ -316,6 +326,7 @@ function pushOrthogonalAdjacentEnemiesToEdge(input: {
     { dr: 0, dc: 1 },
   ];
   let pushed = 0;
+  const origins: { row: number; col: number }[] = [];
   for (const direction of directions) {
     const row = input.center.row + direction.dr;
     const col = input.center.col + direction.dc;
@@ -335,6 +346,7 @@ function pushOrthogonalAdjacentEnemiesToEdge(input: {
       nextCol = candidateCol;
     }
     if (nextRow === target.row && nextCol === target.col) continue;
+    origins.push({ row: target.row, col: target.col });
     input.pieces[idx] = {
       ...target,
       row: nextRow,
@@ -342,7 +354,7 @@ function pushOrthogonalAdjacentEnemiesToEdge(input: {
     };
     pushed += 1;
   }
-  return pushed;
+  return { count: pushed, origins };
 }
 
 function warpHorizontalAdjacentEnemiesToRandomEmptyCell(input: {
@@ -1181,7 +1193,7 @@ function incrementHand(position: AiBattlePosition, side: Side, pieceCode: string
   };
 }
 
-function decrementFirstHandPiece(position: AiBattlePosition, side: Side): boolean {
+function decrementFirstHandPiece(position: AiBattlePosition, side: Side): string | null {
   const bag = { ...(position.hands[side] ?? {}) };
   const keys = Object.keys(bag).sort();
   for (const key of keys) {
@@ -1194,9 +1206,9 @@ function decrementFirstHandPiece(position: AiBattlePosition, side: Side): boolea
       ...position.hands,
       [side]: bag,
     };
-    return true;
+    return key;
   }
-  return false;
+  return null;
 }
 
 function removeRandomHandPiece(position: AiBattlePosition, side: Side): string | null {
@@ -1731,6 +1743,8 @@ export function applyMoveSkillEffects(input: {
   didCapture: boolean;
 }): { moveSkillEffectTriggered: boolean; skillVisualEffects: SkillVisualEffect[] } {
   const skillVisualEffects: SkillVisualEffect[] = [];
+  let skillFxSeq = 0;
+  const skillFxIdPrefix = `mv${input.position.moveCount}`;
   const movedCodeRaw = toBasePieceCode(input.move.pieceCode);
   const movedCode = normalizeSkillPieceCode(movedCodeRaw);
   const movedPiece = input.movedPiece;
@@ -1856,10 +1870,11 @@ export function applyMoveSkillEffects(input: {
       });
       if (burned) {
         markMoveSkillFx();
-        skillVisualEffects.push({
-          kind: 'flame_burn',
-          row: burned.row,
-          col: burned.col,
+        skillFxSeq = appendBoardSkillVisualEffects(skillVisualEffects, {
+          idPrefix: skillFxIdPrefix,
+          seq: skillFxSeq,
+          pieceChar: '炎',
+          cells: [{ row: burned.row, col: burned.col }],
         });
       }
     }
@@ -1868,8 +1883,28 @@ export function applyMoveSkillEffects(input: {
   if (isFireMover && input.move.fromRow != null && input.move.fromCol != null) {
     const procChance = 0.2;
     const triggered = skillProcRoll(procChance);
-    if (triggered && decrementFirstHandPiece(input.position, sideOpposite(input.actorSide))) {
-      markMoveSkillFx();
+    if (triggered) {
+      const targetSide = sideOpposite(input.actorSide);
+      const bag = input.position.hands[targetSide] ?? {};
+      const firstKey = Object.keys(bag)
+        .sort()
+        .find((key) => {
+          const qty = bag[key];
+          return typeof qty === 'number' && Number.isFinite(qty) && qty > 0;
+        });
+      if (firstKey) {
+        const slotIndex = handSlotIndexBeforeRemoval(input.position.hands, targetSide, firstKey);
+        const removedKey = decrementFirstHandPiece(input.position, targetSide);
+        if (removedKey) {
+          markMoveSkillFx();
+          skillFxSeq = appendHandSkillVisualEffects(skillVisualEffects, {
+            idPrefix: skillFxIdPrefix,
+            seq: skillFxSeq,
+            pieceChar: '火',
+            entries: [{ side: targetSide, pieceCode: removedKey, slotIndex }],
+          });
+        }
+      }
     }
   }
   // 宝: 移動時20%で手持ちに金・銀・銅のいずれか1つを加える。
@@ -1904,38 +1939,53 @@ export function applyMoveSkillEffects(input: {
     input.move.fromCol != null &&
     input.movedPiece
   ) {
-    if (
-      pushAdjacentEnemyPiecesOneStep({
-        pieces: input.pieces,
-        center: input.movedPiece,
-        actorSide: input.actorSide,
-      }) > 0
-    ) {
+    const waterPush = pushAdjacentEnemyPiecesOneStep({
+      pieces: input.pieces,
+      center: input.movedPiece,
+      actorSide: input.actorSide,
+    });
+    if (waterPush.count > 0) {
       markMoveSkillFx();
+      skillFxSeq = appendBoardSkillVisualEffects(skillVisualEffects, {
+        idPrefix: skillFxIdPrefix,
+        seq: skillFxSeq,
+        pieceChar: '水',
+        cells: waterPush.origins,
+      });
     }
   }
   // 鉄: 水と同様、移動時に周囲8マスの敵駒を1マス押し流す。
   if (isIronMover && input.move.fromRow != null && input.move.fromCol != null && input.movedPiece) {
-    if (
-      pushAdjacentEnemyPiecesOneStep({
-        pieces: input.pieces,
-        center: input.movedPiece,
-        actorSide: input.actorSide,
-      }) > 0
-    ) {
+    const ironPush = pushAdjacentEnemyPiecesOneStep({
+      pieces: input.pieces,
+      center: input.movedPiece,
+      actorSide: input.actorSide,
+    });
+    if (ironPush.count > 0) {
       markMoveSkillFx();
+      skillFxSeq = appendBoardSkillVisualEffects(skillVisualEffects, {
+        idPrefix: skillFxIdPrefix,
+        seq: skillFxSeq,
+        pieceChar: '鉄',
+        cells: ironPush.origins,
+      });
     }
   }
   // 波: 移動時に周囲8マスの敵駒を1マス押し流す。
   if (isWaveMover && input.move.fromRow != null && input.move.fromCol != null && input.movedPiece) {
-    if (
-      pushAdjacentEnemyPiecesOneStep({
-        pieces: input.pieces,
-        center: input.movedPiece,
-        actorSide: input.actorSide,
-      }) > 0
-    ) {
+    const wavePush = pushAdjacentEnemyPiecesOneStep({
+      pieces: input.pieces,
+      center: input.movedPiece,
+      actorSide: input.actorSide,
+    });
+    if (wavePush.count > 0) {
       markMoveSkillFx();
+      skillFxSeq = appendBoardSkillVisualEffects(skillVisualEffects, {
+        idPrefix: skillFxIdPrefix,
+        seq: skillFxSeq,
+        pieceChar: '波',
+        cells: wavePush.origins,
+      });
     }
   }
   // 砂: 移動時、隣接する味方の砂駒があれば同じ方向へ連携移動する。
@@ -2062,14 +2112,19 @@ export function applyMoveSkillEffects(input: {
   }
   // 風: 前後左右1マスの敵駒を、その方向の行けるところまで押し流す。
   if (isWindMover && input.move.fromRow != null && input.move.fromCol != null && input.movedPiece) {
-    if (
-      pushOrthogonalAdjacentEnemiesToEdge({
-        pieces: input.pieces,
-        center: input.movedPiece,
-        actorSide: input.actorSide,
-      }) > 0
-    ) {
+    const windPush = pushOrthogonalAdjacentEnemiesToEdge({
+      pieces: input.pieces,
+      center: input.movedPiece,
+      actorSide: input.actorSide,
+    });
+    if (windPush.count > 0) {
       markMoveSkillFx();
+      skillFxSeq = appendBoardSkillVisualEffects(skillVisualEffects, {
+        idPrefix: skillFxIdPrefix,
+        seq: skillFxSeq,
+        pieceChar: '風',
+        cells: windPush.origins,
+      });
     }
   }
   // 魚: 移動時30%で周囲の敵駒1体（玉除く）を3ターン行動不能（stun）。
@@ -2445,6 +2500,12 @@ export function applyMoveSkillEffects(input: {
           remaining_turns: 3,
         });
         markMoveSkillFx();
+        skillFxSeq = appendBoardSkillVisualEffects(skillVisualEffects, {
+          idPrefix: skillFxIdPrefix,
+          seq: skillFxSeq,
+          pieceChar: '電',
+          cells: [{ row: target.row, col: target.col }],
+        });
       }
     }
   }
@@ -2452,17 +2513,31 @@ export function applyMoveSkillEffects(input: {
   if (isThunderMover && input.move.fromRow != null && input.move.fromCol != null) {
     const procChance = 0.1;
     const triggered = skillProcRoll(procChance);
-    const removedHandCodes: string[] = [];
+    const removedHandEntries: { side: Side; pieceCode: string; slotIndex: number }[] = [];
     if (triggered) {
       const targetSide = sideOpposite(input.actorSide);
       for (let i = 0; i < 2; i += 1) {
+        const bag = input.position.hands[targetSide] ?? {};
+        const keys = Object.keys(bag).filter((key) => {
+          const qty = bag[key];
+          return typeof qty === 'number' && Number.isFinite(qty) && qty > 0;
+        });
+        if (keys.length === 0) break;
+        const selectedKey = keys[Math.floor(Math.random() * keys.length)]!;
+        const slotIndex = handSlotIndexBeforeRemoval(input.position.hands, targetSide, selectedKey);
         const removed = removeRandomHandPiece(input.position, targetSide);
         if (!removed) break;
-        removedHandCodes.push(removed);
+        removedHandEntries.push({ side: targetSide, pieceCode: removed, slotIndex });
       }
     }
-    if (removedHandCodes.length > 0) {
+    if (removedHandEntries.length > 0) {
       markMoveSkillFx();
+      skillFxSeq = appendHandSkillVisualEffects(skillVisualEffects, {
+        idPrefix: skillFxIdPrefix,
+        seq: skillFxSeq,
+        pieceChar: '雷',
+        entries: removedHandEntries,
+      });
     }
   }
   // 氷: 移動時30%で周囲8マスの敵駒（玉除く）1体を2ターン行動不能（stun）。
@@ -2524,7 +2599,7 @@ export function applyMoveSkillEffects(input: {
           ) ?? null)
         : null);
     if (center) {
-      let timeStuns = 0;
+      const stunnedCells: { row: number; col: number }[] = [];
       for (let dr = -1; dr <= 1; dr += 1) {
         for (let dc = -1; dc <= 1; dc += 1) {
           if (dr === 0 && dc === 0) continue;
@@ -2542,11 +2617,17 @@ export function applyMoveSkillEffects(input: {
             status_type: 'stun',
             remaining_turns: 4,
           });
-          timeStuns += 1;
+          stunnedCells.push({ row, col });
         }
       }
-      if (timeStuns > 0) {
+      if (stunnedCells.length > 0) {
         markMoveSkillFx();
+        skillFxSeq = appendBoardSkillVisualEffects(skillVisualEffects, {
+          idPrefix: skillFxIdPrefix,
+          seq: skillFxSeq,
+          pieceChar: '時',
+          cells: stunnedCells,
+        });
       }
     }
   }
@@ -2731,8 +2812,14 @@ export function applyMoveSkillEffects(input: {
         actorSide: input.actorSide,
         maxRemove: 2,
       });
-      if (demonRemoved > 0) {
+      if (demonRemoved.removed > 0) {
         markMoveSkillFx();
+        skillFxSeq = appendBoardSkillVisualEffects(skillVisualEffects, {
+          idPrefix: skillFxIdPrefix,
+          seq: skillFxSeq,
+          pieceChar: '魔',
+          cells: demonRemoved.cells,
+        });
       }
     }
   }
@@ -2750,7 +2837,7 @@ export function applyMoveSkillEffects(input: {
         actorSide: input.actorSide,
         maxRemove: 1,
       });
-      if (tatsuRemoved > 0) {
+      if (tatsuRemoved.removed > 0) {
         markMoveSkillFx();
       }
     }
@@ -4098,6 +4185,7 @@ export function applyMoveSkillEffects(input: {
         if (!hook) continue;
 
         if (hook === 'bomb_explosion_push') {
+          const bombOrigins: { row: number; col: number }[] = [];
           for (let dr = -1; dr <= 1; dr += 1) {
             for (let dc = -1; dc <= 1; dc += 1) {
               if (dr === 0 && dc === 0) continue;
@@ -4112,8 +4200,18 @@ export function applyMoveSkillEffects(input: {
               const pushCol = col + dc;
               if (pushRow < 0 || pushRow > 8 || pushCol < 0 || pushCol > 8) continue;
               if (!isCellEmpty(input.pieces, pushRow, pushCol)) continue;
+              bombOrigins.push({ row, col });
               input.pieces[idx] = { ...target, row: pushRow, col: pushCol };
             }
+          }
+          if (bombOrigins.length > 0) {
+            markMoveSkillFx();
+            skillFxSeq = appendBoardSkillVisualEffects(skillVisualEffects, {
+              idPrefix: skillFxIdPrefix,
+              seq: skillFxSeq,
+              pieceChar: '爆',
+              cells: bombOrigins,
+            });
           }
           continue;
         }
@@ -4223,7 +4321,25 @@ export function applyMoveSkillEffects(input: {
           };
           input.pieces.splice(selected.idx, 1);
           if (handCode) {
+            const slotIndex = handSlotIndexBeforeRemoval(
+              input.position.hands,
+              enemySide,
+              handCode,
+            );
             incrementHand(input.position, enemySide, handCode, 1);
+            markMoveSkillFx();
+            skillFxSeq = appendBoardSkillVisualEffects(skillVisualEffects, {
+              idPrefix: skillFxIdPrefix,
+              seq: skillFxSeq,
+              pieceChar: resolveSkillFxPieceChar({ char: input.movedPiece.char }),
+              cells: [{ row: before.row, col: before.col }],
+            });
+            skillFxSeq = appendHandSkillVisualEffects(skillVisualEffects, {
+              idPrefix: skillFxIdPrefix,
+              seq: skillFxSeq,
+              pieceChar: resolveSkillFxPieceChar({ char: input.movedPiece.char }),
+              entries: [{ side: enemySide, pieceCode: handCode, slotIndex }],
+            });
           }
           itsuSkillDebugLog({
             hook,
