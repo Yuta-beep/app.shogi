@@ -14,21 +14,24 @@ export class LoadStageSelectWithProgressUseCase {
   ) {}
 
   async execute(): Promise<StageNodeData[]> {
-    const [snapshot, sessionResult] = await Promise.all([
-      this.loadStageSelectUseCase.execute(),
-      supabase.auth.getSession(),
-    ]);
+    const sessionPromise = supabase.auth.getSession();
+    const progressPromise = sessionPromise.then((sessionResult) => {
+      const token = sessionResult.data.session?.access_token ?? null;
+      return token ? this.stageProgressDataSource.getStageProgress(token) : null;
+    });
 
-    const token = sessionResult.data.session?.access_token ?? null;
     let clearedStageNos = new Set<number>();
 
-    if (token) {
-      try {
-        const progress = await this.stageProgressDataSource.getStageProgress(token);
-        clearedStageNos = new Set(progress.clearedStageNos);
-      } catch (error) {
+    const [snapshot, progress] = await Promise.all([
+      this.loadStageSelectUseCase.execute(),
+      progressPromise.catch((error) => {
         console.warn('[stage-select] failed to load stage progress from API', error);
-      }
+        return null;
+      }),
+    ]);
+
+    if (progress) {
+      clearedStageNos = new Set(progress.clearedStageNos);
     }
 
     return snapshot.nodes.map((node) => {

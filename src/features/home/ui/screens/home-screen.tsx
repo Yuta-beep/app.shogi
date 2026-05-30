@@ -35,9 +35,8 @@ import { useScreenBgm } from '@/hooks/common/use-screen-bgm';
 import { playSe } from '@/lib/audio/audio-manager';
 import { resolvePieceImageSource } from '@/lib/piece-image';
 import { supabase } from '@/lib/supabase/supabase-client';
-import { createLoadDeckBuilderUseCase } from '@/usecases/deck-builder/create-deck-builder-usecases';
+import { DeckBuilderApiDataSource } from '@/infra/datasources/deck-builder-datasource';
 
-const MY_DECK_NAME = 'マイデッキ';
 const FADE_IN_MS = 520;
 const FADE_HOLD_MS = 920;
 const FADE_OUT_MS = 520;
@@ -119,21 +118,12 @@ export function HomeScreen() {
           }
           return;
         }
-        const loadDeckUseCase = createLoadDeckBuilderUseCase(nextToken);
-        const deckSnapshot = await loadDeckUseCase.execute();
-        const targetDeck =
-          deckSnapshot.savedDecks.find(
-            (deck) => deck.name === MY_DECK_NAME && (deck.placements?.length ?? 0) > 0,
-          ) ?? deckSnapshot.savedDecks.find((deck) => (deck.placements?.length ?? 0) > 0);
-        const nextPieces =
-          targetDeck?.placements
-            ?.slice()
-            .sort((a, b) => a.rowNo - b.rowNo || a.colNo - b.colNo)
-            .map((placement, idx) => ({
-              key: `${placement.pieceId}-${placement.rowNo}-${placement.colNo}-${idx}`,
-              char: placement.char,
-              name: placement.name,
-            })) ?? [];
+        const deckSummary = await new DeckBuilderApiDataSource(nextToken).getActiveSummary();
+        const nextPieces = deckSummary.placements.map((placement, idx) => ({
+          key: `${placement.pieceId}-${placement.rowNo}-${placement.colNo}-${idx}`,
+          char: placement.char,
+          name: placement.name,
+        }));
         if (active) {
           setDeckPieces(nextPieces);
           setCarouselIndex(0);

@@ -27,7 +27,7 @@ type HomeSnapshotStoreState = {
   error: Error | null;
 };
 
-const FRESH_MS = 5_000;
+const FRESH_MS = 30_000;
 const listeners = new Set<Listener>();
 let loadUseCase: ReturnType<typeof createLoadHomeSnapshotUseCase> | null = null;
 

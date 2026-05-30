@@ -39,6 +39,20 @@ type ApiDeckSnapshot = {
   decks: ApiDeck[];
 };
 
+type ApiActiveDeckPlacement = {
+  rowNo: number;
+  colNo: number;
+  pieceId: number;
+  char: string;
+  name: string;
+};
+
+export type ApiActiveDeckSummary = {
+  deckId: number | null;
+  name: string | null;
+  placements: ApiActiveDeckPlacement[];
+};
+
 function mapOwnedPiece(piece: ApiOwnedPiece): OwnedPiece {
   return {
     pieceId: piece.pieceId,
@@ -81,6 +95,10 @@ export class DeckBuilderApiDataSource {
       ownedPieces: response.ownedPieces.map(mapOwnedPiece),
       savedDecks: response.decks.map(mapSavedDeck),
     };
+  }
+
+  async getActiveSummary(): Promise<ApiActiveDeckSummary> {
+    return getJson<ApiActiveDeckSummary>('/api/v1/deck/active-summary', { token: this.token });
   }
 
   async saveDeck(payload: SaveDeckPayload): Promise<SaveDeckResponse> {

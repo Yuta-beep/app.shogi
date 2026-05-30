@@ -1,6 +1,14 @@
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import {
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppLoadingScreen } from '@/components/organism/app-loading-screen';
@@ -51,7 +59,12 @@ function OnlineMatchImageButton({
     >
       <View
         pointerEvents="box-none"
-        style={{ width: displayWidth, height: displayHeight, alignItems: 'center', justifyContent: 'center' }}
+        style={{
+          width: displayWidth,
+          height: displayHeight,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
       >
         <Image
           pointerEvents="none"
