@@ -26,7 +26,6 @@ import {
   immobilizedKeysFromCanonical,
   movementRuleByCellFromCanonical,
   normalizeBoardPieceForDisplay,
-  pieceCodeFromPlacement,
   piecesFromCanonicalPosition,
   poisonHazardCellsForDisplay,
   positionWithStageFixedBoardTiles,

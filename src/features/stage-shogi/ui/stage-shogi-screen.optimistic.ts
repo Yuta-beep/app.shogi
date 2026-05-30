@@ -1,7 +1,4 @@
-import {
-  CHAR_TO_CODE,
-  type PieceSfenMapping,
-} from '@/features/stage-shogi/domain/piece-conversion';
+import { CHAR_TO_CODE } from '@/features/stage-shogi/domain/piece-conversion';
 import { toBasePieceCode } from '@/ai/model/move';
 import { giantAnchorFootprint, isGiantPieceForEngine } from '@/ai/engine/giant-piece';
 import type { BattleMove } from '@/usecases/stage-battle/game-move-contract';
@@ -21,7 +18,6 @@ import {
   preferBundledPromotedImageOverRemoteUrl,
 } from '@/features/stage-shogi/ui/stage-shogi-screen.helpers';
 import {
-  collectStandardBaseCodesForLocalPromotedImage,
   isPromotedVisualPiece,
   localPromotedModuleFromBaseCodeCandidates,
   resolvePromotedImageSource,

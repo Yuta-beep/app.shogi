@@ -23,14 +23,14 @@ function cellKey(row: number, col: number): string {
 
 /** 必須マスのうち、まだ駒が置かれていないマス（UI 0始まり座標）。 */
 export function listEmptyRequiredDeckCells(
-  placements: ReadonlyArray<{ row: number; col: number }>,
+  placements: readonly { row: number; col: number }[],
 ): DeckBoardCell[] {
   const occupied = new Set(placements.map((p) => cellKey(p.row, p.col)));
   return DECK_REQUIRED_UI_CELLS.filter((cell) => !occupied.has(cellKey(cell.row, cell.col)));
 }
 
 export function isDeckRequiredFormationComplete(
-  placements: ReadonlyArray<{ row: number; col: number }>,
+  placements: readonly { row: number; col: number }[],
 ): boolean {
   return listEmptyRequiredDeckCells(placements).length === 0;
 }
