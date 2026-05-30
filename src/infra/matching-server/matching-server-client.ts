@@ -84,7 +84,7 @@ export class MatchingServerClient {
     this.connectionState = 'connecting';
     this.lastError = null;
 
-    const url = new URL(`${wsBaseUrl}/ws`);
+    const url = new URL(wsBaseUrl);
     if (options?.ticket) {
       url.searchParams.set('ticket', options.ticket);
     } else {
