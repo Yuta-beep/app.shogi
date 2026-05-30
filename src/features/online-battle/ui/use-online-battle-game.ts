@@ -235,7 +235,15 @@ export function useOnlineBattleGame(matchId?: string) {
       boardState: record.position.boardState as Record<string, unknown>,
       hands: record.position.hands,
     };
-    setGame(wire);
+    setGame((current) => {
+      if (
+        current?.version === wire.version &&
+        current?.canonicalState?.stateHash === wire.canonicalState?.stateHash
+      ) {
+        return current;
+      }
+      return wire;
+    });
     setPieces(getDisplayBoardPieces(matchIdValue));
     setHands(getDisplayHands(matchIdValue));
     setPlayerLegalMoves(getMyLegalMoves(matchIdValue));
