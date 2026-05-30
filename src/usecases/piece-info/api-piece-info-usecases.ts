@@ -1,4 +1,5 @@
 import { PieceRepository } from '@/domain/repositories/piece-repository';
+import { preparePieceCatalogForBattleAndDisplay } from '@/features/piece-info/lib/piece-catalog-display';
 import { ApiPieceRepository } from '@/infra/repositories/piece-repository';
 import {
   LoadPieceCatalogUseCase,
@@ -9,6 +10,6 @@ export class ApiLoadPieceCatalogUseCase implements LoadPieceCatalogUseCase {
   constructor(private readonly repository: PieceRepository = new ApiPieceRepository()) {}
 
   async execute(): Promise<PieceCatalogItem[]> {
-    return this.repository.listCatalog();
+    return preparePieceCatalogForBattleAndDisplay(await this.repository.listCatalog());
   }
 }

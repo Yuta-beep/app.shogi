@@ -244,7 +244,7 @@ export type TrustedBoardEndpoints = {
   toCol: number;
 };
 
-function preferBundledPromotedImageOverRemoteUrl(
+export function preferBundledPromotedImageOverRemoteUrl(
   pieceCode: string | null,
   promoted: boolean,
   remoteOrFallback: string | null | undefined,

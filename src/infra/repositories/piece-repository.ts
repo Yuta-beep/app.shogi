@@ -1,6 +1,5 @@
 import { PieceRepository } from '@/domain/repositories/piece-repository';
 import type { PieceCatalogItem } from '@/domain/models/piece';
-import { preparePieceCatalogForBattleAndDisplay } from '@/features/piece-info/lib/piece-catalog-display';
 import { PieceApiDataSource } from '@/infra/datasources/piece-api-datasource';
 
 export class ApiPieceRepository implements PieceRepository {
@@ -8,6 +7,6 @@ export class ApiPieceRepository implements PieceRepository {
 
   async listCatalog(): Promise<PieceCatalogItem[]> {
     const response = await this.dataSource.getCatalog();
-    return preparePieceCatalogForBattleAndDisplay(response.items);
+    return response.items;
   }
 }
