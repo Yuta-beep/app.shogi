@@ -2,12 +2,15 @@ import { createContext, type ReactNode, useContext, useEffect, useMemo, useState
 
 import { ensureSession } from '@/usecases/auth/ensure-session-usecase';
 
+const AUTH_RETRY_MESSAGE = 'サーバーの応答に時間がかかっています';
+
 type AuthSessionState = {
   isReady: boolean;
   userId: string | null;
   accessToken: string | null;
   needsUsernameSetup: boolean;
   error: Error | null;
+  statusMessage: string | null;
 };
 
 const initialState: AuthSessionState = {
@@ -16,6 +19,7 @@ const initialState: AuthSessionState = {
   accessToken: null,
   needsUsernameSetup: false,
   error: null,
+  statusMessage: null,
 };
 
 const AuthSessionContext = createContext<AuthSessionState>(initialState);
@@ -40,7 +44,15 @@ export function AuthSessionProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let active = true;
 
-    ensureSession()
+    ensureSession({
+      onRetry: ({ nextAttempt }) => {
+        if (!active || nextAttempt < 2) return;
+        setState((current) => ({
+          ...current,
+          statusMessage: AUTH_RETRY_MESSAGE,
+        }));
+      },
+    })
       .then(({ userId, accessToken, needsUsernameSetup }) => {
         if (!active) return;
         setState({
@@ -49,6 +61,7 @@ export function AuthSessionProvider({ children }: { children: ReactNode }) {
           accessToken,
           needsUsernameSetup,
           error: null,
+          statusMessage: null,
         });
       })
       .catch((error: unknown) => {
@@ -59,6 +72,7 @@ export function AuthSessionProvider({ children }: { children: ReactNode }) {
           accessToken: null,
           needsUsernameSetup: false,
           error: normalizeUnknownError(error),
+          statusMessage: null,
         });
       });
 

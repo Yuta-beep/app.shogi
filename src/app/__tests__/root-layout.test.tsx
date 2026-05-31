@@ -25,7 +25,9 @@ jest.mock('expo-status-bar', () => ({
 
 jest.mock('@/components/organism/app-loading-screen', () => {
   return {
-    AppLoadingScreen: () => <MockText>loading-screen</MockText>,
+    AppLoadingScreen: ({ label }: { label?: string }) => (
+      <MockText>{label ?? 'loading-screen'}</MockText>
+    ),
   };
 });
 
@@ -46,8 +48,10 @@ describe('RootLayout', () => {
     mockUseAuthSession.mockReturnValue({
       isReady: true,
       userId: 'user-1',
+      accessToken: 'token-1',
       needsUsernameSetup: false,
       error: null,
+      statusMessage: null,
     });
   });
 
@@ -59,8 +63,10 @@ describe('RootLayout', () => {
     mockUseAuthSession.mockReturnValue({
       isReady: false,
       userId: null,
+      accessToken: null,
       needsUsernameSetup: false,
       error: null,
+      statusMessage: null,
     });
 
     const { getByText } = render(<RootLayout />);
@@ -73,8 +79,10 @@ describe('RootLayout', () => {
     mockUseAuthSession.mockReturnValue({
       isReady: true,
       userId: 'user-1',
+      accessToken: 'token-1',
       needsUsernameSetup: true,
       error: null,
+      statusMessage: null,
     });
 
     render(<RootLayout />);
@@ -88,15 +96,49 @@ describe('RootLayout', () => {
     mockUseAuthSession.mockReturnValue({
       isReady: true,
       userId: null,
+      accessToken: null,
       needsUsernameSetup: true,
       error: new Error('network down'),
+      statusMessage: null,
     });
 
     const { getByText } = render(<RootLayout />);
 
-    expect(getByText('接続できませんでした。再起動してください。')).toBeTruthy();
-    expect(getByText('network down')).toBeTruthy();
+    expect(getByText('接続できませんでした。時間をおいてもう一度お試しください。')).toBeTruthy();
     expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  it('認証retry中はローディング文言を差し替える', () => {
+    mockUseAuthSession.mockReturnValue({
+      isReady: false,
+      userId: null,
+      accessToken: null,
+      needsUsernameSetup: false,
+      error: null,
+      statusMessage: 'サーバーの応答に時間がかかっています',
+    });
+
+    const { getByText } = render(<RootLayout />);
+
+    expect(getByText('サーバーの応答に時間がかかっています')).toBeTruthy();
+  });
+
+  it('ユーザー向けエラーメッセージがあればそれを表示する', () => {
+    const error = Object.assign(new Error('Request rate limit reached'), {
+      userMessage: '接続が混み合っています。時間をおいてもう一度お試しください。',
+    });
+    mockUseAuthSession.mockReturnValue({
+      isReady: true,
+      userId: null,
+      accessToken: null,
+      needsUsernameSetup: false,
+      error,
+      statusMessage: null,
+    });
+
+    const { getByText } = render(<RootLayout />);
+
+    expect(getByText('接続が混み合っています。時間をおいてもう一度お試しください。')).toBeTruthy();
   });
 
   it('正常時は Stack を表示する', () => {

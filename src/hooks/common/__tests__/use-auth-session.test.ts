@@ -24,6 +24,7 @@ describe('useAuthSession', () => {
     expect(result.current.accessToken).toBeNull();
     expect(result.current.needsUsernameSetup).toBe(false);
     expect(result.current.error).toBeNull();
+    expect(result.current.statusMessage).toBeNull();
   });
 
   it('ensureSessionが成功したら isReady: true になる', async () => {
@@ -42,6 +43,7 @@ describe('useAuthSession', () => {
     expect(result.current.accessToken).toBe('token-123');
     expect(result.current.needsUsernameSetup).toBe(false);
     expect(result.current.error).toBeNull();
+    expect(result.current.statusMessage).toBeNull();
   });
 
   it('needsUsernameSetup: true が正しく反映される', async () => {
@@ -100,5 +102,19 @@ describe('useAuthSession', () => {
 
     expect(result.current.error).toBeInstanceOf(Error);
     expect(result.current.error?.message).toBe('Auth failed (401 | Token expired | Sign in again)');
+  });
+
+  it('ensureSessionのretry通知をローディング文言に反映する', async () => {
+    mockEnsureSession.mockImplementationOnce(({ onRetry }) => {
+      onRetry({ operation: 'anonymous-sign-in', nextAttempt: 2, maxAttempts: 8, delayMs: 1000 });
+      return new Promise(() => {});
+    });
+
+    const { result } = renderHook(() => useAuthSession(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.statusMessage).toBe('サーバーの応答に時間がかかっています');
+    });
+    expect(result.current.isReady).toBe(false);
   });
 });

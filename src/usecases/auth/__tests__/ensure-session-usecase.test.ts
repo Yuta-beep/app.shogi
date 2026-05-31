@@ -1,4 +1,4 @@
-import { ensureSession } from '../ensure-session-usecase';
+import { AuthRetryLimitError, ensureSession } from '../ensure-session-usecase';
 import { ApiClientError } from '@/infra/http/api-client';
 
 const mockGetSession = jest.fn();
@@ -162,6 +162,57 @@ describe('ensureSession', () => {
       });
 
       await expect(ensureSession()).rejects.toThrow('sign-in failed');
+    });
+
+    it('rate limit時は制限回数まで待って匿名サインインを再試行する', async () => {
+      const onRetry = jest.fn();
+      mockSignInAnonymously
+        .mockResolvedValueOnce({
+          data: { user: null, session: null },
+          error: { message: 'Request rate limit reached' },
+        })
+        .mockResolvedValueOnce({
+          data: { user: { id: userId }, session: { access_token: 'token-retried' } },
+          error: null,
+        });
+      mockGetDisplayName.mockResolvedValueOnce(null);
+
+      const result = await ensureSession({
+        maxAuthAttempts: 3,
+        authRetryBaseDelayMs: 0,
+        authRetryMaxDelayMs: 0,
+        onRetry,
+      });
+
+      expect(mockSignInAnonymously).toHaveBeenCalledTimes(2);
+      expect(onRetry).toHaveBeenCalledWith({
+        operation: 'anonymous-sign-in',
+        nextAttempt: 2,
+        maxAttempts: 3,
+        delayMs: 0,
+      });
+      expect(result).toEqual({
+        userId,
+        accessToken: 'token-retried',
+        isNewUser: true,
+        needsUsernameSetup: true,
+      });
+    });
+
+    it('rate limitが制限回数を超えたらユーザー向けエラーを返す', async () => {
+      mockSignInAnonymously.mockResolvedValue({
+        data: { user: null, session: null },
+        error: { message: 'Request rate limit reached' },
+      });
+
+      await expect(
+        ensureSession({
+          maxAuthAttempts: 2,
+          authRetryBaseDelayMs: 0,
+          authRetryMaxDelayMs: 0,
+        }),
+      ).rejects.toBeInstanceOf(AuthRetryLimitError);
+      expect(mockSignInAnonymously).toHaveBeenCalledTimes(2);
     });
 
     it('signInAnonymouslyがuserなしを返した場合はthrowする', async () => {

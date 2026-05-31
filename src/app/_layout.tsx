@@ -18,7 +18,7 @@ function RootLayoutInner() {
   const [fontsLoaded] = useFonts({
     ShipporiMincho_700Bold,
   });
-  const { isReady, needsUsernameSetup, error } = useAuthSession();
+  const { isReady, needsUsernameSetup, error, statusMessage } = useAuthSession();
 
   useEffect(() => {
     return () => {
@@ -33,7 +33,7 @@ function RootLayoutInner() {
   }, [isReady, error, needsUsernameSetup, router]);
 
   if (!fontsLoaded || !isReady) {
-    return <AppLoadingScreen />;
+    return <AppLoadingScreen label={statusMessage ?? undefined} />;
   }
 
   if (error) {
@@ -49,9 +49,10 @@ function RootLayoutInner() {
         }}
       >
         <Text style={{ color: '#fff', marginBottom: 12 }}>
-          接続できませんでした。再起動してください。
+          {'userMessage' in error
+            ? String(error.userMessage)
+            : '接続できませんでした。時間をおいてもう一度お試しください。'}
         </Text>
-        <Text style={{ color: '#f87171', fontSize: 11, textAlign: 'center' }}>{error.message}</Text>
       </View>
     );
   }
