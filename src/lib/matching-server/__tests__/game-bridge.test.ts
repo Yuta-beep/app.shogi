@@ -23,7 +23,9 @@ describe('matching-server game-bridge', () => {
     };
     const pieces = matchingGameToBoardPieces(game, 'black');
     expect(pieces.find((p) => p.pieceCode === 'FU')?.side).toBe('player');
+    expect(pieces.find((p) => p.pieceCode === 'FU')?.char).toBe('歩');
     expect(pieces.find((p) => p.pieceCode === 'OU')?.side).toBe('enemy');
+    expect(pieces.find((p) => p.pieceCode === 'OU')?.char).toBe('玉');
   });
 
   it('converts battle move to server payload', () => {
