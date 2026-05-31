@@ -1,12 +1,21 @@
 import { Image } from 'expo-image';
 import { type Href, useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ImageBackground, Pressable, View } from 'react-native';
+import {
+  ActivityIndicator,
+  ImageBackground,
+  Modal,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppLoadingScreen } from '@/components/organism/app-loading-screen';
 import { TapToStartScreen } from '@/components/organism/tap-to-start-screen';
 import { homeAssets } from '@/constants/home-assets';
+import type { Announcement } from '@/domain/models/announcement';
 import { TITLE_TO_HOME_LOADING_MS } from '@/constants/loading';
 import {
   TITLE_TUTORIAL_BUTTON_BOTTOM,
@@ -17,11 +26,27 @@ import {
 import { useAssetPreload } from '@/hooks/common/use-asset-preload';
 import { useScreenBgm } from '@/hooks/common/use-screen-bgm';
 import { playSe } from '@/lib/audio/audio-manager';
+import { createLoadAnnouncementsUseCase } from '@/usecases/announcement/create-announcement-usecases';
+
+function formatAnnouncementDate(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, '0')}.${String(
+    date.getDate(),
+  ).padStart(2, '0')}`;
+}
 
 export function TitleScreen() {
   const router = useRouter();
   const [isTransitioning, setIsTransitioning] = useState(false);
+  const [isAnnouncementOpen, setIsAnnouncementOpen] = useState(false);
+  const [isAnnouncementLoading, setIsAnnouncementLoading] = useState(false);
+  const [announcementError, setAnnouncementError] = useState<string | null>(null);
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const transitionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const loadAnnouncementsUseCase = useMemo(() => createLoadAnnouncementsUseCase(), []);
 
   const preloadTargets = useMemo(() => {
     const optionalTargets = Array.isArray(homeAssets.preloadTargets)
@@ -62,6 +87,31 @@ export function TitleScreen() {
     router.push('/tutorial' as Href);
   }
 
+  async function openAnnouncements() {
+    if (isTransitioning) {
+      return;
+    }
+    void playSe('tap');
+    setIsAnnouncementOpen(true);
+    setIsAnnouncementLoading(true);
+    setAnnouncementError(null);
+
+    try {
+      const result = await loadAnnouncementsUseCase.execute();
+      setAnnouncements(result);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'お知らせを取得できませんでした。';
+      setAnnouncementError(message);
+    } finally {
+      setIsAnnouncementLoading(false);
+    }
+  }
+
+  function closeAnnouncements() {
+    void playSe('cancel');
+    setIsAnnouncementOpen(false);
+  }
+
   if (!isReady || isTransitioning) {
     return <AppLoadingScreen />;
   }
@@ -89,6 +139,66 @@ export function TitleScreen() {
               style={{ width: '100%', height: '100%' }}
             />
           </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="お知らせを開く"
+            onPress={openAnnouncements}
+            className="absolute left-5 top-5 z-10 rounded-md border border-white/60 bg-black/55 px-5 py-3 active:scale-95"
+          >
+            <Text className="text-base font-bold text-white">お知らせ</Text>
+          </Pressable>
+          <Modal
+            animationType="fade"
+            transparent
+            visible={isAnnouncementOpen}
+            onRequestClose={closeAnnouncements}
+          >
+            <View className="flex-1 justify-center bg-black/70 px-5">
+              <View className="max-h-[70%] rounded-lg border border-white/25 bg-[#16110d] p-5">
+                <View className="mb-4 flex-row items-center justify-between">
+                  <Text className="text-xl font-bold text-white">お知らせ</Text>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="お知らせを閉じる"
+                    onPress={closeAnnouncements}
+                    className="rounded-md border border-white/40 px-4 py-2 active:scale-95"
+                  >
+                    <Text className="font-bold text-white">閉じる</Text>
+                  </Pressable>
+                </View>
+                {isAnnouncementLoading ? (
+                  <View className="items-center py-8">
+                    <ActivityIndicator color="#ffffff" />
+                  </View>
+                ) : announcementError ? (
+                  <Text className="text-sm leading-6 text-red-200">{announcementError}</Text>
+                ) : announcements.length === 0 ? (
+                  <Text className="text-sm leading-6 text-white/80">
+                    現在お知らせはありません。
+                  </Text>
+                ) : (
+                  <ScrollView className="pr-1">
+                    {announcements.map((announcement) => (
+                      <View
+                        key={announcement.id}
+                        className="mb-4 border-b border-white/15 pb-4 last:mb-0 last:border-b-0"
+                      >
+                        <Text className="mb-1 text-base font-bold text-white">
+                          {announcement.title}
+                        </Text>
+                        <Text className="mb-2 text-xs text-white/60">
+                          {formatAnnouncementDate(announcement.publishedAt)}
+                        </Text>
+                        <Text className="text-sm leading-6 text-white/85">
+                          {announcement.contents}
+                        </Text>
+                      </View>
+                    ))}
+                  </ScrollView>
+                )}
+              </View>
+            </View>
+          </Modal>
         </View>
       </SafeAreaView>
     </ImageBackground>
